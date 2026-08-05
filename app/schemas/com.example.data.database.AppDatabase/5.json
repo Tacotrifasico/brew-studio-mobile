@@ -1,0 +1,212 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 5,
+    "identityHash": "55555555555555555555555555555555",
+    "entities": [
+      {
+        "tableName": "ratio_presets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `methodName` TEXT NOT NULL, `coffeeGrams` REAL NOT NULL, `ratio` REAL NOT NULL, `label` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "methodName", "columnName": "methodName", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "coffeeGrams", "columnName": "coffeeGrams", "affinity": "REAL", "notNull": true },
+          { "fieldPath": "ratio", "columnName": "ratio", "affinity": "REAL", "notNull": true },
+          { "fieldPath": "label", "columnName": "label", "affinity": "TEXT", "notNull": true }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["id"] }
+      },
+      {
+        "tableName": "ratio_last_used",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`methodName` TEXT NOT NULL, `coffeeGrams` REAL NOT NULL, `ratio` REAL NOT NULL, `waterMl` INTEGER NOT NULL, PRIMARY KEY(`methodName`))",
+        "fields": [
+          { "fieldPath": "methodName", "columnName": "methodName", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "coffeeGrams", "columnName": "coffeeGrams", "affinity": "REAL", "notNull": true },
+          { "fieldPath": "ratio", "columnName": "ratio", "affinity": "REAL", "notNull": true },
+          { "fieldPath": "waterMl", "columnName": "waterMl", "affinity": "INTEGER", "notNull": true }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["methodName"] }
+      },
+      {
+        "tableName": "equipment",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `notes` TEXT NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `lastSyncedAt` INTEGER, `createdAt` TEXT, `updatedAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "name", "columnName": "name", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "type", "columnName": "type", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "notes", "columnName": "notes", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "remoteId", "columnName": "remoteId", "affinity": "TEXT" },
+          { "fieldPath": "syncStatus", "columnName": "syncStatus", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "lastSyncedAt", "columnName": "lastSyncedAt", "affinity": "INTEGER" },
+          { "fieldPath": "createdAt", "columnName": "createdAt", "affinity": "TEXT" },
+          { "fieldPath": "updatedAt", "columnName": "updatedAt", "affinity": "TEXT" }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["id"] }
+      },
+      {
+        "tableName": "grinders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `brand` TEXT NOT NULL, `model` TEXT NOT NULL, `clickRange` TEXT NOT NULL, `favoriteClicksByMethod` TEXT NOT NULL, `calibrationNotes` TEXT NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `lastSyncedAt` INTEGER, `createdAt` TEXT, `updatedAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "brand", "columnName": "brand", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "model", "columnName": "model", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "clickRange", "columnName": "clickRange", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "favoriteClicksByMethod", "columnName": "favoriteClicksByMethod", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "calibrationNotes", "columnName": "calibrationNotes", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "remoteId", "columnName": "remoteId", "affinity": "TEXT" },
+          { "fieldPath": "syncStatus", "columnName": "syncStatus", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "lastSyncedAt", "columnName": "lastSyncedAt", "affinity": "INTEGER" },
+          { "fieldPath": "createdAt", "columnName": "createdAt", "affinity": "TEXT" },
+          { "fieldPath": "updatedAt", "columnName": "updatedAt", "affinity": "TEXT" }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["id"] }
+      },
+      {
+        "tableName": "beans",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `roaster` TEXT NOT NULL, `name` TEXT NOT NULL, `origin` TEXT NOT NULL, `altitude` TEXT NOT NULL, `process` TEXT NOT NULL, `roastDate` TEXT NOT NULL, `firstUseDate` TEXT NOT NULL, `notes` TEXT NOT NULL, `status` TEXT NOT NULL, `stockGrams` REAL NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `lastSyncedAt` INTEGER, `createdAt` TEXT, `updatedAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "roaster", "columnName": "roaster", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "name", "columnName": "name", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "origin", "columnName": "origin", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "altitude", "columnName": "altitude", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "process", "columnName": "process", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "roastDate", "columnName": "roastDate", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "firstUseDate", "columnName": "firstUseDate", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "notes", "columnName": "notes", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "status", "columnName": "status", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "stockGrams", "columnName": "stockGrams", "affinity": "REAL", "notNull": true },
+          { "fieldPath": "remoteId", "columnName": "remoteId", "affinity": "TEXT" },
+          { "fieldPath": "syncStatus", "columnName": "syncStatus", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "lastSyncedAt", "columnName": "lastSyncedAt", "affinity": "INTEGER" },
+          { "fieldPath": "createdAt", "columnName": "createdAt", "affinity": "TEXT" },
+          { "fieldPath": "updatedAt", "columnName": "updatedAt", "affinity": "TEXT" }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["id"] }
+      },
+      {
+        "tableName": "recipes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `notes` TEXT NOT NULL, `ingredientsSummary` TEXT NOT NULL, `stepsSummary` TEXT NOT NULL, `tags` TEXT NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `lastSyncedAt` INTEGER, `createdAt` TEXT, `updatedAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "name", "columnName": "name", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "notes", "columnName": "notes", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "ingredientsSummary", "columnName": "ingredientsSummary", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "stepsSummary", "columnName": "stepsSummary", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "tags", "columnName": "tags", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "remoteId", "columnName": "remoteId", "affinity": "TEXT" },
+          { "fieldPath": "syncStatus", "columnName": "syncStatus", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "lastSyncedAt", "columnName": "lastSyncedAt", "affinity": "INTEGER" },
+          { "fieldPath": "createdAt", "columnName": "createdAt", "affinity": "TEXT" },
+          { "fieldPath": "updatedAt", "columnName": "updatedAt", "affinity": "TEXT" }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["id"] }
+      },
+      {
+        "tableName": "techniques",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `waterMl` INTEGER NOT NULL, `ratio` REAL NOT NULL, `notes` TEXT NOT NULL, `totalTimeSeconds` INTEGER NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `lastSyncedAt` INTEGER, `createdAt` TEXT, `updatedAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "name", "columnName": "name", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "waterMl", "columnName": "waterMl", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "ratio", "columnName": "ratio", "affinity": "REAL", "notNull": true },
+          { "fieldPath": "notes", "columnName": "notes", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "totalTimeSeconds", "columnName": "totalTimeSeconds", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "remoteId", "columnName": "remoteId", "affinity": "TEXT" },
+          { "fieldPath": "syncStatus", "columnName": "syncStatus", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "lastSyncedAt", "columnName": "lastSyncedAt", "affinity": "INTEGER" },
+          { "fieldPath": "createdAt", "columnName": "createdAt", "affinity": "TEXT" },
+          { "fieldPath": "updatedAt", "columnName": "updatedAt", "affinity": "TEXT" }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["id"] }
+      },
+      {
+        "tableName": "technique_steps",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `techniqueId` TEXT NOT NULL, `stepNumber` INTEGER NOT NULL, `title` TEXT NOT NULL, `durationSeconds` INTEGER NOT NULL, `waterAddedMl` INTEGER NOT NULL, `waterAccumulatedMl` INTEGER NOT NULL, `intensity` TEXT NOT NULL, `gesture` TEXT NOT NULL, `stepNote` TEXT NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `lastSyncedAt` INTEGER, `createdAt` TEXT, `updatedAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "techniqueId", "columnName": "techniqueId", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "stepNumber", "columnName": "stepNumber", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "title", "columnName": "title", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "durationSeconds", "columnName": "durationSeconds", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "waterAddedMl", "columnName": "waterAddedMl", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "waterAccumulatedMl", "columnName": "waterAccumulatedMl", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "intensity", "columnName": "intensity", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "gesture", "columnName": "gesture", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "stepNote", "columnName": "stepNote", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "remoteId", "columnName": "remoteId", "affinity": "TEXT" },
+          { "fieldPath": "syncStatus", "columnName": "syncStatus", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "lastSyncedAt", "columnName": "lastSyncedAt", "affinity": "INTEGER" },
+          { "fieldPath": "createdAt", "columnName": "createdAt", "affinity": "TEXT" },
+          { "fieldPath": "updatedAt", "columnName": "updatedAt", "affinity": "TEXT" }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["id"] }
+      },
+      {
+        "tableName": "cups",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `waterMl` INTEGER NOT NULL, `ratio` REAL NOT NULL, `clicks` INTEGER NOT NULL, `temperature` INTEGER NOT NULL, `durationSeconds` INTEGER NOT NULL, `rating` REAL, `freeNotes` TEXT NOT NULL, `beanName` TEXT, `recipeName` TEXT, `techniqueName` TEXT, `grinderName` TEXT, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `lastSyncedAt` INTEGER, `createdAt` TEXT, `updatedAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "waterMl", "columnName": "waterMl", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "ratio", "columnName": "ratio", "affinity": "REAL", "notNull": true },
+          { "fieldPath": "clicks", "columnName": "clicks", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "temperature", "columnName": "temperature", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "durationSeconds", "columnName": "durationSeconds", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "rating", "columnName": "rating", "affinity": "REAL" },
+          { "fieldPath": "freeNotes", "columnName": "freeNotes", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "beanName", "columnName": "beanName", "affinity": "TEXT" },
+          { "fieldPath": "recipeName", "columnName": "recipeName", "affinity": "TEXT" },
+          { "fieldPath": "techniqueName", "columnName": "techniqueName", "affinity": "TEXT" },
+          { "fieldPath": "grinderName", "columnName": "grinderName", "affinity": "TEXT" },
+          { "fieldPath": "remoteId", "columnName": "remoteId", "affinity": "TEXT" },
+          { "fieldPath": "syncStatus", "columnName": "syncStatus", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "lastSyncedAt", "columnName": "lastSyncedAt", "affinity": "INTEGER" },
+          { "fieldPath": "createdAt", "columnName": "createdAt", "affinity": "TEXT" },
+          { "fieldPath": "updatedAt", "columnName": "updatedAt", "affinity": "TEXT" }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["id"] }
+      },
+      {
+        "tableName": "catas",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `cupId` TEXT, `overallScore` REAL, `notes` TEXT NOT NULL, `cata_notes` TEXT NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `lastSyncedAt` INTEGER, `createdAt` TEXT, `updatedAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "cupId", "columnName": "cupId", "affinity": "TEXT" },
+          { "fieldPath": "overallScore", "columnName": "overallScore", "affinity": "REAL" },
+          { "fieldPath": "notes", "columnName": "notes", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "cata_notes", "columnName": "cata_notes", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "remoteId", "columnName": "remoteId", "affinity": "TEXT" },
+          { "fieldPath": "syncStatus", "columnName": "syncStatus", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "lastSyncedAt", "columnName": "lastSyncedAt", "affinity": "INTEGER" },
+          { "fieldPath": "createdAt", "columnName": "createdAt", "affinity": "TEXT" },
+          { "fieldPath": "updatedAt", "columnName": "updatedAt", "affinity": "TEXT" }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["id"] }
+      },
+      {
+        "tableName": "lab_experiments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `coffeeGrams` REAL NOT NULL, `waterMl` INTEGER NOT NULL, `ratio` REAL NOT NULL, `temperature` INTEGER NOT NULL, `clicks` INTEGER NOT NULL, `estimatedTimeSeconds` INTEGER NOT NULL, `experimentNotes` TEXT NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `lastSyncedAt` INTEGER, `createdAt` TEXT, `updatedAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "coffeeGrams", "columnName": "coffeeGrams", "affinity": "REAL", "notNull": true },
+          { "fieldPath": "waterMl", "columnName": "waterMl", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "ratio", "columnName": "ratio", "affinity": "REAL", "notNull": true },
+          { "fieldPath": "temperature", "columnName": "temperature", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "clicks", "columnName": "clicks", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "estimatedTimeSeconds", "columnName": "estimatedTimeSeconds", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "experimentNotes", "columnName": "experimentNotes", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "remoteId", "columnName": "remoteId", "affinity": "TEXT" },
+          { "fieldPath": "syncStatus", "columnName": "syncStatus", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "lastSyncedAt", "columnName": "lastSyncedAt", "affinity": "INTEGER" },
+          { "fieldPath": "createdAt", "columnName": "createdAt", "affinity": "TEXT" },
+          { "fieldPath": "updatedAt", "columnName": "updatedAt", "affinity": "TEXT" }
+        ],
+        "primaryKey": { "autoGenerate": false, "columnNames": ["id"] }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '55555555555555555555555555555555')"
+    ]
+  }
+}

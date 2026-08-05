@@ -1,0 +1,1941 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 6,
+    "identityHash": "58372fe801e0e5caa18a522052a42890",
+    "entities": [
+      {
+        "tableName": "ratio_presets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `methodName` TEXT NOT NULL, `coffeeGrams` REAL NOT NULL, `ratio` REAL NOT NULL, `label` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "methodName",
+            "columnName": "methodName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coffeeGrams",
+            "columnName": "coffeeGrams",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ratio",
+            "columnName": "ratio",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "ratio_last_used",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`methodName` TEXT NOT NULL, `coffeeGrams` REAL NOT NULL, `ratio` REAL NOT NULL, `waterMl` INTEGER NOT NULL, PRIMARY KEY(`methodName`))",
+        "fields": [
+          {
+            "fieldPath": "methodName",
+            "columnName": "methodName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coffeeGrams",
+            "columnName": "coffeeGrams",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ratio",
+            "columnName": "ratio",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "waterMl",
+            "columnName": "waterMl",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "methodName"
+          ]
+        }
+      },
+      {
+        "tableName": "brew_methods",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `code` TEXT NOT NULL, `nameKey` TEXT NOT NULL, `category` TEXT NOT NULL, `defaultRatio` REAL NOT NULL, `ownerUserId` TEXT, `schemaVersion` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "code",
+            "columnName": "code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nameKey",
+            "columnName": "nameKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultRatio",
+            "columnName": "defaultRatio",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schemaVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "beans",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `roaster` TEXT NOT NULL, `name` TEXT NOT NULL, `origin` TEXT NOT NULL, `altitude` TEXT NOT NULL, `process` TEXT NOT NULL, `roastDate` TEXT NOT NULL, `firstUseDate` TEXT NOT NULL, `notes` TEXT NOT NULL, `status` TEXT NOT NULL, `stockGrams` REAL NOT NULL, `ownerUserId` TEXT, `schemaVersion` INTEGER NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `serverVersion` INTEGER NOT NULL, `expectedVersion` INTEGER NOT NULL, `lastSyncedAt` TEXT, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `migrationStatus` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "roaster",
+            "columnName": "roaster",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "origin",
+            "columnName": "origin",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "altitude",
+            "columnName": "altitude",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "process",
+            "columnName": "process",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "roastDate",
+            "columnName": "roastDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstUseDate",
+            "columnName": "firstUseDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stockGrams",
+            "columnName": "stockGrams",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schemaVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverVersion",
+            "columnName": "serverVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedVersion",
+            "columnName": "expectedVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "migrationStatus",
+            "columnName": "migrationStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "instruments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `brand` TEXT NOT NULL, `model` TEXT NOT NULL, `notes` TEXT NOT NULL, `ownerUserId` TEXT, `schemaVersion` INTEGER NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `serverVersion` INTEGER NOT NULL, `expectedVersion` INTEGER NOT NULL, `lastSyncedAt` TEXT, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `migrationStatus` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "brand",
+            "columnName": "brand",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "model",
+            "columnName": "model",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schemaVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverVersion",
+            "columnName": "serverVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedVersion",
+            "columnName": "expectedVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "migrationStatus",
+            "columnName": "migrationStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "grinder_profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `instrumentId` TEXT NOT NULL, `clickRange` TEXT NOT NULL, `calibrationNotes` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`instrumentId`) REFERENCES `instruments`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instrumentId",
+            "columnName": "instrumentId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clickRange",
+            "columnName": "clickRange",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "calibrationNotes",
+            "columnName": "calibrationNotes",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_grinder_profiles_instrumentId",
+            "unique": false,
+            "columnNames": [
+              "instrumentId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_grinder_profiles_instrumentId` ON `${TABLE_NAME}` (`instrumentId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "instruments",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "instrumentId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "grinder_method_settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `grinderProfileId` TEXT NOT NULL, `methodId` TEXT NOT NULL, `settingValue` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`grinderProfileId`) REFERENCES `grinder_profiles`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grinderProfileId",
+            "columnName": "grinderProfileId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "methodId",
+            "columnName": "methodId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "settingValue",
+            "columnName": "settingValue",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_grinder_method_settings_grinderProfileId",
+            "unique": false,
+            "columnNames": [
+              "grinderProfileId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_grinder_method_settings_grinderProfileId` ON `${TABLE_NAME}` (`grinderProfileId`)"
+          },
+          {
+            "name": "index_grinder_method_settings_methodId",
+            "unique": false,
+            "columnNames": [
+              "methodId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_grinder_method_settings_methodId` ON `${TABLE_NAME}` (`methodId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "grinder_profiles",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "grinderProfileId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "techniques",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `methodId` TEXT NOT NULL, `recipeId` TEXT, `beanId` TEXT, `grinderId` TEXT, `doseG` REAL NOT NULL, `waterMl` INTEGER NOT NULL, `ratio` REAL NOT NULL, `temperatureC` INTEGER NOT NULL, `executionMode` TEXT NOT NULL, `grindValue` REAL, `grindDescription` TEXT, `grindUnit` TEXT NOT NULL, `notes` TEXT NOT NULL, `totalTimeSeconds` INTEGER NOT NULL, `author` TEXT, `description` TEXT, `ownerUserId` TEXT, `ownerDisplayName` TEXT, `visibility` TEXT NOT NULL, `isShared` INTEGER NOT NULL, `originalAuthorUserId` TEXT, `originalAuthorName` TEXT, `originalEntityId` TEXT, `rootEntityId` TEXT, `importedFromShareId` TEXT, `copyMode` TEXT NOT NULL, `originCreatedAt` TEXT, `legacyMethodName` TEXT, `schemaVersion` INTEGER NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `serverVersion` INTEGER NOT NULL, `expectedVersion` INTEGER NOT NULL, `lastSyncedAt` TEXT, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `migrationStatus` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "methodId",
+            "columnName": "methodId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeId",
+            "columnName": "recipeId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "beanId",
+            "columnName": "beanId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "grinderId",
+            "columnName": "grinderId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "doseG",
+            "columnName": "doseG",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "waterMl",
+            "columnName": "waterMl",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ratio",
+            "columnName": "ratio",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "temperatureC",
+            "columnName": "temperatureC",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "executionMode",
+            "columnName": "executionMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grindValue",
+            "columnName": "grindValue",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "grindDescription",
+            "columnName": "grindDescription",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "grindUnit",
+            "columnName": "grindUnit",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalTimeSeconds",
+            "columnName": "totalTimeSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "author",
+            "columnName": "author",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ownerDisplayName",
+            "columnName": "ownerDisplayName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "visibility",
+            "columnName": "visibility",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isShared",
+            "columnName": "isShared",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalAuthorUserId",
+            "columnName": "originalAuthorUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "originalAuthorName",
+            "columnName": "originalAuthorName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "originalEntityId",
+            "columnName": "originalEntityId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rootEntityId",
+            "columnName": "rootEntityId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "importedFromShareId",
+            "columnName": "importedFromShareId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "copyMode",
+            "columnName": "copyMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originCreatedAt",
+            "columnName": "originCreatedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "legacyMethodName",
+            "columnName": "legacyMethodName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schemaVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverVersion",
+            "columnName": "serverVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedVersion",
+            "columnName": "expectedVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "migrationStatus",
+            "columnName": "migrationStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "technique_steps",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `techniqueId` TEXT NOT NULL, `stepNumber` INTEGER NOT NULL, `title` TEXT NOT NULL, `durationSeconds` INTEGER NOT NULL, `waterAddedMl` INTEGER NOT NULL, `waterAccumulatedMl` INTEGER NOT NULL, `intensity` TEXT NOT NULL, `gesture` TEXT NOT NULL, `stepNote` TEXT NOT NULL, `coverage` REAL, `flow` REAL, `secondaryAction` TEXT, `position` INTEGER, `targetWaterMl` INTEGER, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `serverVersion` INTEGER NOT NULL, `expectedVersion` INTEGER NOT NULL, `lastSyncedAt` TEXT, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`techniqueId`) REFERENCES `techniques`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "techniqueId",
+            "columnName": "techniqueId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepNumber",
+            "columnName": "stepNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationSeconds",
+            "columnName": "durationSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "waterAddedMl",
+            "columnName": "waterAddedMl",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "waterAccumulatedMl",
+            "columnName": "waterAccumulatedMl",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "intensity",
+            "columnName": "intensity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gesture",
+            "columnName": "gesture",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepNote",
+            "columnName": "stepNote",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coverage",
+            "columnName": "coverage",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "flow",
+            "columnName": "flow",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "secondaryAction",
+            "columnName": "secondaryAction",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "targetWaterMl",
+            "columnName": "targetWaterMl",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverVersion",
+            "columnName": "serverVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedVersion",
+            "columnName": "expectedVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_technique_steps_techniqueId",
+            "unique": false,
+            "columnNames": [
+              "techniqueId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_technique_steps_techniqueId` ON `${TABLE_NAME}` (`techniqueId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "techniques",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "techniqueId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "recipes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `recipeKind` TEXT NOT NULL, `intention` TEXT NOT NULL, `suggestedMethodId` TEXT, `isFavorite` INTEGER NOT NULL, `ingredientsSummary` TEXT NOT NULL, `stepsSummary` TEXT NOT NULL, `tags` TEXT NOT NULL, `ownerUserId` TEXT, `ownerDisplayName` TEXT, `visibility` TEXT NOT NULL, `isShared` INTEGER NOT NULL, `originalAuthorUserId` TEXT, `originalAuthorName` TEXT, `originalEntityId` TEXT, `rootEntityId` TEXT, `importedFromShareId` TEXT, `copyMode` TEXT NOT NULL, `originCreatedAt` TEXT, `legacyMethodName` TEXT, `schemaVersion` INTEGER NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `serverVersion` INTEGER NOT NULL, `expectedVersion` INTEGER NOT NULL, `lastSyncedAt` TEXT, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `migrationStatus` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeKind",
+            "columnName": "recipeKind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "intention",
+            "columnName": "intention",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "suggestedMethodId",
+            "columnName": "suggestedMethodId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isFavorite",
+            "columnName": "isFavorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ingredientsSummary",
+            "columnName": "ingredientsSummary",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepsSummary",
+            "columnName": "stepsSummary",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ownerDisplayName",
+            "columnName": "ownerDisplayName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "visibility",
+            "columnName": "visibility",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isShared",
+            "columnName": "isShared",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalAuthorUserId",
+            "columnName": "originalAuthorUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "originalAuthorName",
+            "columnName": "originalAuthorName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "originalEntityId",
+            "columnName": "originalEntityId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rootEntityId",
+            "columnName": "rootEntityId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "importedFromShareId",
+            "columnName": "importedFromShareId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "copyMode",
+            "columnName": "copyMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originCreatedAt",
+            "columnName": "originCreatedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "legacyMethodName",
+            "columnName": "legacyMethodName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schemaVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverVersion",
+            "columnName": "serverVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedVersion",
+            "columnName": "expectedVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "migrationStatus",
+            "columnName": "migrationStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "recipe_ingredients",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `recipeId` TEXT NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `unit` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`recipeId`) REFERENCES `recipes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeId",
+            "columnName": "recipeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unit",
+            "columnName": "unit",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "orderIndex",
+            "columnName": "orderIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recipe_ingredients_recipeId",
+            "unique": false,
+            "columnNames": [
+              "recipeId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recipe_ingredients_recipeId` ON `${TABLE_NAME}` (`recipeId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recipes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recipeId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "recipe_steps",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `recipeId` TEXT NOT NULL, `instruction` TEXT NOT NULL, `stepNumber` INTEGER NOT NULL, `durationSeconds` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`recipeId`) REFERENCES `recipes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeId",
+            "columnName": "recipeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instruction",
+            "columnName": "instruction",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepNumber",
+            "columnName": "stepNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationSeconds",
+            "columnName": "durationSeconds",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recipe_steps_recipeId",
+            "unique": false,
+            "columnNames": [
+              "recipeId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recipe_steps_recipeId` ON `${TABLE_NAME}` (`recipeId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recipes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recipeId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "recipe_tags",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `recipeId` TEXT NOT NULL, `tag` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`recipeId`) REFERENCES `recipes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeId",
+            "columnName": "recipeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tag",
+            "columnName": "tag",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recipe_tags_recipeId",
+            "unique": false,
+            "columnNames": [
+              "recipeId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recipe_tags_recipeId` ON `${TABLE_NAME}` (`recipeId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recipes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recipeId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "cups",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `recipeId` TEXT, `beanId` TEXT, `techniqueId` TEXT, `methodId` TEXT, `grinderId` TEXT, `executedDoseG` REAL NOT NULL, `executedWaterMl` INTEGER NOT NULL, `executedRatio` REAL NOT NULL, `executedTemperatureC` INTEGER NOT NULL, `executedGrindSetting` TEXT NOT NULL, `executedDurationSeconds` INTEGER NOT NULL, `beanNameSnapshot` TEXT NOT NULL, `recipeNameSnapshot` TEXT NOT NULL, `techniqueNameSnapshot` TEXT NOT NULL, `methodNameSnapshot` TEXT NOT NULL, `grinderNameSnapshot` TEXT NOT NULL, `cupLifeSeconds` INTEGER NOT NULL, `cupLifeState` TEXT NOT NULL, `nps` INTEGER, `rating` REAL, `comment` TEXT NOT NULL, `brewDate` TEXT NOT NULL, `recipeSnapshotJson` TEXT NOT NULL, `techniqueSnapshotJson` TEXT NOT NULL, `beanSnapshotJson` TEXT NOT NULL, `grinderSnapshotJson` TEXT NOT NULL, `ownerUserId` TEXT, `schemaVersion` INTEGER NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `serverVersion` INTEGER NOT NULL, `expectedVersion` INTEGER NOT NULL, `lastSyncedAt` TEXT, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `migrationStatus` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeId",
+            "columnName": "recipeId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "beanId",
+            "columnName": "beanId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "techniqueId",
+            "columnName": "techniqueId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "methodId",
+            "columnName": "methodId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "grinderId",
+            "columnName": "grinderId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "executedDoseG",
+            "columnName": "executedDoseG",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "executedWaterMl",
+            "columnName": "executedWaterMl",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "executedRatio",
+            "columnName": "executedRatio",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "executedTemperatureC",
+            "columnName": "executedTemperatureC",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "executedGrindSetting",
+            "columnName": "executedGrindSetting",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "executedDurationSeconds",
+            "columnName": "executedDurationSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "beanNameSnapshot",
+            "columnName": "beanNameSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeNameSnapshot",
+            "columnName": "recipeNameSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "techniqueNameSnapshot",
+            "columnName": "techniqueNameSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "methodNameSnapshot",
+            "columnName": "methodNameSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grinderNameSnapshot",
+            "columnName": "grinderNameSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cupLifeSeconds",
+            "columnName": "cupLifeSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cupLifeState",
+            "columnName": "cupLifeState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nps",
+            "columnName": "nps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "rating",
+            "columnName": "rating",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "comment",
+            "columnName": "comment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "brewDate",
+            "columnName": "brewDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeSnapshotJson",
+            "columnName": "recipeSnapshotJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "techniqueSnapshotJson",
+            "columnName": "techniqueSnapshotJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "beanSnapshotJson",
+            "columnName": "beanSnapshotJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grinderSnapshotJson",
+            "columnName": "grinderSnapshotJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schemaVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverVersion",
+            "columnName": "serverVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedVersion",
+            "columnName": "expectedVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "migrationStatus",
+            "columnName": "migrationStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "catas",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `cupId` TEXT, `recipeId` TEXT, `beanId` TEXT, `activeFlavorFamily` TEXT, `selectedFlavorNotesJson` TEXT NOT NULL, `sensoryWheelDescriptorsJson` TEXT NOT NULL, `textureLevel` TEXT, `cleanlinessLevel` TEXT, `persistenceLevel` TEXT, `sweetnessLevel` TEXT, `acidityLevel` TEXT, `balanceLevel` TEXT, `fragranceAromaScore` REAL, `flavorScore` REAL, `aftertasteScore` REAL, `acidityScore` REAL, `bodyScore` REAL, `uniformityScore` REAL, `cleanCupScore` REAL, `sweetnessScore` REAL, `balanceScore` REAL, `overallScore` REAL, `totalScaScore` REAL, `evaluatorNotes` TEXT NOT NULL, `evaluatedAt` TEXT NOT NULL, `ownerUserId` TEXT, `schemaVersion` INTEGER NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `serverVersion` INTEGER NOT NULL, `expectedVersion` INTEGER NOT NULL, `lastSyncedAt` TEXT, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `migrationStatus` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cupId",
+            "columnName": "cupId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "recipeId",
+            "columnName": "recipeId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "beanId",
+            "columnName": "beanId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "activeFlavorFamily",
+            "columnName": "activeFlavorFamily",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "selectedFlavorNotesJson",
+            "columnName": "selectedFlavorNotesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sensoryWheelDescriptorsJson",
+            "columnName": "sensoryWheelDescriptorsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "textureLevel",
+            "columnName": "textureLevel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cleanlinessLevel",
+            "columnName": "cleanlinessLevel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "persistenceLevel",
+            "columnName": "persistenceLevel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sweetnessLevel",
+            "columnName": "sweetnessLevel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "acidityLevel",
+            "columnName": "acidityLevel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "balanceLevel",
+            "columnName": "balanceLevel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fragranceAromaScore",
+            "columnName": "fragranceAromaScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "flavorScore",
+            "columnName": "flavorScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "aftertasteScore",
+            "columnName": "aftertasteScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "acidityScore",
+            "columnName": "acidityScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "bodyScore",
+            "columnName": "bodyScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "uniformityScore",
+            "columnName": "uniformityScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cleanCupScore",
+            "columnName": "cleanCupScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "sweetnessScore",
+            "columnName": "sweetnessScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "balanceScore",
+            "columnName": "balanceScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "overallScore",
+            "columnName": "overallScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "totalScaScore",
+            "columnName": "totalScaScore",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "evaluatorNotes",
+            "columnName": "evaluatorNotes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "evaluatedAt",
+            "columnName": "evaluatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schemaVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverVersion",
+            "columnName": "serverVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedVersion",
+            "columnName": "expectedVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "migrationStatus",
+            "columnName": "migrationStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_catas_cupId",
+            "unique": true,
+            "columnNames": [
+              "cupId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_catas_cupId` ON `${TABLE_NAME}` (`cupId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "cata_flavor_notes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `cataId` TEXT NOT NULL, `note` TEXT NOT NULL, `category` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`cataId`) REFERENCES `catas`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cataId",
+            "columnName": "cataId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_cata_flavor_notes_cataId",
+            "unique": false,
+            "columnNames": [
+              "cataId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cata_flavor_notes_cataId` ON `${TABLE_NAME}` (`cataId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "catas",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "cataId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "lab_experiments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `methodId` TEXT, `beanId` TEXT, `grinderId` TEXT, `techniqueId` TEXT, `coffeeGrams` REAL NOT NULL, `waterMl` INTEGER NOT NULL, `ratio` REAL NOT NULL, `temperatureC` INTEGER NOT NULL, `grindSetting` TEXT NOT NULL, `beanFreshnessDays` INTEGER, `estimatedTimeSeconds` INTEGER NOT NULL, `actualTimeSeconds` INTEGER, `experimentHypothesis` TEXT NOT NULL, `experimentNotes` TEXT NOT NULL, `conclusionNotes` TEXT NOT NULL, `resultRating` REAL, `resultCupId` TEXT, `ownerUserId` TEXT, `schemaVersion` INTEGER NOT NULL, `remoteId` TEXT, `syncStatus` TEXT NOT NULL, `serverVersion` INTEGER NOT NULL, `expectedVersion` INTEGER NOT NULL, `lastSyncedAt` TEXT, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `migrationStatus` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "methodId",
+            "columnName": "methodId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "beanId",
+            "columnName": "beanId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "grinderId",
+            "columnName": "grinderId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "techniqueId",
+            "columnName": "techniqueId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "coffeeGrams",
+            "columnName": "coffeeGrams",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "waterMl",
+            "columnName": "waterMl",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ratio",
+            "columnName": "ratio",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "temperatureC",
+            "columnName": "temperatureC",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grindSetting",
+            "columnName": "grindSetting",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "beanFreshnessDays",
+            "columnName": "beanFreshnessDays",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "estimatedTimeSeconds",
+            "columnName": "estimatedTimeSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actualTimeSeconds",
+            "columnName": "actualTimeSeconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "experimentHypothesis",
+            "columnName": "experimentHypothesis",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "experimentNotes",
+            "columnName": "experimentNotes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conclusionNotes",
+            "columnName": "conclusionNotes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultRating",
+            "columnName": "resultRating",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "resultCupId",
+            "columnName": "resultCupId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schemaVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverVersion",
+            "columnName": "serverVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedVersion",
+            "columnName": "expectedVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "migrationStatus",
+            "columnName": "migrationStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '58372fe801e0e5caa18a522052a42890')"
+    ]
+  }
+}

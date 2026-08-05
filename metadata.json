@@ -1,0 +1,6 @@
+{
+  "name": "Taller Brewther",
+  "description": "Taller del Brewther / Brew Studio: Herramienta offline-first de calibración interactiva, control de extracción, cata de enfriamiento sensorial, simulador de laboratorio de variables y catálogo del almacén.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

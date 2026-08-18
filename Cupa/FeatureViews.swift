@@ -77,9 +77,7 @@ struct BrewView: View {
     @Binding var selection: CupaTab
     @ObservedObject var calculator: CalculatorModel
     @ObservedObject var lab: LabModel
-    @State private var isTimerRunning = false
-    @State private var elapsed = 0
-    @State private var timer: Timer?
+    @ObservedObject var preparation: PreparationModel
 
     var body: some View {
         ZStack {
@@ -177,39 +175,20 @@ struct BrewView: View {
                                     selection = .lab
                                 } label: { Label("Laboratorio", systemImage: "flask") }
                                     .buttonStyle(.bordered)
-                                Button("Preparar con estos datos") { resetTimer() }
+                                Button("Preparar con estos datos") { preparation.load(calculator: calculator) }
                                     .buttonStyle(.borderedProminent)
                                     .tint(CupaTheme.forest)
                             }
                         }
                     }
 
-                    CupaCard {
-                        VStack(spacing: 14) {
-                            Text(timeString)
-                                .font(.system(size: 52, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-                            HStack {
-                                Button(isTimerRunning ? "Pausar" : "Iniciar") { toggleTimer() }
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(CupaTheme.forest)
-                                Button("Reiniciar") { resetTimer() }
-                                    .buttonStyle(.bordered)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
+                    PreparationExecutionView(model: preparation)
                 }
                 .padding()
             }
         }
         .navigationTitle("Preparar")
         .navigationBarTitleDisplayMode(.inline)
-        .onDisappear { timer?.invalidate() }
-    }
-
-    private var timeString: String {
-        String(format: "%02d:%02d", elapsed / 60, elapsed % 60)
     }
 
     private var categoryColor: Color {
@@ -241,20 +220,6 @@ struct BrewView: View {
         .clipShape(RoundedRectangle(cornerRadius: 15))
     }
 
-    private func toggleTimer() {
-        isTimerRunning.toggle()
-        timer?.invalidate()
-        if isTimerRunning {
-            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in elapsed += 1 }
-        }
-    }
-
-    private func resetTimer() {
-        timer?.invalidate()
-        timer = nil
-        elapsed = 0
-        isTimerRunning = false
-    }
 }
 
 struct TastingView: View {

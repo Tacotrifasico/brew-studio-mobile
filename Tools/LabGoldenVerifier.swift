@@ -31,7 +31,8 @@ struct LabGoldenVerifier {
         verifyStateRestoration()
         verifyLocalPersistence()
         verifyRecipeTechniqueAggregates()
-        print("4 golden tests, restauración y agregados persistentes aprobados")
+        verifyPreparationRecovery()
+        print("4 golden tests, agregados y recuperación de preparación aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -111,5 +112,27 @@ struct LabGoldenVerifier {
         precondition(technique.totalTimeSeconds == 120)
         try! repository.deleteTechnique(technique)
         precondition(try! repository.techniqueSteps(techniqueId: technique.id).isEmpty)
+    }
+
+    @MainActor private static func verifyPreparationRecovery() {
+        let suite = "CupaPreparationVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let repository = RecipeTechniqueRepository(context: context)
+        let technique = try! repository.saveTechnique(TechniqueDraftModel(
+            name: "Guiada", methodName: "V60", executionMode: "GUIDED",
+            steps: [.init(title: "Bloom", durationSeconds: 45, waterAddedMl: 50), .init(title: "Vertido", durationSeconds: 75, waterAddedMl: 190)]
+        ))
+        let model = PreparationModel(defaults: defaults)
+        model.load(technique: technique, steps: try! repository.techniqueSteps(techniqueId: technique.id))
+        model.start(); let tick = model.state.lastTickAt!
+        model.synchronizeClock(now: tick.addingTimeInterval(46)); model.pause()
+        precondition(model.state.activeStepIndex == 1)
+        let restored = PreparationModel(defaults: defaults)
+        precondition(restored.state.status == .paused && restored.state.elapsedSeconds == 46)
+        _ = BrewSessionRecord(context: context, state: restored.state, beanName: "Café", grinderName: "Molino")
+        try! context.save()
+        let sessions = try! context.fetch(NSFetchRequest<BrewSessionRecord>(entityName: "BrewSessionRecord"))
+        precondition(sessions.first?.stepsSnapshotJSON.contains("Bloom") == true)
     }
 }

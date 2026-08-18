@@ -5,9 +5,11 @@ enum CupaTab: Hashable {
 }
 
 struct AppShell: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selection: CupaTab = .home
     @StateObject private var calculator = CalculatorModel()
     @StateObject private var lab = LabModel()
+    @StateObject private var preparation = PreparationModel()
 
     var body: some View {
         TabView(selection: $selection) {
@@ -15,7 +17,7 @@ struct AppShell: View {
                 .tag(CupaTab.home)
                 .tabItem { Label("Taller", systemImage: "house") }
 
-            NavigationStack { BrewView(selection: $selection, calculator: calculator, lab: lab) }
+            NavigationStack { BrewView(selection: $selection, calculator: calculator, lab: lab, preparation: preparation) }
                 .tag(CupaTab.brew)
                 .tabItem { Label("Preparar", systemImage: "mug") }
 
@@ -32,5 +34,6 @@ struct AppShell: View {
                 .tabItem { Label("Almacén", systemImage: "shippingbox") }
         }
         .tint(CupaTheme.forest)
+        .onChange(of: scenePhase) { _, phase in if phase == .active || phase == .background { preparation.synchronizeClock() } }
     }
 }

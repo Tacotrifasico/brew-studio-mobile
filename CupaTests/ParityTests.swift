@@ -185,3 +185,48 @@ final class RecipeTechniqueRepositoryTests: XCTestCase {
         XCTAssertTrue(try repository.techniqueSteps(techniqueId: technique.id).isEmpty)
     }
 }
+
+final class PreparationModelTests: XCTestCase {
+    @MainActor func testGuidedTimingRecoveryAndSessionSnapshot() throws {
+        let suite = "PreparationModelTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite)); defer { defaults.removePersistentDomain(forName: suite) }
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let repository = RecipeTechniqueRepository(context: context)
+        let technique = try repository.saveTechnique(TechniqueDraftModel(
+            name: "Guiada", methodName: "V60", executionMode: "GUIDED",
+            steps: [.init(title: "Bloom", durationSeconds: 45, waterAddedMl: 50), .init(title: "Vertido", durationSeconds: 75, waterAddedMl: 190)]
+        ))
+        let model = PreparationModel(defaults: defaults)
+        model.load(technique: technique, steps: try repository.techniqueSteps(techniqueId: technique.id))
+        model.start()
+        let tick = try XCTUnwrap(model.state.lastTickAt)
+        model.synchronizeClock(now: tick.addingTimeInterval(46))
+        XCTAssertEqual(model.state.elapsedSeconds, 46)
+        XCTAssertEqual(model.state.activeStepIndex, 1)
+        model.pause()
+
+        let restored = PreparationModel(defaults: defaults)
+        XCTAssertEqual(restored.state.status, .paused)
+        XCTAssertEqual(restored.state.elapsedSeconds, 46)
+        XCTAssertEqual(restored.activeStep?.title, "Vertido")
+
+        _ = BrewSessionRecord(context: context, state: restored.state, beanName: "Café prueba", grinderName: "Molino prueba")
+        try context.save()
+        let sessions = try context.fetch(NSFetchRequest<BrewSessionRecord>(entityName: "BrewSessionRecord"))
+        XCTAssertEqual(sessions.first?.techniqueNameSnapshot, "Guiada")
+        XCTAssertEqual(sessions.first?.elapsedSeconds, 46)
+        XCTAssertTrue(sessions.first?.stepsSnapshotJSON.contains("Bloom") == true)
+    }
+
+    @MainActor func testManualNavigationAndReset() {
+        let suite = "PreparationManualTests.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = PreparationModel(defaults: defaults)
+        model.load(calculator: CalculatorModel())
+        XCTAssertEqual(model.state.executionMode, "MANUAL")
+        model.start(); model.pause(); model.reset()
+        XCTAssertEqual(model.state.status, .ready)
+        XCTAssertEqual(model.state.elapsedSeconds, 0)
+        XCTAssertEqual(model.state.activeStepIndex, 0)
+    }
+}

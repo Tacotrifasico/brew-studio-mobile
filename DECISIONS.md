@@ -35,3 +35,7 @@ Además de XCTest, `Tools/LabGoldenVerifier.swift` permite ejecutar el motor pur
 ## D-009 — Agregados separados para receta y técnica
 
 `Recipe` posee ingredientes e instrucciones; `Technique` posee pasos ejecutables y sólo referencia opcionalmente una receta. Los hijos conservan UUID propios y metadatos de sincronización. La edición reconcilia por UUID, el reordenamiento actualiza índices y los elementos retirados se borran lógicamente para que una sincronización futura pueda propagarlos.
+
+## D-010 — Preparación recuperable con snapshots históricos
+
+El cronómetro conserva en `UserDefaults` el último instante observado y el estado activo. Al volver del fondo suma el tiempo transcurrido y avanza de forma determinista en modos guiado o automático; el modo manual sólo cambia de paso por acción del usuario. Al finalizar crea un `BrewSession` en Core Data con UUID de las entidades relacionadas y snapshots de técnica, método, café, molino y pasos, para que el historial no se corrompa si el inventario se edita o elimina después.

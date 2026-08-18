@@ -347,9 +347,23 @@ struct PersistenceController {
         ]
         techniqueStepEntity.uniquenessConstraints = [["id"]]
 
+        let brewSessionEntity = NSEntityDescription()
+        brewSessionEntity.name = "BrewSessionRecord"; brewSessionEntity.managedObjectClassName = NSStringFromClass(BrewSessionRecord.self)
+        brewSessionEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("techniqueId", .UUIDAttributeType, optional: true), attribute("recipeId", .UUIDAttributeType, optional: true),
+            attribute("beanId", .UUIDAttributeType, optional: true), attribute("grinderId", .UUIDAttributeType, optional: true),
+            attribute("techniqueNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("methodNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("beanNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("grinderNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("doseGrams", .doubleAttributeType, defaultValue: 15), attribute("waterMl", .integer64AttributeType, defaultValue: 240),
+            attribute("ratio", .doubleAttributeType, defaultValue: 16), attribute("temperatureC", .integer64AttributeType, defaultValue: 92),
+            attribute("grindDescription", .stringAttributeType, defaultValue: ""), attribute("elapsedSeconds", .integer64AttributeType, defaultValue: 0),
+            attribute("completedAt", .dateAttributeType), attribute("stepsSnapshotJSON", .stringAttributeType, defaultValue: "[]")
+        ]
+        brewSessionEntity.uniquenessConstraints = [["id"]]
+
         model.entities = [
             coffeeEntity, experimentEntity, grinderEntity, equipmentEntity,
-            recipeEntity, ingredientEntity, recipeStepEntity, techniqueEntity, techniqueStepEntity
+            recipeEntity, ingredientEntity, recipeStepEntity, techniqueEntity, techniqueStepEntity, brewSessionEntity
         ]
         return model
     }

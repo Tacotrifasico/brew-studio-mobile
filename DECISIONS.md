@@ -127,3 +127,7 @@ Los equipos activos de tipo `BREWER_METHOD` forman el catálogo personalizado de
 ## D-032 — Detalle de técnica como frontera antes de ejecutar o mutar
 
 La biblioteca abre primero un detalle legible con parámetros y secuencia completa, en vez de entrar directamente al formulario. Desde ahí se puede ejecutar la técnica, editarla o eliminarla con confirmación. Ejecutar carga el agregado persistido y sus pasos ordenados en el mismo `PreparationModel` recuperable usado por la pestaña Preparar; no crea una copia provisional. El borrado lógico mantiene intactos los snapshots de sesiones históricas.
+
+## D-033 — Historial de cata completo y guardado explícitamente nuevo
+
+El historial no se limita a las últimas ocho filas: cada cata abre un detalle con preparación vinculada, perfil, atributos y evolución térmica completa. Editar reutiliza su UUID y reconcilia observaciones y taza asociada; eliminar exige confirmación y conserva la preparación original. Después de guardar, la misma cata queda bloqueada para un segundo guardado ambiguo. “Nueva” crea otro UUID y restablece el progreso, evitando sobrescribir una evaluación previa bajo una etiqueta de alta nueva.

@@ -42,6 +42,7 @@ final class CupaUITests: XCTestCase {
         app.tabBars.buttons["Cata"].tap()
         XCTAssertTrue(app.navigationBars["Cata"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["tasting.save"].exists)
+        XCTAssertTrue(app.buttons["Nueva"].exists)
     }
 
     func testSettingsAndProfileAreReachable() {

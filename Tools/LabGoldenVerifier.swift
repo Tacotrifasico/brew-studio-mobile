@@ -385,6 +385,16 @@ struct LabGoldenVerifier {
         let lab = LabModel(defaults: labDefaults); lab.load(tasting: restored.state, brew: brew)
         precondition(lab.state.method == "V60" && lab.state.coffeeGrams == 18 && lab.state.waterMl == 288)
         precondition(lab.state.notes == "Cargado de cata sensorial. Textura: sedosa, Limpieza: alta.")
+        let editor = TastingModel(defaults: defaults)
+        editor.load(record: tasting, observations: try! repository.observations(tastingId: tasting.id))
+        editor.state.rating = 5; editor.state.freeNotes = "Editada desde el historial"
+        editor.state.observations = [.init(elapsedSeconds: 960, stage: "EXHAUSTED", notes: "Fría", aroma: 3, acidity: 2, sweetness: 3, body: 2, bitterness: 3, finish: 2)]
+        let updated = try! repository.save(editor.state, brew: brew)
+        precondition(updated.id == tasting.id && updated.rating == 5)
+        precondition((try! repository.observations(tastingId: tasting.id)).map(\.stage) == ["EXHAUSTED"])
+        precondition((try! context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))).count == 1)
+        editor.markSaved(); let savedId = editor.state.id; precondition(editor.state.coolingStatus == .completed)
+        editor.newTasting(); precondition(editor.state.id != savedId && editor.state.coolingStatus == .ready)
         try! repository.delete(tasting)
         precondition(tasting.syncStatusRaw == SyncStatus.pendingDelete.rawValue && cup.syncStatusRaw == SyncStatus.pendingDelete.rawValue)
     }

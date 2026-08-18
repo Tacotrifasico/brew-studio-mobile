@@ -39,7 +39,7 @@
 - Recetario: detalle legible con intención, etiquetas, cantidades, unidades, duraciones y acciones de favorita/duplicar/editar/eliminar; acceso a alta e importación cubierto por el target UI compilado.
 - Técnica: alta, detalle completo, edición, reordenamiento, eliminación de pasos, duración total, agua acumulada, gesto, intensidad, cobertura, flujo, acción secundaria, borrado lógico y carga directa en Preparación: verificador ejecutado + XCTest y acceso UI compilados.
 - Preparación: carga desde técnica, avance guiado tras 46 segundos, cierre en tiempo total, recuperación pendiente de guardado, prevención de duplicados, nuevo UUID y snapshot persistente de `BrewSession`: aprobados.
-- Cata: recuperación del enfriamiento a 601 segundos, transición a descenso, observación sensorial independiente, vínculo opcional con `BrewSession`, creación de `CupSession` completo y borrado lógico conjunto: aprobados.
+- Cata: recuperación del enfriamiento a 601 segundos, transición a descenso, observación sensorial independiente, vínculo opcional con `BrewSession`, detalle/historial íntegro, edición con el mismo UUID, reconciliación sin duplicar `CupSession`, alta posterior con UUID nuevo y borrado lógico conjunto: verificador ejecutado + XCTest y UI compilados.
 - Tazas: referencias, dosis, agua, ratio, temperatura, molienda, duración, cinco nombres congelados, vida térmica, valoración, NPS, comentario y fecha verificados contra la preparación/cata de origen: aprobados.
 - Cuenta: estado seguro sin configuración y contrato de login GoTrue (ruta, anon header y mapeo de tokens): XCTest compilado.
 - Eliminación de cuenta: ruta autenticada, confirmación explícita y ausencia de credenciales administrativas en el request iOS: XCTest compilado.

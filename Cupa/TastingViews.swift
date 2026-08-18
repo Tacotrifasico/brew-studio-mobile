@@ -4,11 +4,13 @@ import SwiftUI
 struct TastingView: View {
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TastingRecord.evaluatedAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"), animation: .default) private var tastings: FetchedResults<TastingRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TastingObservationRecord.elapsedSeconds, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var persistedObservations: FetchedResults<TastingObservationRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var brews: FetchedResults<BrewSessionRecord>
     @ObservedObject var model: TastingModel
     @ObservedObject var lab: LabModel
     @Binding var selection: CupaTab
     @State private var message: String?; @State private var editingExisting = false
+    @State private var selectedTasting: TastingRecord?; @State private var pendingEdit: TastingRecord?
 
     var body: some View {
         ZStack {
@@ -28,6 +30,17 @@ struct TastingView: View {
             }
         }
         .navigationTitle("Cata").navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selectedTasting, onDismiss: {
+            if let pendingEdit { edit(pendingEdit); self.pendingEdit = nil }
+        }) { tasting in
+            TastingDetailView(
+                tasting: tasting,
+                observations: persistedObservations.filter { $0.tastingId == tasting.id },
+                brew: brews.first { $0.id == tasting.brewSessionId },
+                onEdit: { pendingEdit = tasting; selectedTasting = nil },
+                onDelete: { remove(tasting); selectedTasting = nil }
+            )
+        }
         .alert("Cata", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("Aceptar") {} } message: { Text(message ?? "") }
     }
 
@@ -116,7 +129,8 @@ struct TastingView: View {
 
     private var actions: some View {
         HStack {
-            Button(editingExisting ? "Actualizar cata" : "Guardar cata", action: save).buttonStyle(.borderedProminent).tint(CupaTheme.forest)
+            Button(saveButtonTitle, action: save).buttonStyle(.borderedProminent).tint(CupaTheme.forest)
+                .disabled(!editingExisting && model.state.coolingStatus == .completed)
                 .accessibilityIdentifier("tasting.save")
             Button("Nueva") { model.newTasting(); editingExisting = false }.buttonStyle(.bordered)
             Button("Llevar al Laboratorio") {
@@ -129,17 +143,16 @@ struct TastingView: View {
     private var historyCard: some View {
         CupaCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Historial").font(.headline)
-                ForEach(tastings.prefix(8)) { tasting in
+                HStack { Text("Historial").font(.headline); Spacer(); Text("\(tastings.count)").font(.caption.bold()).foregroundStyle(CupaTheme.secondaryText) }
+                ForEach(tastings) { tasting in
                     HStack {
-                        Button { edit(tasting) } label: {
+                        Button { selectedTasting = tasting } label: {
                             VStack(alignment: .leading) {
                                 Text("\(FlavorFamily(rawValue: tasting.activeFlavorFamily)?.label ?? "Cata") · \(Int(tasting.rating))/5").font(.subheadline.bold())
                                 Text("\(tasting.evaluatedAt.formatted(date: .abbreviated, time: .shortened)) · \(tasting.cupLifeState.capitalized)").font(.caption).foregroundStyle(CupaTheme.secondaryText)
                             }
                         }.buttonStyle(.plain)
-                        Spacer(); Button(role: .destructive) { remove(tasting) } label: { Image(systemName: "trash") }
-                            .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Eliminar cata")
+                        Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(CupaTheme.secondaryText)
                     }
                 }
             }
@@ -155,5 +168,111 @@ struct TastingView: View {
     }
     private func edit(_ tasting: TastingRecord) { do { model.load(record: tasting, observations: try TastingRepository(context: context).observations(tastingId: tasting.id)); editingExisting = true } catch { message = error.localizedDescription } }
     private func remove(_ tasting: TastingRecord) { do { try TastingRepository(context: context).delete(tasting) } catch { context.rollback(); message = error.localizedDescription } }
+    private var saveButtonTitle: String {
+        if editingExisting { return "Actualizar cata" }
+        return model.state.coolingStatus == .completed ? "Guardada" : "Guardar cata"
+    }
     private func time(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }
+}
+
+private struct TastingDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var tasting: TastingRecord
+    let observations: [TastingObservationRecord]
+    let brew: BrewSessionRecord?
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 9) {
+                        HStack {
+                            Image(systemName: "heart.circle.fill").font(.title2).foregroundStyle(CupaTheme.terracotta)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(FlavorFamily(rawValue: tasting.activeFlavorFamily)?.label ?? "Cata").font(.title3.bold())
+                                Text(tasting.evaluatedAt.formatted(date: .long, time: .shortened)).font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            }
+                            Spacer(); Text("\(Int(tasting.rating))/5 ★").font(.headline).foregroundStyle(CupaTheme.gold)
+                        }
+                        if !tasting.selectedFlavorNotes.isEmpty { Label(tasting.selectedFlavorNotes.joined(separator: ", "), systemImage: "circle.hexagongrid") }
+                        if !tasting.expectedNotes.isEmpty { Text("Esperadas: \(tasting.expectedNotes)").font(.subheadline).foregroundStyle(CupaTheme.secondaryText) }
+                    }.padding(.vertical, 4)
+                }
+
+                if let brew {
+                    Section("Preparación vinculada") {
+                        detailRow("Técnica", brew.techniqueNameSnapshot)
+                        if !brew.beanNameSnapshot.isEmpty { detailRow("Café", brew.beanNameSnapshot) }
+                        detailRow("Extracción", "\(brew.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(brew.waterMl) ml · 1:\(brew.ratio.formatted(.number.precision(.fractionLength(0...1))))")
+                    }
+                }
+
+                Section("Perfil sensorial") {
+                    sensoryRow("Aroma", tasting.aroma)
+                    sensoryRow("Acidez", tasting.acidity)
+                    sensoryRow("Dulzor", tasting.sweetness)
+                    sensoryRow("Cuerpo", tasting.body)
+                    sensoryRow("Amargor", tasting.bitterness)
+                    sensoryRow("Final", tasting.finishScore)
+                }
+
+                Section("Evaluación") {
+                    detailRow("Textura", tasting.texture.capitalized)
+                    detailRow("Limpieza", tasting.cleanliness.capitalized)
+                    detailRow("Persistencia", tasting.persistence.capitalized)
+                    detailRow("Recomendación", "\(tasting.nps)/10")
+                    detailRow("Vida de taza", "\(time(Int(tasting.coolingElapsedSeconds))) · \(cupLifeLabel(tasting.cupLifeState))")
+                    if !tasting.evaluatorNotes.isEmpty { Text(tasting.evaluatorNotes) }
+                }
+
+                Section("Evolución durante el enfriamiento") {
+                    if observations.isEmpty {
+                        Text("No se registraron observaciones por etapa.").foregroundStyle(CupaTheme.secondaryText)
+                    } else {
+                        ForEach(observations) { observation in
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack { Text(stageLabel(observation.stage)).fontWeight(.semibold); Spacer(); Text(time(Int(observation.elapsedSeconds))).monospacedDigit().font(.caption) }
+                                Text("A \(Int(observation.aroma)) · Ac \(Int(observation.acidity)) · D \(Int(observation.sweetness)) · C \(Int(observation.body)) · Am \(Int(observation.bitterness)) · F \(Int(observation.finishScore))")
+                                    .font(.caption).foregroundStyle(CupaTheme.forest)
+                                if !observation.notes.isEmpty { Text(observation.notes).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                            }.padding(.vertical, 3)
+                        }
+                    }
+                }
+
+                Section {
+                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar cata", systemImage: "trash") }
+                }
+            }
+            .navigationTitle("Detalle de cata")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Editar", action: onEdit).accessibilityIdentifier("tasting.detail.edit") }
+            }
+            .confirmationDialog("¿Eliminar esta cata?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Eliminar cata", role: .destructive, action: onDelete)
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("También se quitarán sus observaciones y la taza asociada; las preparaciones originales se conservarán.")
+            }
+        }
+    }
+
+    private func sensoryRow(_ name: String, _ value: Double) -> some View {
+        HStack { Text(name); Spacer(); Text("\(Int(value))/5").fontWeight(.semibold).foregroundStyle(CupaTheme.forest) }
+    }
+    private func detailRow(_ name: String, _ value: String) -> some View {
+        HStack(alignment: .top) { Text(name); Spacer(); Text(value).multilineTextAlignment(.trailing).fontWeight(.semibold).foregroundStyle(CupaTheme.forest) }
+    }
+    private func time(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }
+    private func stageLabel(_ code: String) -> String {
+        switch code { case "HOT": "Caliente"; case "PEAK": "Pico"; case "DECLINING": "Descenso"; default: "Agotada" }
+    }
+    private func cupLifeLabel(_ code: String) -> String {
+        switch code { case "FRESH": "Caliente"; case "PEAK": "Pico"; case "DECLINING": "Descenso"; default: "Agotada" }
+    }
 }

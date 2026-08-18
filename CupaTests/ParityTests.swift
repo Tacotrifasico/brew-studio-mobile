@@ -431,9 +431,28 @@ final class TastingModelTests: XCTestCase {
         XCTAssertEqual(tasting.techniqueId, brew.techniqueId)
         XCTAssertEqual(tasting.selectedFlavorNotes, ["Mora", "Jazmín"])
         XCTAssertEqual(try repository.observations(tastingId: tasting.id).count, 1)
-        let cups = try context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))
+        var cups = try context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))
         XCTAssertEqual(cups.first?.brewSessionId, brew.id)
         XCTAssertEqual(cups.first?.tastingId, tasting.id)
+
+        restored.load(record: tasting, observations: try repository.observations(tastingId: tasting.id))
+        restored.state.rating = 5
+        restored.state.freeNotes = "Editada desde el historial"
+        restored.state.observations = [.init(elapsedSeconds: 960, stage: "EXHAUSTED", notes: "Fría", aroma: 3, acidity: 2, sweetness: 3, body: 2, bitterness: 3, finish: 2)]
+        let updated = try repository.save(restored.state, brew: brew)
+        XCTAssertEqual(updated.id, tasting.id)
+        XCTAssertEqual(updated.rating, 5)
+        XCTAssertEqual(try repository.observations(tastingId: tasting.id).map(\.stage), ["EXHAUSTED"])
+        cups = try context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))
+        XCTAssertEqual(cups.count, 1)
+        XCTAssertEqual(cups.first?.comment, "Editada desde el historial")
+
+        restored.markSaved()
+        XCTAssertEqual(restored.state.coolingStatus, .completed)
+        let savedId = restored.state.id
+        restored.newTasting()
+        XCTAssertNotEqual(restored.state.id, savedId)
+        XCTAssertEqual(restored.state.coolingStatus, .ready)
     }
 
     @MainActor func testTastingSoftDeletePreservesCupSnapshot() throws {

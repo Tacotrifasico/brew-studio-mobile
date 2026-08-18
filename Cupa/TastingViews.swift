@@ -6,6 +6,7 @@ struct TastingView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TastingRecord.evaluatedAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"), animation: .default) private var tastings: FetchedResults<TastingRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var brews: FetchedResults<BrewSessionRecord>
     @ObservedObject var model: TastingModel
+    @ObservedObject var lab: LabModel
     @Binding var selection: CupaTab
     @State private var message: String?; @State private var editingExisting = false
 
@@ -118,7 +119,10 @@ struct TastingView: View {
             Button(editingExisting ? "Actualizar cata" : "Guardar cata", action: save).buttonStyle(.borderedProminent).tint(CupaTheme.forest)
                 .accessibilityIdentifier("tasting.save")
             Button("Nueva") { model.newTasting(); editingExisting = false }.buttonStyle(.bordered)
-            Button("Llevar al Laboratorio") { selection = .lab }.buttonStyle(.bordered)
+            Button("Llevar al Laboratorio") {
+                lab.load(tasting: model.state, brew: brews.first { $0.id == model.state.brewSessionId })
+                selection = .lab
+            }.buttonStyle(.bordered)
         }.font(.caption)
     }
 

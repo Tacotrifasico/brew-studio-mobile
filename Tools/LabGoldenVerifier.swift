@@ -215,6 +215,11 @@ struct LabGoldenVerifier {
         precondition(try! repository.observations(tastingId: tasting.id).count == 1)
         let cups = try! context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))
         precondition(cups.first?.brewSessionId == brew.id && cups.first?.tastingId == tasting.id)
+        let labSuite = "CupaTastingLabVerifier.\(UUID().uuidString)"; let labDefaults = UserDefaults(suiteName: labSuite)!
+        defer { labDefaults.removePersistentDomain(forName: labSuite) }
+        let lab = LabModel(defaults: labDefaults); lab.load(tasting: restored.state, brew: brew)
+        precondition(lab.state.method == "V60" && lab.state.coffeeGrams == 15 && lab.state.waterMl == 240)
+        precondition(lab.state.notes == "Cargado de cata sensorial. Textura: sedosa, Limpieza: alta.")
     }
 
     @MainActor private static func verifySyncConflictAndOutbox() {

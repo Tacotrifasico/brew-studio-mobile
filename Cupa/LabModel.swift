@@ -281,6 +281,21 @@ final class LabModel: ObservableObject {
             $0.altitudeMeters = Int(experiment.altitudeMeters); $0.cityName = experiment.cityName
         }
     }
+    func load(tasting: TastingState, brew: BrewSessionRecord?) {
+        update {
+            if let brew {
+                $0.methodId = brew.methodId; $0.recipeId = brew.recipeId; $0.techniqueId = brew.techniqueId
+                $0.beanId = brew.beanId; $0.grinderId = brew.grinderId
+                $0.recipeName = brew.recipeNameSnapshot.isEmpty ? nil : brew.recipeNameSnapshot
+                $0.techniqueName = brew.techniqueNameSnapshot.isEmpty ? nil : brew.techniqueNameSnapshot
+                $0.method = brew.methodNameSnapshot; $0.coffeeGrams = Float(brew.doseGrams); $0.waterMl = Int(brew.waterMl)
+                $0.ratio = Float(brew.ratio); $0.temperatureC = Int(brew.temperatureC)
+                if let clicks = Self.firstInteger(in: brew.grindDescription) { $0.grindClicks = min(50, max(4, clicks)) }
+                if brew.elapsedSeconds > 0 { $0.timeSeconds = Int(brew.elapsedSeconds) }
+            }
+            $0.notes = "Cargado de cata sensorial. Textura: \(tasting.texture), Limpieza: \(tasting.cleanliness)."
+        }
+    }
     func reset() { state = LabState(temperatureUnit: state.temperatureUnit) }
 
     private func persist() {
@@ -301,5 +316,8 @@ final class LabModel: ObservableObject {
     private static func isMilliliterUnit(_ ingredient: RecipeIngredientRecord) -> Bool {
         let unit = ingredient.unit.uppercased()
         return unit == "ML" || unit.contains("MILLILIT") || unit.contains("MILILIT")
+    }
+    private static func firstInteger(in value: String) -> Int? {
+        value.split(whereSeparator: { !$0.isNumber }).first.flatMap { Int($0) }
     }
 }

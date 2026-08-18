@@ -25,7 +25,7 @@ struct AppShell: View {
                 .tag(CupaTab.brew)
                 .tabItem { Label("Preparar", systemImage: "mug") }
 
-            NavigationStack { TastingView(model: tasting, selection: $selection) }
+            NavigationStack { TastingView(model: tasting, lab: lab, selection: $selection) }
                 .tag(CupaTab.tasting)
                 .tabItem { Label("Cata", systemImage: "heart") }
 

@@ -26,4 +26,6 @@ Al iniciar sesión, la sincronización reclama los datos creados offline, sube l
 
 El target `CupaTests` contiene pruebas XCTest. Si CoreSimulator no inicia, `Tools/LabGoldenVerifier.swift` valida cuatro casos dorados, restauración de estado y persistencia Core Data desde macOS; el comando está en `TEST_PLAN.md`.
 
+El target `CupaUITests` contiene recorridos de interfaz y lanza una base Core Data en memoria mediante el argumento `-ui-testing`, sin alterar ni depender de datos personales del simulador.
+
 Supabase, sincronización multiusuario, Gemini mediante backend y los demás CRUD siguen el estado documentado en `PARITY_MATRIX.md` y `BLOCKERS.md`.

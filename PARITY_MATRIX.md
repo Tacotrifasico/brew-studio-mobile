@@ -4,7 +4,7 @@ Estados permitidos: No iniciado, Parcial, Implementado sin validar, Validado, Bl
 
 | Módulo | Función | Referencia | Estado iOS | Datos | Visual | Pruebas | Bloqueo | Criterio de aceptación | Estado final |
 |---|---|---|---|---|---|---|---|---|---|
-| Navegación | Cinco secciones principales | `MainActivity.kt` | Implementado sin validar | N/A | Parcial | Compilación | Ninguno | Navegar sin perder estado | Implementado sin validar |
+| Navegación | Cinco secciones principales | `MainActivity.kt` | Implementado sin validar | N/A | Implementado sin validar | Target UI con navegación compilado | Ejecución pendiente por CoreSimulator | Navegar sin perder estado | Implementado sin validar |
 | Calculadora | Cálculo café → agua | `BaristaCalcViewModel.onCoffeeChanged` | Validado | Local | Parcial | XCTest compilado + prueba de paridad | Ninguno | Mismos resultados y truncamiento | Validado |
 | Calculadora | Cálculo ratio → agua | `onRatioChanged` | Validado | Local | Parcial | XCTest compilado + prueba de paridad | Ninguno | Paridad para límites y decimales | Validado |
 | Calculadora | Cálculo agua → café | `onWaterChanged` | Validado | Local | Parcial | XCTest compilado + prueba de paridad | Ninguno | Mismo redondeo a un decimal | Validado |

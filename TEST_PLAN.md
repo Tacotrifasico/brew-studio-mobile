@@ -18,6 +18,7 @@
 
 - Cuenta, café, receta, técnica, preparación, Laboratorio, cata y enfriamiento.
 - Reapertura, edición, eliminación, estados vacíos, errores y offline.
+- El target `CupaUITests` arranca con Core Data en memoria y cubre navegación principal, campos de calculadora, acceso a preparación, Laboratorio, Almacén, Cata, Configuración y Brew Hub.
 
 ## Distribución
 
@@ -41,6 +42,7 @@
 - Configuración: restauración de tema oscuro, Fahrenheit y unidades: XCTest compilado.
 - Social: contrato del feed público, publicación sin correo, reporte, bloqueo e importación profunda con atribución: verificador ejecutado + XCTest compilado.
 - Target `CupaTests`: compilación para iOS Simulator aprobada. La ejecución XCTest queda pendiente hasta reparar CoreSimulator local.
+- Target `CupaUITests`: tres recorridos XCTest UI compilados para arm64 y x86_64. La ejecución queda pendiente hasta reparar CoreSimulator local.
 - Build Release para iPhone genérico sin firma: aprobado.
 - Accesibilidad estática: controles de sólo icono etiquetados, áreas táctiles de 44 puntos e identificadores para flujos críticos: compilado.
 - Privacidad: `PrivacyInfo.xcprivacy` válido con `plutil` e incluido en el bundle Release; consentimiento Gemini explícito y revocable: compilado.

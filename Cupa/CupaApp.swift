@@ -2,7 +2,9 @@ import SwiftUI
 
 @main
 struct CupaApp: App {
-    private let persistence = PersistenceController.shared
+    private let persistence: PersistenceController = ProcessInfo.processInfo.arguments.contains("-ui-testing")
+        ? PersistenceController(inMemory: true)
+        : .shared
 
     var body: some Scene {
         WindowGroup {

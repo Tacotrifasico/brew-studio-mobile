@@ -30,8 +30,10 @@ struct LabGoldenVerifier {
         )
         verifyStateRestoration()
         verifyCoffeeFreshnessParity()
+        verifyCoffeeInputValidation()
         verifyCoffeeInventoryActions()
         verifySQLiteReopening()
+        verifyPersistentStoreRecovery()
         verifyCalculatorFavorites()
         verifyCalculatorQuickPreparation()
         verifyTransfersAndHistoricalSnapshots()
@@ -73,6 +75,30 @@ struct LabGoldenVerifier {
         precondition(preparation.state.beanId == bean.id && PreparationModel(defaults: defaults).state.beanId == bean.id)
         bean.openedDate = roastDate.addingTimeInterval(5 * 86_400); precondition(bean.inventoryStatus == .open)
         bean.remainingQuantityGrams = 0; precondition(bean.inventoryStatus == .finished)
+    }
+
+    private static func verifyCoffeeInputValidation() {
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_776_643_200)
+        let roast = calendar.date(byAdding: .day, value: -10, to: now)!
+        let opened = calendar.date(byAdding: .day, value: -2, to: now)!
+        let valid = try! CoffeeBeanInputValidator.validate(
+            altitudeText: "1850", initialQuantityText: "250,5", remainingQuantityText: "125.25",
+            roastDate: roast, openedDate: opened, now: now, calendar: calendar
+        )
+        precondition(valid == .init(altitudeMeters: 1_850, initialQuantityGrams: 250.5, remainingQuantityGrams: 125.25))
+        do {
+            _ = try CoffeeBeanInputValidator.validate(altitudeText: "alto", initialQuantityText: "250", remainingQuantityText: "100", roastDate: nil, openedDate: nil)
+            preconditionFailure("La altitud inválida debió rechazarse")
+        } catch { precondition(error as? CoffeeBeanInputError == .invalidAltitude) }
+        do {
+            _ = try CoffeeBeanInputValidator.validate(altitudeText: "", initialQuantityText: "250", remainingQuantityText: "251", roastDate: nil, openedDate: nil)
+            preconditionFailure("El inventario incoherente debió rechazarse")
+        } catch { precondition(error as? CoffeeBeanInputError == .remainingExceedsInitial) }
+        do {
+            _ = try CoffeeBeanInputValidator.validate(altitudeText: "", initialQuantityText: "250", remainingQuantityText: "100", roastDate: roast, openedDate: calendar.date(byAdding: .day, value: -11, to: now), now: now, calendar: calendar)
+            preconditionFailure("La apertura anterior al tueste debió rechazarse")
+        } catch { precondition(error as? CoffeeBeanInputError == .openedBeforeRoast) }
     }
 
     private static func verifyStateRestoration() {
@@ -144,6 +170,19 @@ struct LabGoldenVerifier {
             precondition(equipment.capacityMl == 600 && equipment.isFavorite)
             try! reopened.container.persistentStoreCoordinator.remove(reopened.container.persistentStoreCoordinator.persistentStores[0])
         }
+    }
+
+    @MainActor private static func verifyPersistentStoreRecovery() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CupaFallbackVerifier-\(UUID().uuidString)", isDirectory: true)
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let blockedParent = directory.appendingPathComponent("not-a-directory")
+        try! Data("blocked".utf8).write(to: blockedParent)
+        let persistence = PersistenceController(storeURL: blockedParent.appendingPathComponent("Cupa.sqlite"), enablePersistentHistory: false)
+        precondition(persistence.storageRecoveryMessage != nil)
+        precondition(persistence.container.persistentStoreCoordinator.persistentStores.first?.type == NSInMemoryStoreType)
+        _ = CoffeeBeanRecord(context: persistence.container.viewContext, name: "Temporal", brand: "", remainingQuantityGrams: 100)
+        try! persistence.container.viewContext.save()
     }
 
     @MainActor private static func verifyCalculatorFavorites() {

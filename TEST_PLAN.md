@@ -41,7 +41,7 @@
 - Preparación: carga desde técnica, avance guiado tras 46 segundos, cierre en tiempo total, recuperación pendiente de guardado, prevención de duplicados, nuevo UUID y snapshot persistente de `BrewSession`: aprobados.
 - Cata: cortes térmicos exactos a 0/239/240/599/600/959/960 segundos, pausa, recuperación a 601 segundos, reinicio, alta/baja de observaciones, cierre inmutable, vínculo opcional con `BrewSession`, detalle/historial íntegro, edición con el mismo UUID, reconciliación sin duplicar `CupSession`, alta posterior con UUID nuevo y borrado lógico conjunto: verificador ejecutado + XCTest y UI compilados.
 - Molinos y equipos: alta, lectura íntegra, edición conservando UUID, validación de rango/capacidad, reapertura desde un contenedor SQLite nuevo, estados de sincronización, borrado lógico y conservación de referencias/snapshots en preparaciones históricas: verificador ejecutado + XCTest y recorridos UI compilados.
-- Tazas: referencias, dosis, agua, ratio, temperatura, molienda, duración, cinco nombres congelados, vida térmica, valoración, NPS, comentario y fecha verificados contra la preparación/cata de origen: aprobados.
+- Tazas: referencias, dosis, agua, ratio, temperatura, molienda, duración, cinco nombres congelados, vida térmica, valoración, NPS, comentario y fecha verificados contra la preparación/cata de origen; detalle completo y eliminación conjunta confirmada compilados: aprobados.
 - Cuenta: estado seguro sin configuración y contrato de login GoTrue (ruta, anon header y mapeo de tokens): XCTest compilado.
 - Eliminación de cuenta: ruta autenticada, confirmación explícita y ausencia de credenciales administrativas en el request iOS: XCTest compilado.
 - Sincronización: elección por fecha/versión, rechazo de propietario distinto, compactación de outbox, reintento exponencial y finalización: verificador ejecutado.
@@ -50,6 +50,9 @@
 - Perfil: creación, edición con UUID estable, normalización de alias, aislamiento entre dos propietarios y DTO sin correo: verificador ejecutado.
 - Configuración: restauración de tema oscuro y Fahrenheit aprobada; eliminado el control métrico sin efecto que no existe en Android.
 - Inventario: fallos de guardado de café, molino y equipo hacen rollback, mantienen el editor abierto y muestran alerta; flujo compilado.
+- Café: altitud fuera de rango, cantidades vacías/no numéricas/negativas, existencias mayores al lote y fechas futuras o invertidas son rechazadas antes de guardar; decimal con coma aceptado: verificador ejecutado + XCTest compilado.
+- Recuperación de Core Data: un destino SQLite imposible activa un store temporal visible, permite guardar durante la sesión y no termina la app ni destruye el archivo original: verificador ejecutado + XCTest compilado.
+- Acciones destructivas: café, taza/cata, experimento, receta, técnica y reinicios con progreso sólo se ejecutan después de una confirmación explícita; se retiraron borrados por deslizamiento que la omitían: targets UI compilados.
 - Historial por café: consulta de preparación y taza por `beanId`, conteos, calificación/comentario y conservación de ambas sesiones después del borrado lógico del café: verificador ejecutado + XCTest compilado.
 - Acciones de café: transición cerrado/abierto/terminado, fecha de apertura, separación de lotes terminados, UUID recuperable en Preparación y carga de frescura/proceso/notas al Laboratorio: verificador ejecutado + XCTest compilado.
 - Social: contrato del feed público, publicación sin correo, reporte, bloqueo, filtro preventivo e importación profunda con atribución: verificador ejecutado + XCTest compilado.

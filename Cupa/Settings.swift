@@ -32,7 +32,7 @@ struct SettingsView: View {
                     Toggle("Permitir sugerencias con Google Gemini", isOn: $geminiConsent)
                     Text("Al activarlo, sólo se envían los parámetros de preparación y el perfil sensorial que solicites analizar. No se envían tu correo, nombre ni identificador.")
                         .font(.caption).foregroundStyle(.secondary)
-                    Text("Este build no envía telemetría sensible ni solicita permisos de notificaciones.")
+                    Text("Cupa no envía telemetría sensible ni solicita permisos de notificaciones.")
                         .font(.caption).foregroundStyle(.secondary)
                     if let privacyPolicyURL {
                         Link("Consultar política de privacidad", destination: privacyPolicyURL)

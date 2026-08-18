@@ -139,3 +139,7 @@ Molinos y equipos abren una ficha de lectura con todos sus datos persistidos ant
 ## D-035 — Cierre inmutable y reinicio confirmado de cata
 
 Una cata completada no admite reinicio ni nuevas observaciones: para otra evaluación se debe usar “Nueva”, que asigna otro UUID. Esto impide que reiniciar después de guardar sobrescriba silenciosamente el historial. Mientras la cata está activa, sus observaciones térmicas son visibles y removibles; reiniciar tiempo y observaciones exige confirmación cuando ya existe progreso. Guardar detiene primero el reloj para persistir un tiempo coherente y deja el estado pausado si Core Data falla.
+
+## D-036 — Validación estricta y recuperación no destructiva
+
+El café se valida antes de tocar Core Data: altitud, cantidades finitas, existencias no mayores a la cantidad inicial y fechas coherentes. Los borrados y reinicios con información relevante se realizan desde un detalle o diálogo que explica su alcance; se eliminan los atajos de deslizar que omitían esa confirmación. Si el SQLite local no puede abrirse, la app conserva el archivo original, inicia un almacén temporal en memoria y muestra una advertencia persistente en vez de terminar con `fatalError`; así permite recuperar la interfaz sin ocultar que esa sesión no persistirá cambios.

@@ -11,7 +11,7 @@ struct AccountView: View {
             Form {
                 switch model.state {
                 case .unavailable:
-                    ContentUnavailableView("Cuenta aún no conectada", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("El build está listo, pero faltan SUPABASE_URL y SUPABASE_ANON_KEY."))
+                    ContentUnavailableView("Cuenta no disponible", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("El servicio de cuenta todavía no está disponible en esta versión. Tus datos locales permanecen en el dispositivo."))
                 case let .signedIn(tokens):
                     Section("Sesión") { LabeledContent("Correo", value: tokens.email); LabeledContent("Usuario", value: tokens.userId.uuidString) }
                     Button("Cerrar sesión", role: .destructive) { Task { await model.signOut() } }

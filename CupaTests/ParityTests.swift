@@ -163,6 +163,19 @@ final class CalculatorParityTests: XCTestCase {
 }
 
 final class LocalPersistenceTests: XCTestCase {
+    @MainActor func testPersistentStoreFailureUsesVisibleTemporaryFallback() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CupaFallbackTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let blockedParent = directory.appendingPathComponent("not-a-directory")
+        try Data("blocked".utf8).write(to: blockedParent)
+        let persistence = PersistenceController(storeURL: blockedParent.appendingPathComponent("Cupa.sqlite"), enablePersistentHistory: false)
+        XCTAssertNotNil(persistence.storageRecoveryMessage)
+        XCTAssertEqual(persistence.container.persistentStoreCoordinator.persistentStores.first?.type, NSInMemoryStoreType)
+        _ = CoffeeBeanRecord(context: persistence.container.viewContext, name: "Temporal", brand: "", remainingQuantityGrams: 100)
+        XCTAssertNoThrow(try persistence.container.viewContext.save())
+    }
+
     @MainActor func testSQLiteStoreSurvivesContainerReopening() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CupaSQLiteTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -210,6 +223,34 @@ final class LocalPersistenceTests: XCTestCase {
         XCTAssertEqual(CoffeeFreshnessEngine.progress(days: 80), 1, accuracy: 0.000_001)
         let opened = CoffeeFreshnessEngine.evaluate(roastDate: date(15), openedDate: date(15), now: now, calendar: calendar)
         XCTAssertEqual(opened.openWarning, "Abierto hace 15 días. Puede perder aroma más rápido.")
+    }
+
+    func testCoffeeInputValidationRejectsCorruptInventoryValues() throws {
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_776_643_200)
+        let roast = calendar.date(byAdding: .day, value: -10, to: now)!
+        let opened = calendar.date(byAdding: .day, value: -2, to: now)!
+        let valid = try CoffeeBeanInputValidator.validate(
+            altitudeText: "1850", initialQuantityText: "250,5", remainingQuantityText: "125.25",
+            roastDate: roast, openedDate: opened, now: now, calendar: calendar
+        )
+        XCTAssertEqual(valid, .init(altitudeMeters: 1_850, initialQuantityGrams: 250.5, remainingQuantityGrams: 125.25))
+
+        XCTAssertThrowsError(try CoffeeBeanInputValidator.validate(altitudeText: "alto", initialQuantityText: "250", remainingQuantityText: "100", roastDate: nil, openedDate: nil)) {
+            XCTAssertEqual($0 as? CoffeeBeanInputError, .invalidAltitude)
+        }
+        XCTAssertThrowsError(try CoffeeBeanInputValidator.validate(altitudeText: "", initialQuantityText: "NaN", remainingQuantityText: "0", roastDate: nil, openedDate: nil)) {
+            XCTAssertEqual($0 as? CoffeeBeanInputError, .invalidInitialQuantity)
+        }
+        XCTAssertThrowsError(try CoffeeBeanInputValidator.validate(altitudeText: "", initialQuantityText: "250", remainingQuantityText: "251", roastDate: nil, openedDate: nil)) {
+            XCTAssertEqual($0 as? CoffeeBeanInputError, .remainingExceedsInitial)
+        }
+        XCTAssertThrowsError(try CoffeeBeanInputValidator.validate(altitudeText: "", initialQuantityText: "250", remainingQuantityText: "100", roastDate: roast, openedDate: calendar.date(byAdding: .day, value: -11, to: now), now: now, calendar: calendar)) {
+            XCTAssertEqual($0 as? CoffeeBeanInputError, .openedBeforeRoast)
+        }
+        XCTAssertThrowsError(try CoffeeBeanInputValidator.validate(altitudeText: "", initialQuantityText: "250", remainingQuantityText: "100", roastDate: calendar.date(byAdding: .day, value: 1, to: now), openedDate: nil, now: now, calendar: calendar)) {
+            XCTAssertEqual($0 as? CoffeeBeanInputError, .roastDateInFuture)
+        }
     }
 
     func testCoffeeExperimentGrinderAndEquipmentCRUDInMemory() throws {

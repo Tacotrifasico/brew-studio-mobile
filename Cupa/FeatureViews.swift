@@ -372,6 +372,8 @@ struct LabView: View {
     @State private var showCustomCity = false
     @State private var customCity = ""
     @State private var customAltitude = ""
+    @State private var confirmingLabReset = false
+    @State private var deletingExperiment: LabExperimentRecord?
     @State private var saveConfirmation = false
     @State private var suggestion: BrewSuggestion?
     @State private var suggestionLoading = false
@@ -410,7 +412,7 @@ struct LabView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { model.reset() } label: { Image(systemName: "arrow.counterclockwise") }
+                Button { confirmingLabReset = true } label: { Image(systemName: "arrow.counterclockwise") }
                     .accessibilityLabel("Restablecer Laboratorio")
             }
         }
@@ -429,6 +431,14 @@ struct LabView: View {
         .alert("No se pudo actualizar el experimento", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("Aceptar") {}
         } message: { Text(errorMessage ?? "") }
+        .confirmationDialog("¿Restablecer el Laboratorio?", isPresented: $confirmingLabReset, titleVisibility: .visible) {
+            Button("Restablecer variables", role: .destructive, action: model.reset)
+            Button("Cancelar", role: .cancel) {}
+        } message: { Text("Se perderán los ajustes que no hayas guardado como experimento.") }
+        .confirmationDialog("¿Eliminar este experimento?", isPresented: Binding(get: { deletingExperiment != nil }, set: { if !$0 { deletingExperiment = nil } }), titleVisibility: .visible) {
+            Button("Eliminar experimento", role: .destructive) { if let experiment = deletingExperiment { deleteExperiment(experiment) }; deletingExperiment = nil }
+            Button("Cancelar", role: .cancel) { deletingExperiment = nil }
+        } message: { Text("Se retirará del historial local y la eliminación se sincronizará cuando haya conexión.") }
     }
 
     private var baseDataCard: some View {
@@ -614,7 +624,7 @@ struct LabView: View {
                         }.buttonStyle(.plain).accessibilityLabel("Cargar experimento de \(experiment.method)")
                         Spacer()
                         Text(experiment.createdAt, style: .date).font(.caption2)
-                        Button(role: .destructive) { deleteExperiment(experiment) } label: { Image(systemName: "trash") }
+                        Button(role: .destructive) { deletingExperiment = experiment } label: { Image(systemName: "trash") }
                             .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Eliminar experimento")
                     }
                 }
@@ -673,15 +683,22 @@ struct LabView: View {
             Form {
                 TextField("Ciudad", text: $customCity)
                 TextField("Altitud (msnm)", text: $customAltitude).keyboardType(.numberPad)
+                if !customLocationIsValid { Text("Escribe una ciudad y una altitud entre 0 y 5,000 msnm.").font(.caption).foregroundStyle(.red) }
             }
             .navigationTitle("Tu ciudad y altura")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { showCustomCity = false } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { model.setManualAltitude(Int(customAltitude) ?? 0, city: customCity); showCustomCity = false }
+                    Button("Guardar") { model.setManualAltitude(customAltitudeValue ?? 0, city: customCity.trimmingCharacters(in: .whitespacesAndNewlines)); showCustomCity = false }
+                        .disabled(!customLocationIsValid)
                 }
             }
         }
+    }
+
+    private var customAltitudeValue: Int? { Int(customAltitude.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    private var customLocationIsValid: Bool {
+        !customCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && customAltitudeValue.map { (0...5_000).contains($0) } == true
     }
 
     private func saveExperiment() {
@@ -786,6 +803,7 @@ private struct CupHistoryView: View {
         animation: .default
     ) private var cups: FetchedResults<CupSessionRecord>
     @State private var errorMessage: String?
+    @State private var selectedCup: CupSessionRecord?
 
     var body: some View {
         List {
@@ -798,37 +816,101 @@ private struct CupHistoryView: View {
                 .listRowBackground(Color.clear)
             } else {
                 ForEach(cups) { cup in
-                    VStack(alignment: .leading, spacing: 7) {
-                        HStack {
-                            Text(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot).font(.headline)
-                            Spacer()
-                            Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").foregroundStyle(CupaTheme.gold)
+                    Button { selectedCup = cup } label: {
+                        VStack(alignment: .leading, spacing: 7) {
+                            HStack {
+                                Text(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot).font(.headline)
+                                Spacer()
+                                Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").foregroundStyle(CupaTheme.gold)
+                            }
+                            Text("\(cup.techniqueNameSnapshot) · \(cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))) g → \(cup.executedWaterMl) ml")
+                                .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                            HStack {
+                                Label(cup.cupLifeState.localizedCupLife, systemImage: "thermometer.medium")
+                                if !cup.executedGrindSetting.isEmpty { Label(cup.executedGrindSetting, systemImage: "dial.medium") }
+                            }
+                            .font(.caption).foregroundStyle(CupaTheme.forest)
+                            if !cup.comment.isEmpty { Text(cup.comment).font(.caption) }
+                            if let date = cup.brewDate { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary) }
                         }
-                        Text("\(cup.techniqueNameSnapshot) · \(cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))) g → \(cup.executedWaterMl) ml")
-                            .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
-                        HStack {
-                            Label(cup.cupLifeState.localizedCupLife, systemImage: "thermometer.medium")
-                            if !cup.executedGrindSetting.isEmpty { Label(cup.executedGrindSetting, systemImage: "dial.medium") }
-                        }
-                        .font(.caption).foregroundStyle(CupaTheme.forest)
-                        if !cup.comment.isEmpty { Text(cup.comment).font(.caption) }
-                        if let date = cup.brewDate { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary) }
+                        .padding(.vertical, 6)
                     }
-                    .padding(.vertical, 6)
+                    .buttonStyle(.plain)
                     .accessibilityElement(children: .combine)
+                    .accessibilityHint("Abre todos los datos de la taza")
                 }
-                .onDelete(perform: delete)
             }
         }
         .scrollContentBackground(.hidden)
+        .sheet(item: $selectedCup) { cup in
+            CupSessionDetailView(cup: cup, onDelete: { if delete(cup) { selectedCup = nil } })
+        }
         .alert("No se pudo eliminar la taza", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("Aceptar") {}
         } message: { Text(errorMessage ?? "") }
     }
 
-    private func delete(at offsets: IndexSet) {
-        do { for index in offsets { try TastingRepository(context: context).delete(cups[index]) } }
-        catch { context.rollback(); errorMessage = error.localizedDescription }
+    private func delete(_ cup: CupSessionRecord) -> Bool {
+        do { try TastingRepository(context: context).delete(cup); return true }
+        catch { context.rollback(); errorMessage = error.localizedDescription; return false }
+    }
+}
+
+private struct CupSessionDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var cup: CupSessionRecord
+    let onDelete: () -> Void
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Label(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot, systemImage: "cup.and.saucer.fill").font(.title3.bold())
+                            Spacer(); Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").font(.headline).foregroundStyle(CupaTheme.gold)
+                        }
+                        if let date = cup.brewDate { Text(date.formatted(date: .long, time: .shortened)).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                    }.padding(.vertical, 4)
+                }
+                Section("Preparación ejecutada") {
+                    cupDetailRow("Dosis", "\(cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))) g")
+                    cupDetailRow("Agua", "\(cup.executedWaterMl) ml")
+                    cupDetailRow("Proporción", "1:\(cup.executedRatio.formatted(.number.precision(.fractionLength(0...1))))")
+                    cupDetailRow("Temperatura", "\(cup.executedTemperatureC) °C")
+                    cupDetailRow("Duración", String(format: "%02d:%02d", Int(cup.executedDurationSeconds) / 60, Int(cup.executedDurationSeconds) % 60))
+                    if !cup.executedGrindSetting.isEmpty { cupDetailRow("Molienda", cup.executedGrindSetting) }
+                }
+                Section("Referencias históricas") {
+                    if !cup.recipeNameSnapshot.isEmpty { cupDetailRow("Receta", cup.recipeNameSnapshot) }
+                    cupDetailRow("Técnica", cup.techniqueNameSnapshot.isEmpty ? "Cata independiente" : cup.techniqueNameSnapshot)
+                    if !cup.methodNameSnapshot.isEmpty { cupDetailRow("Método", cup.methodNameSnapshot) }
+                    if !cup.grinderNameSnapshot.isEmpty { cupDetailRow("Molino", cup.grinderNameSnapshot) }
+                }
+                Section("Resultado de cata") {
+                    cupDetailRow("Vida de taza", "\(cup.cupLifeState.localizedCupLife) · \(String(format: "%02d:%02d", Int(cup.cupLifeSeconds) / 60, Int(cup.cupLifeSeconds) % 60))")
+                    cupDetailRow("Recomendación", "\(cup.nps)/10")
+                    if !cup.comment.isEmpty { Text(cup.comment) }
+                }
+                Section {
+                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar taza y cata", systemImage: "trash") }
+                }
+            }
+            .navigationTitle("Detalle de taza")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } } }
+            .confirmationDialog("¿Eliminar esta taza?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Eliminar taza y cata", role: .destructive, action: onDelete)
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("También se ocultarán la cata y sus observaciones asociadas. La preparación original se conservará.")
+            }
+        }
+    }
+
+    private func cupDetailRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .top) { Text(title); Spacer(); Text(value).multilineTextAlignment(.trailing).fontWeight(.semibold).foregroundStyle(CupaTheme.forest) }
     }
 }
 
@@ -866,13 +948,11 @@ private struct CoffeeInventoryView: View {
                         .listRowBackground(Color.clear)
                     } else {
                         ForEach(activeBeans) { bean in coffeeRow(bean) }
-                            .onDelete { softDelete(at: $0, from: activeBeans) }
                     }
                 }
                 if !finishedBeans.isEmpty {
                     Section("Lotes históricos / terminados") {
                         ForEach(finishedBeans) { bean in coffeeRow(bean) }
-                            .onDelete { softDelete(at: $0, from: finishedBeans) }
                     }
                 }
             }
@@ -893,7 +973,8 @@ private struct CoffeeInventoryView: View {
             CoffeeBeanDetail(
                 record: bean,
                 onPrepare: { preparation.selectBean(bean); selection = .brew },
-                onLab: { lab.load(bean: bean); selection = .lab }
+                onLab: { lab.load(bean: bean); selection = .lab },
+                onDelete: { delete(bean) }
             )
         }
         .alert("No se pudo guardar el café", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
@@ -929,11 +1010,12 @@ private struct CoffeeInventoryView: View {
             .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("coffee.row.\(bean.id.uuidString)")
     }
 
-    private func softDelete(at offsets: IndexSet, from records: [CoffeeBeanRecord]) {
-        for index in offsets { records[index].markDeleted() }
-        if let error = save() { errorMessage = error }
+    private func delete(_ bean: CoffeeBeanRecord) -> String? {
+        bean.markDeleted()
+        return save()
     }
 
     @discardableResult private func save() -> String? {
@@ -948,15 +1030,19 @@ private struct CoffeeBeanDetail: View {
     @ObservedObject private var record: CoffeeBeanRecord
     private let onPrepare: () -> Void
     private let onLab: () -> Void
+    private let onDelete: () -> String?
     @FetchRequest private var brews: FetchedResults<BrewSessionRecord>
     @FetchRequest private var cups: FetchedResults<CupSessionRecord>
     @State private var showEditor = false
     @State private var actionError: String?
+    @State private var confirmingFinished = false
+    @State private var confirmingDelete = false
 
-    init(record: CoffeeBeanRecord, onPrepare: @escaping () -> Void, onLab: @escaping () -> Void) {
+    init(record: CoffeeBeanRecord, onPrepare: @escaping () -> Void, onLab: @escaping () -> Void, onDelete: @escaping () -> String?) {
         _record = ObservedObject(wrappedValue: record)
         self.onPrepare = onPrepare
         self.onLab = onLab
+        self.onDelete = onDelete
         _brews = FetchRequest(
             sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)],
             predicate: NSPredicate(format: "beanId == %@ AND deletedAt == nil", record.id as CVarArg),
@@ -1007,7 +1093,7 @@ private struct CoffeeBeanDetail: View {
                         Button("Abrir bolsa hoy", systemImage: "shippingbox.and.arrow.backward") { markOpened() }
                     }
                     if record.inventoryStatus != .finished {
-                        Button("Marcar como terminado", systemImage: "checkmark.circle") { markFinished() }
+                        Button("Marcar como terminado", systemImage: "checkmark.circle") { confirmingFinished = true }
                             .foregroundStyle(CupaTheme.terracotta)
                     }
                 }
@@ -1057,12 +1143,16 @@ private struct CoffeeBeanDetail: View {
                         }
                     }
                 }
+
+                Section {
+                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar café", systemImage: "trash") }
+                }
             }
             .navigationTitle("Historial del café")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } }
-                ToolbarItem(placement: .primaryAction) { Button("Editar") { showEditor = true } }
+                ToolbarItem(placement: .primaryAction) { Button("Editar") { showEditor = true }.accessibilityIdentifier("coffee.detail.edit") }
             }
             .sheet(isPresented: $showEditor) {
                 CoffeeBeanEditor(record: record) { draft in
@@ -1074,6 +1164,16 @@ private struct CoffeeBeanDetail: View {
             .alert("No se pudo actualizar el café", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
                 Button("Aceptar") {}
             } message: { Text(actionError ?? "") }
+            .confirmationDialog("¿Marcar este lote como terminado?", isPresented: $confirmingFinished, titleVisibility: .visible) {
+                Button("Marcar como terminado", role: .destructive, action: markFinished)
+                Button("Cancelar", role: .cancel) {}
+            } message: { Text("La cantidad restante cambiará a 0 g. Puedes corregirla después desde Editar.") }
+            .confirmationDialog("¿Eliminar este café?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Eliminar café", role: .destructive) {
+                    if let error = onDelete() { actionError = error } else { dismiss() }
+                }
+                Button("Cancelar", role: .cancel) {}
+            } message: { Text("Se retirará del inventario, pero las preparaciones y tazas conservarán sus datos históricos.") }
         }
     }
 
@@ -1256,6 +1356,7 @@ private struct CoffeeBeanEditor: View {
                 Section("Inventario") {
                     TextField("Cantidad inicial (g)", text: $initialQuantity).keyboardType(.decimalPad)
                     TextField("Cantidad restante (g)", text: $remainingQuantity).keyboardType(.decimalPad)
+                    if let validationMessage { Text(validationMessage).font(.caption).foregroundStyle(.red) }
                     TextField("Notas", text: $notes, axis: .vertical).lineLimit(3...8)
                 }
             }
@@ -1264,24 +1365,27 @@ private struct CoffeeBeanEditor: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
+                        let values: CoffeeBeanValidatedInput
+                        do { values = try validatedInput() }
+                        catch { saveError = error.localizedDescription; return }
                         let error = onSave(CoffeeBeanDraft(
                             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                             brand: brand.trimmingCharacters(in: .whitespacesAndNewlines),
-                            origin: origin,
-                            producer: producer,
-                            variety: variety,
-                            process: process,
-                            altitudeMeters: Int(altitude),
+                            origin: origin.trimmingCharacters(in: .whitespacesAndNewlines),
+                            producer: producer.trimmingCharacters(in: .whitespacesAndNewlines),
+                            variety: variety.trimmingCharacters(in: .whitespacesAndNewlines),
+                            process: process.trimmingCharacters(in: .whitespacesAndNewlines),
+                            altitudeMeters: values.altitudeMeters,
                             roastLevel: roastLevel,
                             roastDate: hasRoastDate ? roastDate : nil,
                             openedDate: hasOpenedDate ? openedDate : nil,
-                            initialQuantityGrams: parseDecimal(initialQuantity),
-                            remainingQuantityGrams: parseDecimal(remainingQuantity),
-                            notes: notes
+                            initialQuantityGrams: values.initialQuantityGrams,
+                            remainingQuantityGrams: values.remainingQuantityGrams,
+                            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
                         ))
                         if let error { saveError = error } else { dismiss() }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || validationMessage != nil)
                 }
             }
             .alert("No se pudo guardar el café", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
@@ -1290,8 +1394,19 @@ private struct CoffeeBeanEditor: View {
         }
     }
 
-    private func parseDecimal(_ text: String) -> Double {
-        Double(text.replacingOccurrences(of: ",", with: ".")) ?? 0
+    private func validatedInput() throws -> CoffeeBeanValidatedInput {
+        try CoffeeBeanInputValidator.validate(
+            altitudeText: altitude,
+            initialQuantityText: initialQuantity,
+            remainingQuantityText: remainingQuantity,
+            roastDate: hasRoastDate ? roastDate : nil,
+            openedDate: hasOpenedDate ? openedDate : nil
+        )
+    }
+
+    private var validationMessage: String? {
+        do { _ = try validatedInput(); return nil }
+        catch { return error.localizedDescription }
     }
 
     private var freshness: CoffeeFreshnessResult {

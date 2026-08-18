@@ -8,7 +8,7 @@ struct CupaApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AppShell()
+            AppShell(storageWarning: persistence.storageRecoveryMessage)
                 .preferredColorScheme(nil)
                 .environment(\.managedObjectContext, persistence.container.viewContext)
         }

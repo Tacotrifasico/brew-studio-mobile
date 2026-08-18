@@ -115,6 +115,62 @@ enum CoffeeFreshnessEngine {
     }
 }
 
+struct CoffeeBeanValidatedInput: Equatable {
+    let altitudeMeters: Int?
+    let initialQuantityGrams: Double
+    let remainingQuantityGrams: Double
+}
+
+enum CoffeeBeanInputError: LocalizedError, Equatable {
+    case invalidAltitude, invalidInitialQuantity, invalidRemainingQuantity, remainingExceedsInitial
+    case roastDateInFuture, openedDateInFuture, openedBeforeRoast
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidAltitude: "La altitud debe ser un número entero entre 0 y 9,000 msnm."
+        case .invalidInitialQuantity: "La cantidad inicial debe ser un número mayor que cero."
+        case .invalidRemainingQuantity: "La cantidad restante debe ser un número igual o mayor que cero."
+        case .remainingExceedsInitial: "La cantidad restante no puede superar la cantidad inicial."
+        case .roastDateInFuture: "La fecha de tueste no puede estar en el futuro."
+        case .openedDateInFuture: "La fecha de apertura no puede estar en el futuro."
+        case .openedBeforeRoast: "La bolsa no puede abrirse antes de la fecha de tueste."
+        }
+    }
+}
+
+enum CoffeeBeanInputValidator {
+    static func validate(
+        altitudeText: String,
+        initialQuantityText: String,
+        remainingQuantityText: String,
+        roastDate: Date?,
+        openedDate: Date?,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) throws -> CoffeeBeanValidatedInput {
+        let altitudeText = altitudeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let altitude: Int?
+        if altitudeText.isEmpty { altitude = nil }
+        else if let value = Int(altitudeText), (0...9_000).contains(value) { altitude = value }
+        else { throw CoffeeBeanInputError.invalidAltitude }
+
+        guard let initial = decimal(initialQuantityText), initial > 0 else { throw CoffeeBeanInputError.invalidInitialQuantity }
+        guard let remaining = decimal(remainingQuantityText), remaining >= 0 else { throw CoffeeBeanInputError.invalidRemainingQuantity }
+        guard remaining <= initial else { throw CoffeeBeanInputError.remainingExceedsInitial }
+
+        let today = calendar.startOfDay(for: now)
+        if let roastDate, calendar.startOfDay(for: roastDate) > today { throw CoffeeBeanInputError.roastDateInFuture }
+        if let openedDate, calendar.startOfDay(for: openedDate) > today { throw CoffeeBeanInputError.openedDateInFuture }
+        if let roastDate, let openedDate, calendar.startOfDay(for: openedDate) < calendar.startOfDay(for: roastDate) { throw CoffeeBeanInputError.openedBeforeRoast }
+        return .init(altitudeMeters: altitude, initialQuantityGrams: initial, remainingQuantityGrams: remaining)
+    }
+
+    private static func decimal(_ text: String) -> Double? {
+        guard let value = Double(text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")), value.isFinite else { return nil }
+        return value
+    }
+}
+
 @objc(CoffeeBeanRecord)
 final class CoffeeBeanRecord: NSManagedObject {
     @NSManaged var id: UUID
@@ -324,9 +380,10 @@ struct PersistenceController {
     static let shared = PersistenceController()
     private static let sharedModel = makeModel()
     let container: NSPersistentContainer
+    let storageRecoveryMessage: String?
 
     init(inMemory: Bool = false, storeURL: URL? = nil, enablePersistentHistory: Bool = true) {
-        container = NSPersistentContainer(name: "Cupa", managedObjectModel: Self.sharedModel)
+        let requestedContainer = NSPersistentContainer(name: "Cupa", managedObjectModel: Self.sharedModel)
         let description = NSPersistentStoreDescription()
         if inMemory {
             description.type = NSInMemoryStoreType
@@ -340,9 +397,24 @@ struct PersistenceController {
             description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
             description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
         }
-        container.persistentStoreDescriptions = [description]
-        container.loadPersistentStores { _, error in
-            if let error { fatalError("No se pudo abrir el almacenamiento local: \(error.localizedDescription)") }
+        requestedContainer.persistentStoreDescriptions = [description]
+        var requestedError: Error?
+        requestedContainer.loadPersistentStores { _, error in requestedError = error }
+
+        if let requestedError, !inMemory {
+            NSLog("Cupa: no se pudo abrir el almacén persistente; se usará una sesión temporal. %@", requestedError.localizedDescription)
+            let fallback = NSPersistentContainer(name: "Cupa", managedObjectModel: Self.sharedModel)
+            let fallbackDescription = NSPersistentStoreDescription()
+            fallbackDescription.type = NSInMemoryStoreType
+            fallback.persistentStoreDescriptions = [fallbackDescription]
+            var fallbackError: Error?
+            fallback.loadPersistentStores { _, error in fallbackError = error }
+            if let fallbackError { NSLog("Cupa: tampoco se pudo abrir el almacén temporal. %@", fallbackError.localizedDescription) }
+            container = fallback
+            storageRecoveryMessage = "No se pudo abrir el almacenamiento permanente. Los cambios de esta sesión serán temporales; reinicia la app antes de continuar con información importante."
+        } else {
+            container = requestedContainer
+            storageRecoveryMessage = requestedError == nil ? nil : "No se pudo iniciar el almacenamiento local."
         }
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy

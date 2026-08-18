@@ -77,7 +77,7 @@ struct HubView: View {
 
     @ViewBuilder private var communityTab: some View {
         if feedLoading { ProgressView("Cargando comunidad…").frame(maxWidth: .infinity, maxHeight: .infinity) }
-        else if feed.isEmpty { ContentUnavailableView("Comunidad sin contenido", systemImage: "person.3", description: Text("El feed muestra únicamente publicaciones reales permitidas por RLS. No hay datos demostrativos.")) }
+        else if feed.isEmpty { ContentUnavailableView("Comunidad sin contenido", systemImage: "person.3", description: Text("Cuando haya fórmulas públicas de la comunidad aparecerán aquí.")) }
         else {
             List(feed) { share in
                 VStack(alignment: .leading, spacing: 8) {

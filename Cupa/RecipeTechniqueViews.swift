@@ -52,7 +52,7 @@ struct RecipeInventoryView: View {
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button { toggleFavorite(recipe) } label: { Label(recipe.isFavorite ? "Quitar favorita" : "Favorita", systemImage: recipe.isFavorite ? "star.slash" : "star") }.tint(CupaTheme.gold)
                     }
-                }.onDelete(perform: delete)
+                }
             }
         }
         .searchable(text: $search, prompt: "Buscar en recetario")
@@ -89,7 +89,6 @@ struct RecipeInventoryView: View {
     private func duplicate(_ recipe: RecipeRecord) { do { _ = try RecipeTechniqueRepository(context: context).duplicateRecipe(recipe) } catch { errorMessage = error.localizedDescription } }
     private func toggleFavorite(_ recipe: RecipeRecord) { do { try RecipeTechniqueRepository(context: context).toggleFavorite(recipe) } catch { errorMessage = error.localizedDescription } }
     private func delete(_ recipe: RecipeRecord) { do { try RecipeTechniqueRepository(context: context).deleteRecipe(recipe) } catch { errorMessage = error.localizedDescription } }
-    private func delete(_ offsets: IndexSet) { do { for index in offsets { try RecipeTechniqueRepository(context: context).deleteRecipe(visible[index]) } } catch { errorMessage = error.localizedDescription } }
     private func matchesSearch(_ recipe: RecipeRecord) -> Bool {
         guard !search.isEmpty else { return true }
         return recipe.name.localizedCaseInsensitiveContains(search) || recipe.tags.localizedCaseInsensitiveContains(search) ||
@@ -216,7 +215,7 @@ struct TechniqueInventoryView: View {
                                 .font(.caption).foregroundStyle(CupaTheme.forest)
                         }.padding(.vertical, 4)
                     }.buttonStyle(.plain)
-                }.onDelete(perform: delete)
+                }
             }
         }
         .searchable(text: $search, prompt: "Buscar técnica o método")
@@ -247,7 +246,6 @@ struct TechniqueInventoryView: View {
         } catch { errorMessage = error.localizedDescription }
     }
     private func delete(_ technique: TechniqueRecord) { do { try RecipeTechniqueRepository(context: context).deleteTechnique(technique) } catch { errorMessage = error.localizedDescription } }
-    private func delete(_ offsets: IndexSet) { do { for index in offsets { try RecipeTechniqueRepository(context: context).deleteTechnique(visible[index]) } } catch { errorMessage = error.localizedDescription } }
 }
 
 private struct TechniqueDetailView: View {

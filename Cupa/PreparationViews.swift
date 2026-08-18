@@ -9,6 +9,7 @@ struct PreparationExecutionView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var recipes: FetchedResults<RecipeRecord>
     @ObservedObject var model: PreparationModel
     @State private var selectedTechniqueId: UUID?; @State private var errorMessage: String?; @State private var savedConfirmation = false
+    @State private var confirmingReset = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -65,6 +66,12 @@ struct PreparationExecutionView: View {
         }
         .alert("Preparación guardada", isPresented: $savedConfirmation) { Button("Aceptar") {} } message: { Text("La sesión y sus snapshots quedaron disponibles offline.") }
         .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "") }
+        .confirmationDialog("¿Reiniciar la preparación?", isPresented: $confirmingReset, titleVisibility: .visible) {
+            Button("Reiniciar preparación", role: .destructive, action: model.reset)
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text(model.state.savedAt == nil ? "Se borrarán el tiempo y el avance que todavía no hayas guardado." : "Se iniciará una preparación nueva con otro identificador.")
+        }
     }
 
     @ViewBuilder private var controls: some View {
@@ -81,14 +88,19 @@ struct PreparationExecutionView: View {
             Button { model.nextStep() } label: { Image(systemName: "forward.end") }
                 .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Paso siguiente")
                 .disabled(model.state.activeStepIndex >= model.state.steps.count - 1)
-            Button { model.reset() } label: { Image(systemName: "arrow.counterclockwise") }
+            Button(action: requestReset) { Image(systemName: "arrow.counterclockwise") }
                 .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Reiniciar preparación")
+                .accessibilityIdentifier("preparation.reset")
                 .disabled(model.state.steps.isEmpty)
         }
         if model.state.elapsedSeconds > 0 && model.state.savedAt == nil {
             Button(model.state.status == .completed ? "Guardar sesión finalizada" : "Finalizar y guardar sesión", action: finish).buttonStyle(.bordered).tint(CupaTheme.forest)
                 .accessibilityIdentifier("preparation.finish")
         }
+    }
+    private func requestReset() {
+        if model.state.elapsedSeconds > 0 || model.state.savedAt != nil { confirmingReset = true }
+        else { model.reset() }
     }
 
     private func loadTechnique() {
@@ -97,6 +109,7 @@ struct PreparationExecutionView: View {
         catch { errorMessage = error.localizedDescription }
     }
     private func finish() {
+        if model.state.status == .running { model.pause() }
         let recipeName = recipes.first(where: { $0.id == model.state.recipeId })?.name ?? ""
         let beanName = beans.first(where: { $0.id == model.state.beanId })?.name ?? ""
         let grinderName = grinders.first(where: { $0.id == model.state.grinderId })?.name ?? ""

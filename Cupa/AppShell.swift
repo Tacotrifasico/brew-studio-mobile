@@ -5,6 +5,7 @@ enum CupaTab: Hashable {
 }
 
 struct AppShell: View {
+    let storageWarning: String?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.managedObjectContext) private var context
     @State private var selection: CupaTab = .home
@@ -14,6 +15,8 @@ struct AppShell: View {
     @StateObject private var tasting = TastingModel()
     @StateObject private var account = AccountModel()
     @StateObject private var settings = SettingsModel()
+
+    init(storageWarning: String? = nil) { self.storageWarning = storageWarning }
 
     var body: some View {
         TabView(selection: $selection) {
@@ -38,6 +41,17 @@ struct AppShell: View {
                 .tabItem { Label("Almacén", systemImage: "shippingbox") }
         }
         .tint(CupaTheme.forest)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let storageWarning {
+                Label(storageWarning, systemImage: "externaldrive.badge.exclamationmark")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .background(CupaTheme.terracotta)
+                    .accessibilityIdentifier("storage.recoveryWarning")
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
         }

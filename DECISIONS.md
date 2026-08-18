@@ -56,9 +56,9 @@ El cliente envía sólo entradas numéricas y de método a una Edge Function con
 
 Los colores semánticos usan proveedores dinámicos de UIKit para responder a claro/oscuro sin duplicar vistas. La elección sistema/claro/oscuro y las unidades persisten en `UserDefaults`. Brew Hub cuenta directamente entidades Core Data no eliminadas; no guarda contadores ni inserta actividad demostrativa. El perfil es propiedad del UUID autenticado y se conserva offline con estado de sincronización.
 
-## D-015 — Publicaciones por snapshot y moderación mínima
+## D-015 — Publicaciones por snapshot y moderación en profundidad
 
-Compartir crea un snapshot explícito de receta o técnica; importar genera UUID nuevos y conserva `originalEntityId` y `copyMode=IMPORT`. El feed sólo consulta contenido real `PUBLIC/ACTIVE`. RLS excluye relaciones bloqueadas y separa mensajes directos. Likes y guardados sólo son visibles/editables por su usuario; reportes son visibles al denunciante y quedan listos para revisión administrativa. Correos y otros identificadores sensibles nunca forman parte del payload público.
+Compartir crea un snapshot explícito de receta o técnica; importar genera UUID nuevos y conserva `originalEntityId` y `copyMode=IMPORT`. El feed sólo consulta contenido real `PUBLIC/ACTIVE`. RLS excluye relaciones bloqueadas y separa mensajes directos. Likes y guardados sólo son visibles/editables por su usuario; reportes son visibles al denunciante y quedan listos para revisión administrativa. Correos y otros identificadores sensibles nunca forman parte del payload público. La publicación valida identidad, longitudes y frases objetables en iOS para respuesta inmediata y repite la regla mediante trigger SQL sobre todo el snapshot, evitando que REST directo eluda el filtro.
 
 ## D-016 — Sincronización incremental por descriptor
 

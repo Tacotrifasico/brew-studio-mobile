@@ -17,6 +17,35 @@ struct SharedTechniqueSnapshot: Codable, Equatable {
 }
 struct SharePayloadSnapshot: Codable, Equatable { let kind: String; let recipe: SharedRecipeSnapshot?; let technique: SharedTechniqueSnapshot? }
 
+enum SocialValidationError: LocalizedError, Equatable {
+    case emptyIdentity, tooLong, objectionableContent
+    var errorDescription: String? {
+        switch self {
+        case .emptyIdentity: "Completa tu nombre y alias antes de publicar."
+        case .tooLong: "La publicación excede la longitud permitida."
+        case .objectionableContent: "La publicación contiene texto que no está permitido en la comunidad."
+        }
+    }
+}
+
+enum SocialContentPolicy {
+    private static let blockedPhrases = [
+        "pornografia", "pornography", "violacion", "rape", "nazi", "terrorista", "terrorist",
+        "matarte", "kill yourself", "suicidate", "suicide", "odio racial", "racial hate"
+    ]
+
+    static func validate(fromName: String, fromHandle: String, name: String, subtitle: String, message: String, payload: SharePayloadSnapshot) throws {
+        guard !fromName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !fromHandle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SocialValidationError.emptyIdentity }
+        guard fromName.count <= 80, fromHandle.count <= 40, name.count <= 160, subtitle.count <= 300, message.count <= 1_000 else { throw SocialValidationError.tooLong }
+        let payloadText = (try? String(data: JSONEncoder().encode(payload), encoding: .utf8)) ?? ""
+        let combined = [fromName, fromHandle, name, subtitle, message, payloadText].joined(separator: " ")
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "es_MX"))
+            .lowercased()
+        guard !blockedPhrases.contains(where: combined.contains) else { throw SocialValidationError.objectionableContent }
+    }
+}
+
 struct SocialShare: Codable, Identifiable, Equatable {
     let id: UUID; let ownerId: UUID; let entityType: String; let entityId: UUID; let fromName: String; let fromHandle: String
     let targetUserId: UUID?; let visibility: String; let name: String; let subtitle: String; let message: String
@@ -38,6 +67,7 @@ struct SocialService {
         return try JSONDecoder().decode([SocialShare].self, from: data)
     }
     func publish(entityType: String, entityId: UUID, fromName: String, fromHandle: String, name: String, subtitle: String, message: String, payload: SharePayloadSnapshot, accessToken: String) async throws {
+        try SocialContentPolicy.validate(fromName: fromName, fromHandle: fromHandle, name: name, subtitle: subtitle, message: message, payload: payload)
         let body: [String: Any] = ["entity_type": entityType, "entity_id": entityId.uuidString, "from_name": fromName, "from_handle": fromHandle, "visibility": "PUBLIC", "name": name, "subtitle": subtitle, "message": message, "payload_snapshot": try jsonObject(payload), "original_entity_id": entityId.uuidString]
         _ = try await request(path: "rest/v1/brew_shares", query: nil, method: "POST", body: try JSONSerialization.data(withJSONObject: body), accessToken: accessToken, prefer: "return=minimal")
     }

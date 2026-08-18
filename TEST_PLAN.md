@@ -40,7 +40,7 @@
 - Gemini: llamada autenticada a Edge Function, validación de respuesta y fallback local determinista cuando no hay configuración: verificador ejecutado + XCTest compilado.
 - Perfil: creación, edición con UUID estable, normalización de alias, aislamiento entre dos propietarios y DTO sin correo: verificador ejecutado.
 - Configuración: restauración de tema oscuro, Fahrenheit y unidades: XCTest compilado.
-- Social: contrato del feed público, publicación sin correo, reporte, bloqueo e importación profunda con atribución: verificador ejecutado + XCTest compilado.
+- Social: contrato del feed público, publicación sin correo, reporte, bloqueo, filtro preventivo e importación profunda con atribución: verificador ejecutado + XCTest compilado.
 - Target `CupaTests`: compilación para iOS Simulator aprobada. La ejecución XCTest queda pendiente hasta reparar CoreSimulator local.
 - Target `CupaUITests`: tres recorridos XCTest UI compilados para arm64 y x86_64. La ejecución queda pendiente hasta reparar CoreSimulator local.
 - Build Release para iPhone genérico sin firma: aprobado.

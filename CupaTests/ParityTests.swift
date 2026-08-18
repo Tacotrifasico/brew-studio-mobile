@@ -66,6 +66,30 @@ final class LabEngineParityTests: XCTestCase {
     }
 }
 
+final class SocialContentPolicyTests: XCTestCase {
+    private let safePayload = SharePayloadSnapshot(
+        kind: "recipe",
+        recipe: SharedRecipeSnapshot(name: "V60 dulce", recipeKind: "Brew", intention: "Balance", suggestedMethodName: "V60", tags: "frutal", ingredients: [], steps: []),
+        technique: nil
+    )
+
+    func testAllowsCoffeeContent() throws {
+        XCTAssertNoThrow(try SocialContentPolicy.validate(fromName: "Ana", fromHandle: "ana", name: "V60 dulce", subtitle: "Balance", message: "Notas de cacao", payload: safePayload))
+    }
+
+    func testRejectsObjectionableContentEvenWithDiacritics() {
+        XCTAssertThrowsError(try SocialContentPolicy.validate(fromName: "Ana", fromHandle: "ana", name: "V60", subtitle: "", message: "contenido de violación", payload: safePayload)) { error in
+            XCTAssertEqual(error as? SocialValidationError, .objectionableContent)
+        }
+    }
+
+    func testRejectsMissingProfileIdentity() {
+        XCTAssertThrowsError(try SocialContentPolicy.validate(fromName: "", fromHandle: "", name: "V60", subtitle: "", message: "", payload: safePayload)) { error in
+            XCTAssertEqual(error as? SocialValidationError, .emptyIdentity)
+        }
+    }
+}
+
 final class CalculatorParityTests: XCTestCase {
     @MainActor func testBidirectionalCalculationsMatchAndroidRules() {
         let calculator = CalculatorModel()

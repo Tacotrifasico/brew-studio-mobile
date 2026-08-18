@@ -36,6 +36,7 @@ struct LabGoldenVerifier {
         verifySyncConflictAndOutbox()
         verifyLocalSuggestionFallback()
         verifyProfilePersistence()
+        verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
         print("4 golden tests, agregados, preparación, cata, sincronización, IA, perfil y social aprobados")
@@ -204,6 +205,23 @@ struct LabGoldenVerifier {
         try! SocialService(configuration: .init(supabaseURL: nil, supabaseAnonKey: nil)).importShare(share, context: context)
         let imported = try! context.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord"))
         precondition(imported.first?.originalEntityId == originalId && imported.first?.copyMode == "IMPORT")
+    }
+
+    private static func verifySocialContentPolicy() {
+        let payload = SharePayloadSnapshot(
+            kind: "recipe",
+            recipe: .init(name: "V60 dulce", recipeKind: "BLACK_COFFEE", intention: "Balance", suggestedMethodName: "V60", tags: "", ingredients: [], steps: []),
+            technique: nil
+        )
+        try! SocialContentPolicy.validate(fromName: "Ana", fromHandle: "ana", name: "V60 dulce", subtitle: "Balance", message: "Notas de cacao", payload: payload)
+        do {
+            try SocialContentPolicy.validate(fromName: "Ana", fromHandle: "ana", name: "V60", subtitle: "", message: "contenido de violación", payload: payload)
+            preconditionFailure("El filtro social aceptó contenido prohibido")
+        } catch SocialValidationError.objectionableContent {
+            // Resultado esperado.
+        } catch {
+            preconditionFailure("Error inesperado del filtro social: \(error)")
+        }
     }
 
     @MainActor private static func verifyEntitySyncMapping() {

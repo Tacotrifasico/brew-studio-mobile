@@ -372,3 +372,33 @@ final class SettingsTests: XCTestCase {
         XCTAssertTrue(json.contains("favorite_methods")); XCTAssertFalse(json.contains("email"))
     }
 }
+
+final class SocialTests: XCTestCase {
+    @MainActor func testFeedContractImportAndAttribution() async throws {
+        let originalId = UUID(); let ownerId = UUID()
+        let recipe = SharedRecipeSnapshot(name: "V60 comunitaria", recipeKind: "BLACK_COFFEE", intention: "Dulzor", suggestedMethodName: "V60", tags: "frutal", ingredients: [.init(name: "Café", amount: 15, unit: "GRAMS")], steps: [.init(instruction: "Bloom", durationSeconds: 45)])
+        let share = SocialShare(id: UUID(), ownerId: ownerId, entityType: "recipe", entityId: originalId, fromName: "Barista", fromHandle: "barista", targetUserId: nil, visibility: "PUBLIC", name: recipe.name, subtitle: recipe.intention, message: "Prueba", payloadSnapshot: .init(kind: "recipe", recipe: recipe, technique: nil), originalEntityId: originalId, status: "ACTIVE", createdAt: "2026-08-17T00:00:00Z", updatedAt: "2026-08-17T00:00:00Z")
+        let transport = MockTransport(responseData: try JSONEncoder().encode([share]))
+        let service = SocialService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
+        let feed = try await service.feed(accessToken: "user-jwt")
+        XCTAssertEqual(feed, [share]); XCTAssertEqual(transport.requests.first?.url?.path, "/rest/v1/brew_shares")
+        XCTAssertTrue(transport.requests.first?.url?.query?.contains("visibility=eq.PUBLIC") == true)
+
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        try service.importShare(share, context: context)
+        let imported = try context.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord"))
+        XCTAssertEqual(imported.first?.name, "Copia de V60 comunitaria"); XCTAssertEqual(imported.first?.originalEntityId, originalId); XCTAssertEqual(imported.first?.copyMode, "IMPORT")
+        XCTAssertEqual(try RecipeTechniqueRepository(context: context).ingredients(recipeId: try XCTUnwrap(imported.first?.id)).count, 1)
+    }
+
+    func testPublishReportAndBlockContractsDoNotExposeEmail() async throws {
+        let transport = MockTransport(statusCode: 201); let service = SocialService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
+        let entityId = UUID(); let payload = SharePayloadSnapshot(kind: "recipe", recipe: .init(name: "V60", recipeKind: "BLACK_COFFEE", intention: "", suggestedMethodName: "V60", tags: "", ingredients: [], steps: []), technique: nil)
+        try await service.publish(entityType: "recipe", entityId: entityId, fromName: "Barista", fromHandle: "brew", name: "V60", subtitle: "", message: "", payload: payload, accessToken: "jwt")
+        let publishBody = String(data: try XCTUnwrap(transport.requests.first?.httpBody), encoding: .utf8) ?? ""
+        XCTAssertFalse(publishBody.contains("email")); XCTAssertTrue(publishBody.contains("payload_snapshot"))
+        try await service.report(shareId: UUID(), reason: "USER_REPORTED", accessToken: "jwt")
+        try await service.block(userId: UUID(), accessToken: "jwt")
+        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/rest/v1/brew_shares", "/rest/v1/content_reports", "/rest/v1/blocked_users"])
+    }
+}

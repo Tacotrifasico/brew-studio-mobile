@@ -13,6 +13,7 @@ struct HubView: View {
     @State private var displayName = ""; @State private var alias = ""; @State private var biography = ""
     @State private var avatarColor = "#3F7A63"; @State private var favoriteMethods = ""; @State private var isPrivate = true
     @State private var message: String?
+    @State private var feed: [SocialShare] = []; @State private var feedLoading = false
 
     var body: some View {
         NavigationStack {
@@ -25,7 +26,7 @@ struct HubView: View {
             .navigationTitle("Brew Studio Hub")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Cerrar") { dismiss() } } }
             .sheet(isPresented: $showAccount) { AccountView(model: account) }
-            .task { loadProfile() }
+            .task { loadProfile(); await loadFeed() }
             .alert("Perfil", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("Aceptar") {} } message: { Text(message ?? "") }
         }
     }
@@ -53,10 +54,13 @@ struct HubView: View {
 
     private var formulasTab: some View {
         List {
-            Section("Recetas") { if recipes.isEmpty { Text("Sin recetas guardadas") } else { ForEach(recipes) { Text($0.name) } } }
+            Section("Recetas") {
+                if recipes.isEmpty { Text("Sin recetas guardadas") }
+                else { ForEach(recipes) { recipe in HStack { Text(recipe.name); Spacer(); Button { publish(recipe: recipe) } label: { Image(systemName: "square.and.arrow.up") } } } }
+            }
             Section("Técnicas") {
                 if techniques.isEmpty { Text("Sin técnicas guardadas") }
-                else { ForEach(techniques) { technique in VStack(alignment: .leading) { Text(technique.name); Text(technique.methodName).font(.caption).foregroundStyle(.secondary) } } }
+                else { ForEach(techniques) { technique in HStack { VStack(alignment: .leading) { Text(technique.name); Text(technique.methodName).font(.caption).foregroundStyle(.secondary) }; Spacer(); Button { publish(technique: technique) } label: { Image(systemName: "square.and.arrow.up") } } } }
             }
         }.scrollContentBackground(.hidden)
     }
@@ -68,8 +72,22 @@ struct HubView: View {
         }.scrollContentBackground(.hidden)
     }
 
-    private var communityTab: some View {
-        ContentUnavailableView("Comunidad sin contenido", systemImage: "person.3", description: Text("El feed mostrará únicamente publicaciones reales permitidas por RLS. No hay datos demostrativos."))
+    @ViewBuilder private var communityTab: some View {
+        if feedLoading { ProgressView("Cargando comunidad…").frame(maxWidth: .infinity, maxHeight: .infinity) }
+        else if feed.isEmpty { ContentUnavailableView("Comunidad sin contenido", systemImage: "person.3", description: Text("El feed muestra únicamente publicaciones reales permitidas por RLS. No hay datos demostrativos.")) }
+        else {
+            List(feed) { share in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(share.name).font(.headline); Text("@\(share.fromHandle) · \(share.entityType.capitalized)").font(.caption).foregroundStyle(.secondary)
+                    if !share.message.isEmpty { Text(share.message).font(.subheadline) }
+                    HStack {
+                        Button("Importar") { importShare(share) }
+                        Button { socialAction { try await $0.like(shareId: share.id, accessToken: account.tokens!.accessToken) } } label: { Label("Me gusta", systemImage: "heart") }
+                        Menu { Button("Reportar contenido", role: .destructive) { socialAction { try await $0.report(shareId: share.id, reason: "USER_REPORTED", accessToken: account.tokens!.accessToken) } }; Button("Bloquear usuario", role: .destructive) { block(share) } } label: { Image(systemName: "ellipsis") }
+                    }.font(.caption)
+                }.padding(.vertical, 5)
+            }.scrollContentBackground(.hidden).refreshable { await loadFeed() }
+        }
     }
 
     private func loadProfile() {
@@ -87,5 +105,34 @@ struct HubView: View {
                 catch { message = "Perfil guardado offline; se sincronizará cuando el backend esté disponible." }
             }
         } catch { context.rollback(); message = error.localizedDescription }
+    }
+    private func loadFeed() async {
+        guard let token = account.tokens?.accessToken else { return }; feedLoading = true
+        do { feed = try await SocialService(configuration: account.configuration).feed(accessToken: token) }
+        catch { if account.configuration.isSupabaseConfigured { message = error.localizedDescription } }
+        feedLoading = false
+    }
+    private func publish(recipe: RecipeRecord) {
+        guard let tokens = account.tokens else { return }
+        do {
+            let draft = try RecipeTechniqueRepository(context: context).recipeDraft(for: recipe)
+            let snapshot = SharedRecipeSnapshot(name: draft.name, recipeKind: draft.recipeKind, intention: draft.intention, suggestedMethodName: draft.suggestedMethodName, tags: draft.tags, ingredients: draft.ingredients.map { .init(name: $0.name, amount: $0.amount, unit: $0.unit) }, steps: draft.steps.map { .init(instruction: $0.instruction, durationSeconds: $0.durationSeconds) })
+            let payload = SharePayloadSnapshot(kind: "recipe", recipe: snapshot, technique: nil)
+            socialAction { try await $0.publish(entityType: "recipe", entityId: recipe.id, fromName: displayName, fromHandle: alias, name: recipe.name, subtitle: recipe.intention, message: "", payload: payload, accessToken: tokens.accessToken) }
+        } catch { message = error.localizedDescription }
+    }
+    private func publish(technique: TechniqueRecord) {
+        guard let tokens = account.tokens else { return }
+        do {
+            let draft = try RecipeTechniqueRepository(context: context).techniqueDraft(for: technique)
+            let snapshot = SharedTechniqueSnapshot(name: draft.name, methodName: draft.methodName, doseGrams: draft.doseGrams, waterMl: draft.waterMl, ratio: draft.ratio, temperatureC: draft.temperatureC, executionMode: draft.executionMode, grindValue: draft.grindValue, grindDescription: draft.grindDescription, grindUnit: draft.grindUnit, notes: draft.notes, techniqueDescription: draft.techniqueDescription, steps: draft.steps.map { .init(title: $0.title, durationSeconds: $0.durationSeconds, waterAddedMl: $0.waterAddedMl, intensity: $0.intensity, gesture: $0.gesture, note: $0.note) })
+            let payload = SharePayloadSnapshot(kind: "technique", recipe: nil, technique: snapshot)
+            socialAction { try await $0.publish(entityType: "technique", entityId: technique.id, fromName: displayName, fromHandle: alias, name: technique.name, subtitle: technique.methodName, message: "", payload: payload, accessToken: tokens.accessToken) }
+        } catch { message = error.localizedDescription }
+    }
+    private func importShare(_ share: SocialShare) { do { try SocialService(configuration: account.configuration).importShare(share, context: context); message = "Fórmula importada con atribución." } catch { message = error.localizedDescription } }
+    private func block(_ share: SocialShare) { socialAction { try await $0.block(userId: share.ownerId, accessToken: account.tokens!.accessToken) }; feed.removeAll { $0.ownerId == share.ownerId } }
+    private func socialAction(_ operation: @escaping (SocialService) async throws -> Void) {
+        Task { do { try await operation(SocialService(configuration: account.configuration)); message = "Acción completada."; await loadFeed() } catch { message = error.localizedDescription } }
     }
 }

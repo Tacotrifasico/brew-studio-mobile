@@ -38,4 +38,6 @@ Relaciones por UUID estables. Una sesión histórica conserva identificadores y 
 
 `UserProfile` usa el UUID de Auth como identidad y conserva nombre, alias, biografía, color de avatar, métodos favoritos y privacidad. Las estadísticas del Hub se derivan de recetas, técnicas, preparaciones y catas activas; no son campos almacenados ni valores simulados.
 
+`BrewShare` conserva tipo/UUID de la entidad, autor público, visibilidad, destino opcional, mensaje y snapshot tipado. `ShareLike`, `ShareSave`, `BlockedUser` y `ContentReport` son tablas separadas con claves compuestas o unicidad para impedir duplicados. Una importación crea un agregado local nuevo y conserva atribución; nunca adopta el UUID editable del autor.
+
 `syncStatus`: `synced`, `pendingCreate`, `pendingUpdate`, `pendingDelete`, `conflict`, `error`.

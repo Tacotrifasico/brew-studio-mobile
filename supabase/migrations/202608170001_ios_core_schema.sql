@@ -138,6 +138,36 @@ create table if not exists public.ai_request_log (
   prompt_version text not null, created_at timestamptz not null default now()
 );
 
+create table if not exists public.blocked_users (
+  blocker_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  blocked_user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(), primary key (blocker_id, blocked_user_id), check (blocker_id <> blocked_user_id)
+);
+
+create table if not exists public.brew_shares (
+  id uuid primary key default gen_random_uuid(), owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  entity_type text not null check (entity_type in ('recipe','technique')), entity_id uuid not null,
+  from_name text not null, from_handle text not null, target_user_id uuid references auth.users(id) on delete cascade,
+  visibility text not null default 'PUBLIC' check (visibility in ('PUBLIC','DIRECT')),
+  name text not null, subtitle text not null default '', message text not null default '', payload_snapshot jsonb not null,
+  original_entity_id uuid, status text not null default 'ACTIVE' check (status in ('ACTIVE','REMOVED')),
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1, deleted_at timestamptz
+);
+
+create table if not exists public.share_likes (
+  share_id uuid not null references public.brew_shares(id) on delete cascade, user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(), primary key (share_id, user_id)
+);
+create table if not exists public.share_saves (
+  share_id uuid not null references public.brew_shares(id) on delete cascade, user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(), primary key (share_id, user_id)
+);
+create table if not exists public.content_reports (
+  id uuid primary key default gen_random_uuid(), reporter_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  share_id uuid not null references public.brew_shares(id) on delete cascade, reason text not null,
+  status text not null default 'OPEN' check (status in ('OPEN','REVIEWED','DISMISSED','ACTIONED')), created_at timestamptz not null default now(), unique (reporter_id, share_id)
+);
+
 create index if not exists coffee_beans_owner_updated_idx on public.coffee_beans(owner_id, updated_at);
 create index if not exists grinders_owner_updated_idx on public.grinders(owner_id, updated_at);
 create index if not exists equipment_owner_updated_idx on public.equipment(owner_id, updated_at);
@@ -151,6 +181,9 @@ create index if not exists tastings_owner_updated_idx on public.tastings(owner_i
 create index if not exists tasting_observations_parent_idx on public.tasting_observations(tasting_id, elapsed_seconds);
 create index if not exists cup_sessions_owner_updated_idx on public.cup_sessions(owner_id, updated_at);
 create index if not exists ai_request_log_owner_created_idx on public.ai_request_log(owner_id, created_at desc);
+create index if not exists brew_shares_feed_idx on public.brew_shares(visibility, status, created_at desc);
+create index if not exists brew_shares_target_idx on public.brew_shares(target_user_id, created_at desc);
+create index if not exists content_reports_status_idx on public.content_reports(status, created_at);
 
 do $$
 declare table_name text;
@@ -160,6 +193,11 @@ begin
     execute format('alter table public.%I enable row level security', table_name);
   end loop;
   alter table public.ai_request_log enable row level security;
+  alter table public.blocked_users enable row level security;
+  alter table public.brew_shares enable row level security;
+  alter table public.share_likes enable row level security;
+  alter table public.share_saves enable row level security;
+  alter table public.content_reports enable row level security;
 end $$;
 
 do $$
@@ -180,6 +218,16 @@ begin
     create policy ai_request_log_owner_all on public.ai_request_log for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
   exception when duplicate_object then null;
   end;
+  begin create policy blocked_users_owner_all on public.blocked_users for all to authenticated using (blocker_id = auth.uid()) with check (blocker_id = auth.uid()); exception when duplicate_object then null; end;
+  begin create policy brew_shares_read_allowed on public.brew_shares for select to authenticated using (
+    deleted_at is null and status = 'ACTIVE' and (owner_id = auth.uid() or target_user_id = auth.uid() or visibility = 'PUBLIC') and
+    not exists (select 1 from public.blocked_users b where (b.blocker_id = auth.uid() and b.blocked_user_id = owner_id) or (b.blocker_id = owner_id and b.blocked_user_id = auth.uid()))
+  ); exception when duplicate_object then null; end;
+  begin create policy brew_shares_owner_write on public.brew_shares for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid()); exception when duplicate_object then null; end;
+  begin create policy share_likes_owner_write on public.share_likes for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid()); exception when duplicate_object then null; end;
+  begin create policy share_saves_owner_all on public.share_saves for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid()); exception when duplicate_object then null; end;
+  begin create policy content_reports_owner_insert on public.content_reports for insert to authenticated with check (reporter_id = auth.uid()); exception when duplicate_object then null; end;
+  begin create policy content_reports_owner_read on public.content_reports for select to authenticated using (reporter_id = auth.uid()); exception when duplicate_object then null; end;
 end $$;
 
 do $$
@@ -190,6 +238,8 @@ begin
     execute format('drop trigger if exists %I on public.%I', table_name || '_set_updated_at', table_name);
     execute format('create trigger %I before update on public.%I for each row execute function public.set_updated_at()', table_name || '_set_updated_at', table_name);
   end loop;
+  drop trigger if exists brew_shares_set_updated_at on public.brew_shares;
+  create trigger brew_shares_set_updated_at before update on public.brew_shares for each row execute function public.set_updated_at();
 end $$;
 
 commit;

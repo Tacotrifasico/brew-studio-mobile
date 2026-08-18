@@ -36,7 +36,8 @@ struct LabGoldenVerifier {
         verifySyncConflictAndOutbox()
         verifyLocalSuggestionFallback()
         verifyProfilePersistence()
-        print("4 golden tests, agregados, preparación, cata, outbox, IA y perfil aprobados")
+        verifySocialImportAttribution()
+        print("4 golden tests, agregados, preparación, cata, outbox, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -189,5 +190,18 @@ struct LabGoldenVerifier {
         _ = try! repository.save(ownerId: ownerB, displayName: "Otra", alias: "otra", biography: "", avatarColor: "#000000", favoriteMethods: "", isPrivate: true)
         precondition(first.id == updated.id && updated.alias == "brewther")
         precondition(try! context.fetch(NSFetchRequest<UserProfileRecord>(entityName: "UserProfileRecord")).count == 2)
+    }
+
+    @MainActor private static func verifySocialImportAttribution() {
+        let originalId = UUID(); let share = SocialShare(
+            id: UUID(), ownerId: UUID(), entityType: "recipe", entityId: originalId, fromName: "Barista", fromHandle: "brew",
+            targetUserId: nil, visibility: "PUBLIC", name: "V60 comunitaria", subtitle: "Dulzor", message: "",
+            payloadSnapshot: .init(kind: "recipe", recipe: .init(name: "V60 comunitaria", recipeKind: "BLACK_COFFEE", intention: "Dulzor", suggestedMethodName: "V60", tags: "", ingredients: [.init(name: "Café", amount: 15, unit: "GRAMS")], steps: [.init(instruction: "Bloom", durationSeconds: 45)]), technique: nil),
+            originalEntityId: originalId, status: "ACTIVE", createdAt: "2026-08-17T00:00:00Z", updatedAt: "2026-08-17T00:00:00Z"
+        )
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        try! SocialService(configuration: .init(supabaseURL: nil, supabaseAnonKey: nil)).importShare(share, context: context)
+        let imported = try! context.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord"))
+        precondition(imported.first?.originalEntityId == originalId && imported.first?.copyMode == "IMPORT")
     }
 }

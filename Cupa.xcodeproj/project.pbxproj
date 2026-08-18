@@ -29,6 +29,7 @@
 		A10000000000000000000015 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* Settings.swift */; };
 		A10000000000000000000016 /* ProfileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* ProfileModels.swift */; };
 		A10000000000000000000017 /* HubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* HubView.swift */; };
+		A10000000000000000000018 /* SocialModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* SocialModels.swift */; };
 		B10000000000000000000001 /* ParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ParityTests.swift */; };
 		B10000000000000000000002 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* XCTest.framework */; };
 /* End PBXBuildFile section */
@@ -67,6 +68,7 @@
 		A20000000000000000000015 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 /* ProfileModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileModels.swift; sourceTree = "<group>"; };
 		A20000000000000000000017 /* HubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HubView.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* SocialModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialModels.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* ParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParityTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* CupaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CupaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000003 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
@@ -131,6 +133,7 @@
 				A20000000000000000000015 /* Settings.swift */,
 				A20000000000000000000016 /* ProfileModels.swift */,
 				A20000000000000000000017 /* HubView.swift */,
+				A20000000000000000000018 /* SocialModels.swift */,
 			);
 			path = Cupa;
 			sourceTree = "<group>";
@@ -291,6 +294,7 @@
 				A10000000000000000000015 /* Settings.swift in Sources */,
 				A10000000000000000000016 /* ProfileModels.swift in Sources */,
 				A10000000000000000000017 /* HubView.swift in Sources */,
+				A10000000000000000000018 /* SocialModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

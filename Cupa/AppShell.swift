@@ -1,14 +1,25 @@
 import SwiftUI
 
-enum CupaTab: Hashable {
+enum CupaTab: String, CaseIterable, Hashable, Identifiable {
     case home, brew, tasting, lab, storage
+    var id: Self { self }
+    var title: String {
+        switch self { case .home: "Taller"; case .brew: "Preparar"; case .tasting: "Cata"; case .lab: "Laboratorio"; case .storage: "Almacén" }
+    }
+}
+
+@MainActor
+final class AppNavigationModel: ObservableObject {
+    @Published var selection: CupaTab
+    init(selection: CupaTab = .home) { self.selection = selection }
+    func select(_ tab: CupaTab) { selection = tab }
 }
 
 struct AppShell: View {
     let storageWarning: String?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.managedObjectContext) private var context
-    @State private var selection: CupaTab = .home
+    @StateObject private var navigation = AppNavigationModel()
     @StateObject private var calculator = CalculatorModel()
     @StateObject private var lab = LabModel()
     @StateObject private var preparation = PreparationModel()
@@ -19,24 +30,24 @@ struct AppShell: View {
     init(storageWarning: String? = nil) { self.storageWarning = storageWarning }
 
     var body: some View {
-        TabView(selection: $selection) {
-            NavigationStack { HomeView(selection: $selection, account: account, settings: settings) }
+        TabView(selection: $navigation.selection) {
+            NavigationStack { HomeView(selection: $navigation.selection, account: account, settings: settings) }
                 .tag(CupaTab.home)
                 .tabItem { Label("Taller", systemImage: "house") }
 
-            NavigationStack { BrewView(selection: $selection, calculator: calculator, lab: lab, preparation: preparation) }
+            NavigationStack { BrewView(selection: $navigation.selection, calculator: calculator, lab: lab, preparation: preparation) }
                 .tag(CupaTab.brew)
                 .tabItem { Label("Preparar", systemImage: "mug") }
 
-            NavigationStack { TastingView(model: tasting, lab: lab, selection: $selection) }
+            NavigationStack { TastingView(model: tasting, lab: lab, selection: $navigation.selection) }
                 .tag(CupaTab.tasting)
                 .tabItem { Label("Cata", systemImage: "heart") }
 
-            NavigationStack { LabView(model: lab, preparation: preparation, account: account, selection: $selection) }
+            NavigationStack { LabView(model: lab, preparation: preparation, account: account, selection: $navigation.selection) }
                 .tag(CupaTab.lab)
                 .tabItem { Label("Laboratorio", systemImage: "flask") }
 
-            NavigationStack { StorageView(selection: $selection, lab: lab, preparation: preparation) }
+            NavigationStack { StorageView(selection: $navigation.selection, lab: lab, preparation: preparation) }
                 .tag(CupaTab.storage)
                 .tabItem { Label("Almacén", systemImage: "shippingbox") }
         }
@@ -45,7 +56,7 @@ struct AppShell: View {
             if let storageWarning {
                 Label(storageWarning, systemImage: "externaldrive.badge.exclamationmark")
                     .font(.caption.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(CupaTheme.onAccent)
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .frame(maxWidth: .infinity)
                     .background(CupaTheme.terracotta)

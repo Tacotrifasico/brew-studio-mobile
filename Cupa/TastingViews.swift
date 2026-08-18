@@ -59,9 +59,9 @@ struct TastingView: View {
                 ProgressView(value: min(Double(model.state.coolingElapsedSeconds), 960), total: 960).tint(CupaTheme.terracotta)
                 HStack {
                     switch model.state.coolingStatus {
-                    case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest).accessibilityIdentifier("tasting.cooling.start")
-                    case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta).accessibilityIdentifier("tasting.cooling.pause")
-                    case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest).accessibilityIdentifier("tasting.cooling.resume")
+                    case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent).accessibilityIdentifier("tasting.cooling.start")
+                    case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta).foregroundStyle(CupaTheme.onAccent).accessibilityIdentifier("tasting.cooling.pause")
+                    case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent).accessibilityIdentifier("tasting.cooling.resume")
                     case .completed: Label("Guardada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forest)
                     }
                     Button("Reiniciar", action: requestCoolingReset).buttonStyle(.bordered)
@@ -158,7 +158,7 @@ struct TastingView: View {
 
     private var actions: some View {
         HStack {
-            Button(saveButtonTitle, action: save).buttonStyle(.borderedProminent).tint(CupaTheme.forest)
+            Button(saveButtonTitle, action: save).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
                 .disabled(!editingExisting && model.state.coolingStatus == .completed)
                 .accessibilityIdentifier("tasting.save")
             Button("Nueva") { model.newTasting(); editingExisting = false }.buttonStyle(.bordered)
@@ -188,7 +188,21 @@ struct TastingView: View {
         }
     }
 
-    private func score(_ name: String, _ value: Binding<Double>) -> some View { HStack { Text(name).frame(width: 70, alignment: .leading); Slider(value: value, in: 1...5, step: 1).tint(CupaTheme.terracotta); Text("\(Int(value.wrappedValue))/5").monospacedDigit() } }
+    private func score(_ name: String, _ value: Binding<Double>) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                Text(name).frame(minWidth: 70, alignment: .leading)
+                Slider(value: value, in: 1...5, step: 1).tint(CupaTheme.terracotta)
+                    .accessibilityLabel(name).accessibilityValue("\(Int(value.wrappedValue)) de 5")
+                Text("\(Int(value.wrappedValue))/5").monospacedDigit()
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack { Text(name); Spacer(); Text("\(Int(value.wrappedValue))/5").monospacedDigit() }
+                Slider(value: value, in: 1...5, step: 1).tint(CupaTheme.terracotta)
+                    .accessibilityLabel(name).accessibilityValue("\(Int(value.wrappedValue)) de 5")
+            }
+        }
+    }
     private func toggle(_ note: String) { if let index = model.state.selectedFlavorNotes.firstIndex(of: note) { model.state.selectedFlavorNotes.remove(at: index) } else { model.state.selectedFlavorNotes.append(note) } }
     private func save() {
         if model.state.coolingStatus == .running { model.pause() }

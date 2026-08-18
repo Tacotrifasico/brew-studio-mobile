@@ -94,4 +94,18 @@ final class CupaUITests: XCTestCase {
         units.buttons["°F"].tap()
         XCTAssertTrue(units.buttons["°F"].isSelected)
     }
+
+    func testSwitchingAllTabsKeepsCalculatorState() {
+        app.tabBars.buttons["Preparar"].tap()
+        let coffee = app.textFields["calculator.coffee"]
+        XCTAssertTrue(coffee.waitForExistence(timeout: 3))
+        coffee.tap()
+        coffee.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 8) + "18")
+        app.tabBars.buttons["Cata"].tap()
+        app.tabBars.buttons["Laboratorio"].tap()
+        app.tabBars.buttons["Almacén"].tap()
+        app.tabBars.buttons["Taller"].tap()
+        app.tabBars.buttons["Preparar"].tap()
+        XCTAssertEqual(app.textFields["calculator.coffee"].value as? String, "18")
+    }
 }

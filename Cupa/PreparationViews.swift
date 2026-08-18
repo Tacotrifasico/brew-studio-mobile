@@ -44,7 +44,7 @@ struct PreparationExecutionView: View {
                         Spacer()
                         Text("1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))").font(.subheadline.bold()).foregroundStyle(CupaTheme.forest)
                     }
-                    Text(timeString(model.state.elapsedSeconds)).font(.system(size: 52, weight: .bold, design: .rounded)).monospacedDigit()
+                    Text(timeString(model.state.elapsedSeconds)).font(.system(.largeTitle, design: .rounded, weight: .bold)).monospacedDigit()
                         .minimumScaleFactor(0.6)
                         .accessibilityLabel("Tiempo transcurrido")
                         .accessibilityValue(timeString(model.state.elapsedSeconds))
@@ -80,9 +80,9 @@ struct PreparationExecutionView: View {
                 .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Paso anterior")
                 .disabled(model.state.activeStepIndex == 0)
             switch model.state.status {
-            case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest).disabled(model.state.steps.isEmpty)
-            case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta)
-            case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest)
+            case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent).disabled(model.state.steps.isEmpty)
+            case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta).foregroundStyle(CupaTheme.onAccent)
+            case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
             case .completed: Label("Finalizada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forest)
             }
             Button { model.nextStep() } label: { Image(systemName: "forward.end") }

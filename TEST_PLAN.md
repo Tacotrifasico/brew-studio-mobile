@@ -51,6 +51,8 @@
 - Gemini: llamada autenticada a Edge Function, validación de respuesta y fallback local determinista cuando no hay configuración: verificador ejecutado + XCTest compilado.
 - Perfil: creación, edición con UUID estable, normalización de alias, aislamiento entre dos propietarios y DTO sin correo: verificador ejecutado.
 - Configuración: restauración de tema oscuro y Fahrenheit aprobada; eliminado el control métrico sin efecto que no existe en Android.
+- Navegación: las cinco secciones mantienen el orden Taller, Preparar, Cata, Laboratorio y Almacén; el modelo compartido conserva los 18 g introducidos en Calculadora al recorrerlas todas: XCTest y recorrido UI compilados.
+- Tema y accesibilidad: paletas clara y oscura verificadas matemáticamente con contraste WCAG AA mínimo 4.5:1 para texto, secundarios, acentos y categorías; colores sobre botones adaptativos, métricas críticas con Dynamic Type y fila de valoración refluible con valor ajustable: XCTest compilado.
 - Inventario: fallos de guardado de café, molino y equipo hacen rollback, mantienen el editor abierto y muestran alerta; flujo compilado.
 - Café: altitud fuera de rango, cantidades vacías/no numéricas/negativas, existencias mayores al lote y fechas futuras o invertidas son rechazadas antes de guardar; decimal con coma aceptado: verificador ejecutado + XCTest compilado.
 - Recuperación de Core Data: un destino SQLite imposible activa un store temporal visible, permite guardar durante la sesión y no termina la app ni destruye el archivo original: verificador ejecutado + XCTest compilado.
@@ -59,7 +61,7 @@
 - Acciones de café: transición cerrado/abierto/terminado, fecha de apertura, separación de lotes terminados, UUID recuperable en Preparación y carga de frescura/proceso/notas al Laboratorio: verificador ejecutado + XCTest compilado.
 - Social: contrato del feed público, publicación sin correo, reporte, bloqueo, filtro preventivo e importación profunda con atribución: verificador ejecutado + XCTest compilado.
 - Target `CupaTests`: compilación para iOS Simulator aprobada. La ejecución XCTest queda pendiente hasta reparar CoreSimulator local.
-- Target `CupaUITests`: tres recorridos XCTest UI compilados para arm64 y x86_64. La ejecución queda pendiente hasta reparar CoreSimulator local.
+- Target `CupaUITests`: cinco recorridos XCTest UI compilados para arm64 y x86_64. La ejecución queda pendiente hasta reparar CoreSimulator local.
 - Build Release para iPhone genérico sin firma: aprobado.
 - Accesibilidad estática: controles de sólo icono etiquetados, áreas táctiles de 44 puntos e identificadores para flujos críticos: compilado.
 - Privacidad: `PrivacyInfo.xcprivacy` válido con `plutil` e incluido en el bundle Release; consentimiento Gemini explícito y revocable: compilado.

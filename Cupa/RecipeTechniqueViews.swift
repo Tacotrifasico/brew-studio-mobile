@@ -143,8 +143,8 @@ private struct RecipeDetailView: View {
                 Section("Pasos de preparación") {
                     ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
                         HStack(alignment: .top, spacing: 12) {
-                            Text("\(index + 1)").font(.caption.bold()).foregroundStyle(.white)
-                                .frame(width: 26, height: 26).background(CupaTheme.forest, in: Circle())
+                            Text("\(index + 1)").font(.caption.bold()).foregroundStyle(CupaTheme.onAccent)
+                                .frame(minWidth: 28, minHeight: 28).background(CupaTheme.forest, in: Circle())
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(step.instruction)
                                 if let seconds = step.durationSeconds {
@@ -297,8 +297,8 @@ private struct TechniqueDetailView: View {
                 Section("Secuencia") {
                     ForEach(steps) { step in
                         HStack(alignment: .top, spacing: 12) {
-                            Text("\(step.stepNumber)").font(.caption.bold()).foregroundStyle(.white)
-                                .frame(width: 27, height: 27).background(CupaTheme.forest, in: Circle())
+                            Text("\(step.stepNumber)").font(.caption.bold()).foregroundStyle(CupaTheme.onAccent)
+                                .frame(minWidth: 28, minHeight: 28).background(CupaTheme.forest, in: Circle())
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(step.title).fontWeight(.semibold)
                                 HStack(spacing: 12) {

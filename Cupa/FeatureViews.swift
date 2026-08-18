@@ -50,6 +50,7 @@ struct HomeView: View {
                             Button("Calcular preparación") { selection = .brew }
                                 .buttonStyle(.borderedProminent)
                                 .tint(CupaTheme.forest)
+                                .foregroundStyle(CupaTheme.onAccent)
                         }
                     }
 
@@ -119,11 +120,11 @@ struct BrewView: View {
                             VStack(spacing: 2) {
                                 Text("AGUA").font(.caption2.bold()).tracking(1.5)
                                 Text("\(calculator.water) ml")
-                                    .font(.system(size: 44, weight: .black, design: .rounded))
+                                    .font(.system(.largeTitle, design: .rounded, weight: .black))
                                 Text("\(calculator.coffeeInput) g · 1:\(calculator.ratioInput) · \(calculator.method)")
                                     .font(.caption)
                             }
-                            .foregroundStyle(.white)
+                            .foregroundStyle(CupaTheme.onAccent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 22)
                             .background(LinearGradient(colors: [CupaTheme.forest, categoryColor], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -208,6 +209,7 @@ struct BrewView: View {
                                 Button("Preparar con estos datos") { preparation.load(calculator: calculator) }
                                     .buttonStyle(.borderedProminent)
                                     .tint(CupaTheme.forest)
+                                    .foregroundStyle(CupaTheme.onAccent)
                                     .accessibilityIdentifier("calculator.prepare")
                             }
                         }
@@ -265,16 +267,16 @@ struct BrewView: View {
 
     private var categoryColor: Color {
         switch calculator.category {
-        case .espresso: Color(hex: 0xB85D42)
+        case .espresso: CupaTheme.espresso
         case .intense: CupaTheme.gold
         case .balance: CupaTheme.forest
-        case .clarity: Color(hex: 0x2E5A44)
+        case .clarity: CupaTheme.clarity
         }
     }
 
     private func calculatorInput(_ title: String, identifier: String, text: Binding<String>, minus: @escaping () -> Void, plus: @escaping () -> Void) -> some View {
         VStack(spacing: 7) {
-            Text(title).font(.system(size: 9, weight: .bold)).foregroundStyle(CupaTheme.secondaryText)
+            Text(title).font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
             TextField("", text: text)
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
@@ -543,7 +545,7 @@ struct LabView: View {
             Text(profile.summary).font(.subheadline)
             HStack { ForEach(profile.labels, id: \.self) { Text($0).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 4).background(.white.opacity(0.18)).clipShape(Capsule()) } }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(CupaTheme.onAccent)
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracotta], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -570,7 +572,7 @@ struct LabView: View {
                                     Capsule().fill(color.gradient).frame(height: proxy.size.height * CGFloat(value) / 100)
                                 }
                             }.frame(height: 112)
-                            Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                            Text(label).font(.caption2.weight(.semibold)).lineLimit(2).multilineTextAlignment(.center)
                         }.frame(maxWidth: .infinity)
                     }
                 }
@@ -677,7 +679,7 @@ struct LabView: View {
                 preparation.load(lab: model.state)
                 selection = .brew
             } label: { Label("Preparar esta idea", systemImage: "play.fill") }
-                .buttonStyle(.borderedProminent).tint(CupaTheme.forest)
+                .buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
         }
         .padding().frame(maxWidth: .infinity).background(.ultraThinMaterial)
     }
@@ -1093,7 +1095,7 @@ private struct CoffeeBeanDetail: View {
                 Section("Acciones") {
                     HStack {
                         Button { onPrepare(); dismiss() } label: { Label("Preparar", systemImage: "mug") }
-                            .buttonStyle(.borderedProminent).tint(CupaTheme.forest)
+                            .buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
                         Spacer()
                         Button { onLab(); dismiss() } label: { Label("Llevar a Lab", systemImage: "flask") }
                             .buttonStyle(.bordered).tint(CupaTheme.terracotta)

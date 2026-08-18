@@ -831,3 +831,51 @@ final class EntitySyncTests: XCTestCase {
         XCTAssertEqual(pulledTables, Set(CoreSyncSchema.descriptors.map(\.table)))
     }
 }
+
+final class NavigationAndThemeTests: XCTestCase {
+    @MainActor func testFiveReferenceTabsKeepSharedFeatureState() throws {
+        XCTAssertEqual(CupaTab.allCases.map(\.title), ["Taller", "Preparar", "Cata", "Laboratorio", "Almacén"])
+        let suite = "NavigationAndThemeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let navigation = AppNavigationModel()
+        let calculator = CalculatorModel(defaults: defaults)
+        calculator.changeCoffee("18")
+        for tab in CupaTab.allCases { navigation.select(tab); XCTAssertEqual(navigation.selection, tab) }
+        XCTAssertEqual(calculator.coffee, 18)
+        XCTAssertEqual(calculator.coffeeInput, "18")
+    }
+
+    func testBrandPaletteMeetsWCAGNormalTextContrast() {
+        let lightForegrounds = [CupaPalette.Light.text, CupaPalette.Light.secondaryText, CupaPalette.Light.forest, CupaPalette.Light.terracotta, CupaPalette.Light.gold, CupaPalette.Light.espresso, CupaPalette.Light.clarity]
+        let darkForegrounds = [CupaPalette.Dark.text, CupaPalette.Dark.secondaryText, CupaPalette.Dark.forest, CupaPalette.Dark.terracotta, CupaPalette.Dark.gold, CupaPalette.Dark.espresso, CupaPalette.Dark.clarity]
+        for foreground in lightForegrounds {
+            XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Light.background), 4.5)
+            XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Light.card), 4.5)
+        }
+        for foreground in darkForegrounds {
+            XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Dark.background), 4.5)
+            XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Dark.card), 4.5)
+        }
+        for accent in [CupaPalette.Light.forest, CupaPalette.Light.terracotta, CupaPalette.Light.gold, CupaPalette.Light.espresso, CupaPalette.Light.clarity] {
+            XCTAssertGreaterThanOrEqual(contrast(CupaPalette.Light.onAccent, accent), 4.5)
+        }
+        for accent in [CupaPalette.Dark.forest, CupaPalette.Dark.terracotta, CupaPalette.Dark.gold, CupaPalette.Dark.espresso, CupaPalette.Dark.clarity] {
+            XCTAssertGreaterThanOrEqual(contrast(CupaPalette.Dark.onAccent, accent), 4.5)
+        }
+    }
+
+    private func contrast(_ first: UInt, _ second: UInt) -> Double {
+        let brighter = max(luminance(first), luminance(second))
+        let darker = min(luminance(first), luminance(second))
+        return (brighter + 0.05) / (darker + 0.05)
+    }
+
+    private func luminance(_ hex: UInt) -> Double {
+        let channels = [Double((hex >> 16) & 0xff), Double((hex >> 8) & 0xff), Double(hex & 0xff)].map { value -> Double in
+            let normalized = value / 255
+            return normalized <= 0.04045 ? normalized / 12.92 : pow((normalized + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+    }
+}

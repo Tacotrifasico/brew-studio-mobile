@@ -35,7 +35,7 @@ struct HubView: View {
     }
 
     private var signedOut: some View {
-        ContentUnavailableView { Label("Inicia sesión para abrir tu Hub", systemImage: "person.2") } description: { Text("Tus datos locales siguen disponibles en Almacén.") } actions: { Button("Abrir cuenta") { showAccount = true }.buttonStyle(.borderedProminent).tint(CupaTheme.forest) }
+        ContentUnavailableView { Label("Inicia sesión para abrir tu Hub", systemImage: "person.2") } description: { Text("Tus datos locales siguen disponibles en Almacén.") } actions: { Button("Abrir cuenta") { showAccount = true }.buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent) }
     }
 
     private var profileTab: some View {

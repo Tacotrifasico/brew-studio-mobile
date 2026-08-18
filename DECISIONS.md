@@ -147,3 +147,7 @@ El café se valida antes de tocar Core Data: altitud, cantidades finitas, existe
 ## D-037 — Una sola preferencia térmica y selección geográfica exacta
 
 Celsius/Fahrenheit usa `settings.temperature` como única preferencia entre Configuración y Laboratorio. El estado anterior del Laboratorio se migra a esa clave cuando todavía no existe y después siempre respeta la elección global, evitando volver silenciosamente a Celsius tras reiniciar. La temperatura de cálculo y de persistencia permanece en Celsius; Fahrenheit sólo convierte y redondea la presentación, igual que Android. Una ciudad se considera seleccionada únicamente cuando coinciden altitud e identidad, para que una calibración manual a la misma elevación no aparente ser una ciudad predefinida.
+
+## D-038 — Navegación estable y color accesible por tema
+
+Las cinco secciones conservan el orden Android y comparten un único modelo de selección para que cambiar de pestaña no reconstruya el estado de trabajo. La paleta define un color de texto sobre acentos para cada apariencia en vez de asumir blanco, y todos los pares usados como texto normal alcanzan contraste WCAG AA de 4.5:1 en claro y oscuro. Las métricas críticas usan estilos relativos de Dynamic Type; las filas ajustables pueden cambiar de distribución antes de truncar y mantienen etiquetas y valores accesibles para VoiceOver.

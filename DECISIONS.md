@@ -83,3 +83,7 @@ Calculadora persiste únicamente el último estado numérico válido; el texto i
 ## D-021 — Finalización recuperable y guardado idempotente de preparación
 
 Los modos `GUIDED` y `AUTOMATED` terminan al alcanzar la suma exacta de sus pasos y acotan el tiempo si la app vuelve del fondo después del límite. Una sesión completada pero todavía no guardada se restaura para no perder trabajo; después de crear `BrewSession`, `savedAt` oculta la acción repetida. Reiniciar una sesión ya guardada asigna un UUID nuevo, evitando colisiones o duplicados históricos.
+
+## D-022 — Historial de tazas como snapshot autónomo
+
+`CupSession` replica el conjunto histórico de Android y se muestra localmente en Almacén, sin exigir cuenta. Al guardar una cata copia referencias, parámetros ejecutados, nombres, vida de taza, calificación, NPS, comentario y fecha desde `BrewSession` y `Tasting`. Borrar una cata o su taza marca también la otra y sus observaciones como borradas, evitando filas históricas huérfanas; borrar inventario no destruye los snapshots. El selector de Almacén usa botones desplazables porque seis categorías no caben de forma accesible en un control segmentado de iPhone.

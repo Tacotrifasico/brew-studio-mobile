@@ -228,11 +228,16 @@ struct LabGoldenVerifier {
         let suite = "CupaTastingVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
-        let brewState = PreparationState(techniqueName: "V60", methodName: "V60", elapsedSeconds: 180, status: .completed)
-        let brew = BrewSessionRecord(context: context, state: brewState, beanName: "Etiopía", grinderName: "C40")
+        let recipeId = UUID(); let techniqueId = UUID(); let methodId = UUID(); let beanId = UUID(); let grinderId = UUID()
+        let brewState = PreparationState(
+            techniqueId: techniqueId, techniqueName: "V60 Dulce", methodId: methodId, methodName: "V60",
+            recipeId: recipeId, beanId: beanId, grinderId: grinderId, doseGrams: 18, waterMl: 288, ratio: 16,
+            temperatureC: 93, grindDescription: "22 clicks", elapsedSeconds: 180, status: .completed
+        )
+        let brew = BrewSessionRecord(context: context, state: brewState, recipeName: "Mora limpia", beanName: "Etiopía", grinderName: "C40")
         try! context.save()
         let model = TastingModel(defaults: defaults); model.state.brewSessionId = brew.id
-        model.state.selectedFlavorNotes = ["Mora", "Jazmín"]; model.start(); let tick = model.state.lastTickAt!
+        model.state.selectedFlavorNotes = ["Mora", "Jazmín"]; model.state.freeNotes = "Muy dulce"; model.start(); let tick = model.state.lastTickAt!
         model.synchronizeClock(now: tick.addingTimeInterval(601)); model.state.freeNotes = "Cacao"; model.addObservation(); model.pause()
         precondition(model.stageCode == "DECLINING")
         let restored = TastingModel(defaults: defaults); precondition(restored.state.coolingElapsedSeconds == 601)
@@ -240,12 +245,21 @@ struct LabGoldenVerifier {
         precondition(tasting.id != brew.id && tasting.selectedFlavorNotes == ["Mora", "Jazmín"])
         precondition(try! repository.observations(tastingId: tasting.id).count == 1)
         let cups = try! context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))
-        precondition(cups.first?.brewSessionId == brew.id && cups.first?.tastingId == tasting.id)
+        let cup = cups.first!
+        precondition(cup.brewSessionId == brew.id && cup.tastingId == tasting.id)
+        precondition(cup.recipeId == recipeId && cup.techniqueId == techniqueId && cup.methodId == methodId && cup.beanId == beanId && cup.grinderId == grinderId)
+        precondition(cup.executedDoseGrams == 18 && cup.executedWaterMl == 288 && cup.executedRatio == 16 && cup.executedTemperatureC == 93)
+        precondition(cup.executedGrindSetting == "22 clicks" && cup.executedDurationSeconds == 180)
+        precondition(cup.beanNameSnapshot == "Etiopía" && cup.recipeNameSnapshot == "Mora limpia" && cup.techniqueNameSnapshot == "V60 Dulce")
+        precondition(cup.methodNameSnapshot == "V60" && cup.grinderNameSnapshot == "C40" && cup.cupLifeState == "DECLINING")
+        precondition(cup.comment == "Cacao" && cup.rating == restored.state.rating && cup.nps == Int64(restored.state.nps))
         let labSuite = "CupaTastingLabVerifier.\(UUID().uuidString)"; let labDefaults = UserDefaults(suiteName: labSuite)!
         defer { labDefaults.removePersistentDomain(forName: labSuite) }
         let lab = LabModel(defaults: labDefaults); lab.load(tasting: restored.state, brew: brew)
-        precondition(lab.state.method == "V60" && lab.state.coffeeGrams == 15 && lab.state.waterMl == 240)
+        precondition(lab.state.method == "V60" && lab.state.coffeeGrams == 18 && lab.state.waterMl == 288)
         precondition(lab.state.notes == "Cargado de cata sensorial. Textura: sedosa, Limpieza: alta.")
+        try! repository.delete(tasting)
+        precondition(tasting.syncStatusRaw == SyncStatus.pendingDelete.rawValue && cup.syncStatusRaw == SyncStatus.pendingDelete.rawValue)
     }
 
     @MainActor private static func verifySyncConflictAndOutbox() {

@@ -8,6 +8,8 @@ La migración `supabase/migrations/202608170002_social_content_moderation.sql` a
 
 La migración `supabase/migrations/202608170003_lab_and_brew_references.sql` añade las referencias de método, receta, técnica, café y molino a los experimentos, y método más snapshot de receta a las sesiones. Es idempotente, incorpora claves foráneas `ON DELETE SET NULL` e índices; los snapshots permanecen aunque una referencia sea eliminada físicamente.
 
+La migración `supabase/migrations/202608170004_cup_history_snapshots.sql` amplía `cup_sessions` de forma idempotente con las referencias, parámetros ejecutados, nombres congelados, vida térmica, valoración, comentario, fecha y snapshots JSON presentes en Android. Añade claves foráneas `ON DELETE SET NULL` e índices de consulta sin modificar migraciones ya desplegadas.
+
 Antes de producción se requiere:
 
 1. Comparar esta migración con el esquema ya desplegado antes de aplicarla; no modificar una migración que ya haya sido ejecutada.

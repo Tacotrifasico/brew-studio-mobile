@@ -642,6 +642,7 @@ private enum StorageCategory: String, CaseIterable, Identifiable {
     case equipment = "Equipos"
     case recipes = "Recetas"
     case techniques = "Técnicas"
+    case cups = "Tazas"
     var id: Self { self }
 }
 
@@ -650,21 +651,89 @@ struct StorageView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Inventario", selection: $category) {
-                ForEach(StorageCategory.allCases) { Text($0.rawValue).tag($0) }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(StorageCategory.allCases) { item in
+                        Button(item.rawValue) { category = item }
+                            .buttonStyle(.bordered)
+                            .tint(category == item ? CupaTheme.forest : CupaTheme.secondaryText)
+                            .accessibilityAddTraits(category == item ? .isSelected : [])
+                    }
+                }
+                .padding(.horizontal)
             }
-            .pickerStyle(.segmented)
-            .padding()
+            .padding(.vertical, 10)
             switch category {
             case .coffee: CoffeeInventoryView()
             case .grinders: GrinderInventoryView()
             case .equipment: EquipmentInventoryView()
             case .recipes: RecipeInventoryView()
             case .techniques: TechniqueInventoryView()
+            case .cups: CupHistoryView()
             }
         }
         .background(CupaTheme.background)
         .navigationTitle("Almacén")
+    }
+}
+
+private struct CupHistoryView: View {
+    @Environment(\.managedObjectContext) private var context
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \CupSessionRecord.brewDate, ascending: false)],
+        predicate: NSPredicate(format: "deletedAt == nil"),
+        animation: .default
+    ) private var cups: FetchedResults<CupSessionRecord>
+    @State private var errorMessage: String?
+
+    var body: some View {
+        List {
+            if cups.isEmpty {
+                ContentUnavailableView(
+                    "Sin tazas guardadas",
+                    systemImage: "cup.and.saucer",
+                    description: Text("Al guardar una cata aparecerá aquí con los valores ejecutados de la preparación.")
+                )
+                .listRowBackground(Color.clear)
+            } else {
+                ForEach(cups) { cup in
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack {
+                            Text(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot).font(.headline)
+                            Spacer()
+                            Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").foregroundStyle(CupaTheme.gold)
+                        }
+                        Text("\(cup.techniqueNameSnapshot) · \(cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))) g → \(cup.executedWaterMl) ml")
+                            .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                        HStack {
+                            Label(cup.cupLifeState.localizedCupLife, systemImage: "thermometer.medium")
+                            if !cup.executedGrindSetting.isEmpty { Label(cup.executedGrindSetting, systemImage: "dial.medium") }
+                        }
+                        .font(.caption).foregroundStyle(CupaTheme.forest)
+                        if !cup.comment.isEmpty { Text(cup.comment).font(.caption) }
+                        if let date = cup.brewDate { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary) }
+                    }
+                    .padding(.vertical, 6)
+                    .accessibilityElement(children: .combine)
+                }
+                .onDelete(perform: delete)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .alert("No se pudo eliminar la taza", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("Aceptar") {}
+        } message: { Text(errorMessage ?? "") }
+    }
+
+    private func delete(at offsets: IndexSet) {
+        do { for index in offsets { try TastingRepository(context: context).delete(cups[index]) } }
+        catch { context.rollback(); errorMessage = error.localizedDescription }
+    }
+}
+
+private extension String {
+    var localizedCupLife: String {
+        switch self { case "FRESH": "Fresca"; case "PEAK": "En su punto"; case "DECLINING": "En descenso"; case "EXHAUSTED": "Agotada"; default: self.capitalized }
     }
 }
 

@@ -404,8 +404,18 @@ struct PersistenceController {
         cupSessionEntity.name = "CupSessionRecord"; cupSessionEntity.managedObjectClassName = NSStringFromClass(CupSessionRecord.self)
         cupSessionEntity.properties = syncProperties(attribute: attribute) + [
             attribute("brewSessionId", .UUIDAttributeType, optional: true), attribute("tastingId", .UUIDAttributeType),
-            attribute("techniqueNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("beanNameSnapshot", .stringAttributeType, defaultValue: ""),
-            attribute("rating", .doubleAttributeType, defaultValue: 0)
+            attribute("recipeId", .UUIDAttributeType, optional: true), attribute("beanId", .UUIDAttributeType, optional: true),
+            attribute("techniqueId", .UUIDAttributeType, optional: true), attribute("methodId", .UUIDAttributeType, optional: true), attribute("grinderId", .UUIDAttributeType, optional: true),
+            attribute("executedDoseGrams", .doubleAttributeType, defaultValue: 0), attribute("executedWaterMl", .integer64AttributeType, defaultValue: 0),
+            attribute("executedRatio", .doubleAttributeType, defaultValue: 0), attribute("executedTemperatureC", .integer64AttributeType, defaultValue: 0),
+            attribute("executedGrindSetting", .stringAttributeType, defaultValue: ""), attribute("executedDurationSeconds", .integer64AttributeType, defaultValue: 0),
+            attribute("beanNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("recipeNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("techniqueNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("methodNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("grinderNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("cupLifeSeconds", .integer64AttributeType, defaultValue: 0),
+            attribute("cupLifeState", .stringAttributeType, defaultValue: "FRESH"), attribute("nps", .integer64AttributeType, defaultValue: 0),
+            attribute("rating", .doubleAttributeType, defaultValue: 0), attribute("comment", .stringAttributeType, defaultValue: ""), attribute("brewDate", .dateAttributeType, optional: true),
+            attribute("recipeSnapshotJSON", .stringAttributeType, defaultValue: "{}"), attribute("techniqueSnapshotJSON", .stringAttributeType, defaultValue: "{}"),
+            attribute("beanSnapshotJSON", .stringAttributeType, defaultValue: "{}"), attribute("grinderSnapshotJSON", .stringAttributeType, defaultValue: "{}")
         ]
         cupSessionEntity.uniquenessConstraints = [["id"], ["tastingId"]]
 

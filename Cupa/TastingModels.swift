@@ -173,7 +173,14 @@ extension TastingObservationRecord: Identifiable {}
 @objc(CupSessionRecord)
 final class CupSessionRecord: NSManagedObject, SyncTrackedRecord {
     @NSManaged var id: UUID; @NSManaged var ownerId: UUID?; @NSManaged var brewSessionId: UUID?; @NSManaged var tastingId: UUID
-    @NSManaged var techniqueNameSnapshot: String; @NSManaged var beanNameSnapshot: String; @NSManaged var rating: Double
+    @NSManaged var recipeId: UUID?; @NSManaged var beanId: UUID?; @NSManaged var techniqueId: UUID?; @NSManaged var methodId: UUID?; @NSManaged var grinderId: UUID?
+    @NSManaged var executedDoseGrams: Double; @NSManaged var executedWaterMl: Int64; @NSManaged var executedRatio: Double
+    @NSManaged var executedTemperatureC: Int64; @NSManaged var executedGrindSetting: String; @NSManaged var executedDurationSeconds: Int64
+    @NSManaged var beanNameSnapshot: String; @NSManaged var recipeNameSnapshot: String; @NSManaged var techniqueNameSnapshot: String
+    @NSManaged var methodNameSnapshot: String; @NSManaged var grinderNameSnapshot: String
+    @NSManaged var cupLifeSeconds: Int64; @NSManaged var cupLifeState: String; @NSManaged var nps: Int64; @NSManaged var rating: Double
+    @NSManaged var comment: String; @NSManaged var brewDate: Date?
+    @NSManaged var recipeSnapshotJSON: String; @NSManaged var techniqueSnapshotJSON: String; @NSManaged var beanSnapshotJSON: String; @NSManaged var grinderSnapshotJSON: String
     @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
     @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
     func markUpdated() { trackUpdate() }; func markDeleted() { trackDeletion() }
@@ -212,12 +219,33 @@ struct TastingRepository {
         let cup = try context.fetch(cupRequest).first ?? CupSessionRecord(context: context)
         if cup.value(forKey: "createdAt") == nil { cup.id = UUID(); cup.ownerId = nil; cup.tastingId = state.id; cup.createdAt = .now; cup.version = 1; cup.syncStatusRaw = SyncStatus.pendingCreate.rawValue; cup.deletedAt = nil }
         else { cup.markUpdated() }
-        cup.brewSessionId = state.brewSessionId; cup.techniqueNameSnapshot = brew?.techniqueNameSnapshot ?? "Cata independiente"
-        cup.beanNameSnapshot = brew?.beanNameSnapshot ?? ""; cup.rating = state.rating; cup.updatedAt = .now
+        cup.brewSessionId = state.brewSessionId; cup.recipeId = brew?.recipeId; cup.beanId = brew?.beanId; cup.techniqueId = brew?.techniqueId
+        cup.methodId = brew?.methodId; cup.grinderId = brew?.grinderId
+        cup.executedDoseGrams = brew?.doseGrams ?? 0; cup.executedWaterMl = brew?.waterMl ?? 0; cup.executedRatio = brew?.ratio ?? 0
+        cup.executedTemperatureC = brew?.temperatureC ?? 0; cup.executedGrindSetting = brew?.grindDescription ?? ""
+        cup.executedDurationSeconds = brew?.elapsedSeconds ?? 0
+        cup.beanNameSnapshot = brew?.beanNameSnapshot ?? ""; cup.recipeNameSnapshot = brew?.recipeNameSnapshot ?? ""
+        cup.techniqueNameSnapshot = brew?.techniqueNameSnapshot ?? "Cata independiente"; cup.methodNameSnapshot = brew?.methodNameSnapshot ?? ""
+        cup.grinderNameSnapshot = brew?.grinderNameSnapshot ?? ""; cup.cupLifeSeconds = Int64(state.coolingElapsedSeconds)
+        cup.cupLifeState = record.cupLifeState; cup.nps = Int64(state.nps); cup.rating = state.rating; cup.comment = state.freeNotes
+        cup.brewDate = brew?.completedAt ?? state.evaluatedAt
+        cup.recipeSnapshotJSON = "{}"; cup.techniqueSnapshotJSON = "{}"; cup.beanSnapshotJSON = "{}"; cup.grinderSnapshotJSON = "{}"
+        cup.updatedAt = .now
         try context.save(); return record
     }
 
     func delete(_ record: TastingRecord) throws {
-        record.markDeleted(); try observations(tastingId: record.id).forEach { $0.markDeleted() }; try context.save()
+        record.markDeleted(); try observations(tastingId: record.id).forEach { $0.markDeleted() }
+        let cupRequest = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")
+        cupRequest.predicate = NSPredicate(format: "tastingId == %@ AND deletedAt == nil", record.id as CVarArg)
+        try context.fetch(cupRequest).forEach { $0.markDeleted() }
+        try context.save()
+    }
+
+    func delete(_ cup: CupSessionRecord) throws {
+        cup.markDeleted()
+        let tastingRequest = NSFetchRequest<TastingRecord>(entityName: "TastingRecord")
+        tastingRequest.predicate = NSPredicate(format: "id == %@ AND deletedAt == nil", cup.tastingId as CVarArg)
+        if let tasting = try context.fetch(tastingRequest).first { try delete(tasting) } else { try context.save() }
     }
 }

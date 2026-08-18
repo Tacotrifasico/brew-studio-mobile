@@ -131,3 +131,7 @@ La biblioteca abre primero un detalle legible con parámetros y secuencia comple
 ## D-033 — Historial de cata completo y guardado explícitamente nuevo
 
 El historial no se limita a las últimas ocho filas: cada cata abre un detalle con preparación vinculada, perfil, atributos y evolución térmica completa. Editar reutiliza su UUID y reconcilia observaciones y taza asociada; eliminar exige confirmación y conserva la preparación original. Después de guardar, la misma cata queda bloqueada para un segundo guardado ambiguo. “Nueva” crea otro UUID y restablece el progreso, evitando sobrescribir una evaluación previa bajo una etiqueta de alta nueva.
+
+## D-034 — Detalle de inventario antes de editar o eliminar
+
+Molinos y equipos abren una ficha de lectura con todos sus datos persistidos antes de cualquier mutación. Editar conserva el UUID y marca una actualización sincronizable; eliminar exige confirmación y realiza borrado lógico. Las preparaciones previas mantienen los UUID y snapshots de molino y método, de modo que retirar inventario no vuelve ilegible el historial. La capacidad de un equipo sólo acepta enteros positivos y el rango del molino se mantiene ordenado.

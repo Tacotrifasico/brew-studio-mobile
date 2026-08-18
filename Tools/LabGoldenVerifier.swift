@@ -116,12 +116,16 @@ struct LabGoldenVerifier {
         defer { try? FileManager.default.removeItem(at: directory) }
         let storeURL = directory.appendingPathComponent("Cupa.sqlite")
         let beanId = UUID(); let roastDate = Date(timeIntervalSince1970: 1_775_952_000)
+        var grinderId: UUID!; var equipmentId: UUID!
         autoreleasepool {
             let first = PersistenceController(storeURL: storeURL, enablePersistentHistory: false); let context = first.container.viewContext
             _ = CoffeeBeanRecord(
                 context: context, id: beanId, name: "Reapertura", brand: "Tostador", origin: "Chiapas",
                 roastDate: roastDate, initialQuantityGrams: 250, remainingQuantityGrams: 232
             )
+            let grinder = GrinderRecord(context: context, name: "C40", brand: "Comandante", model: "MK4", grinderType: "MANUAL", scaleUnit: "CLICKS", minimumSetting: 0, maximumSetting: 40, calibrationNotes: "Cero real", notes: "Viaje")
+            let equipment = EquipmentRecord(context: context, name: "V60 02", equipmentType: "BREWER_METHOD", brand: "Hario", model: "02", capacityMl: 600, configuration: "Plástico", notes: "Con servidor", isFavorite: true, isActive: true)
+            grinderId = grinder.id; equipmentId = equipment.id
             try! context.save()
             try! first.container.persistentStoreCoordinator.remove(first.container.persistentStoreCoordinator.persistentStores[0])
         }
@@ -132,6 +136,12 @@ struct LabGoldenVerifier {
             let bean = try! context.fetch(request).first!
             precondition(bean.name == "Reapertura" && bean.origin == "Chiapas")
             precondition(bean.roastDate == roastDate && bean.remainingQuantityGrams == 232)
+            let grinderRequest = NSFetchRequest<GrinderRecord>(entityName: "GrinderRecord"); grinderRequest.predicate = NSPredicate(format: "id == %@", grinderId as CVarArg)
+            let grinder = try! context.fetch(grinderRequest).first!
+            precondition(grinder.brand == "Comandante" && grinder.calibrationNotes == "Cero real")
+            let equipmentRequest = NSFetchRequest<EquipmentRecord>(entityName: "EquipmentRecord"); equipmentRequest.predicate = NSPredicate(format: "id == %@", equipmentId as CVarArg)
+            let equipment = try! context.fetch(equipmentRequest).first!
+            precondition(equipment.capacityMl == 600 && equipment.isFavorite)
             try! reopened.container.persistentStoreCoordinator.remove(reopened.container.persistentStoreCoordinator.persistentStores[0])
         }
     }
@@ -253,15 +263,27 @@ struct LabGoldenVerifier {
         precondition(grinders.first?.maximumSetting == 40)
         precondition(equipmentItems.first?.capacityMl == 600)
         precondition(equipment.isBrewingMethod && equipment.isFavorite)
+        grinder.maximumSetting = 42; grinder.calibrationNotes = "Cero ajustado"; grinder.markUpdated()
+        equipment.capacityMl = 700; equipment.configuration = "Cerámica"; equipment.isFavorite = false; equipment.markUpdated()
+        try! context.save()
+        precondition(grinder.maximumSetting == 42 && grinder.syncStatus == .pendingUpdate)
+        precondition(equipment.capacityMl == 700 && equipment.syncStatus == .pendingUpdate)
+        let preparation = PreparationState(techniqueName: "Prueba histórica", methodId: equipment.id, methodName: equipment.name, grinderId: grinder.id, grindDescription: "22 clicks")
+        let brew = BrewSessionRecord(context: context, state: preparation, beanName: "", grinderName: grinder.name)
+        try! context.save()
         bean.markDeleted()
         grinder.markDeleted()
-        equipment.markUpdated()
+        equipment.markDeleted()
         try! context.save()
         let active = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
         active.predicate = NSPredicate(format: "deletedAt == nil")
         precondition(try! context.fetch(active).isEmpty)
-        precondition(grinder.syncStatus == .pendingDelete)
-        precondition(equipment.syncStatus == .pendingUpdate)
+        let activeGrinders = NSFetchRequest<GrinderRecord>(entityName: "GrinderRecord"); activeGrinders.predicate = NSPredicate(format: "deletedAt == nil")
+        let activeEquipment = NSFetchRequest<EquipmentRecord>(entityName: "EquipmentRecord"); activeEquipment.predicate = NSPredicate(format: "deletedAt == nil")
+        precondition(try! context.fetch(activeGrinders).isEmpty && (try! context.fetch(activeEquipment)).isEmpty)
+        precondition(grinder.syncStatus == .pendingDelete && equipment.syncStatus == .pendingDelete)
+        precondition(brew.grinderId == grinder.id && brew.methodId == equipment.id)
+        precondition(brew.grinderNameSnapshot == "C40" && brew.methodNameSnapshot == "V60 02")
     }
 
     @MainActor private static func verifyRecipeTechniqueAggregates() {

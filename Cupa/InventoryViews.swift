@@ -9,6 +9,8 @@ struct GrinderInventoryView: View {
     ) private var grinders: FetchedResults<GrinderRecord>
     @State private var adding = false
     @State private var editing: GrinderRecord?
+    @State private var selected: GrinderRecord?
+    @State private var pendingEdit: GrinderRecord?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -18,7 +20,7 @@ struct GrinderInventoryView: View {
                     .listRowBackground(Color.clear)
             } else {
                 ForEach(grinders) { grinder in
-                    Button { editing = grinder } label: {
+                    Button { selected = grinder } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
                                 Text(grinder.name).font(.headline)
@@ -30,24 +32,39 @@ struct GrinderInventoryView: View {
                             Text("\(grinder.minimumSetting)–\(grinder.maximumSetting) \(grinder.scaleUnit.lowercased()) · \(grinder.grinderType.capitalized)")
                                 .font(.caption).foregroundStyle(CupaTheme.forest)
                         }.padding(.vertical, 5)
-                    }.buttonStyle(.plain)
-                }.onDelete(perform: softDelete)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("grinders.row.\(grinder.id.uuidString)")
+                }
             }
         }
         .scrollContentBackground(.hidden)
-        .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar molino") }
+        .toolbar {
+            Button { adding = true } label: { Image(systemName: "plus") }
+                .accessibilityLabel("Agregar molino")
+                .accessibilityIdentifier("grinders.add")
+        }
         .sheet(isPresented: $adding) {
             GrinderEditor(record: nil) { draft in _ = draft.insert(in: context); return save() }
         }
         .sheet(item: $editing) { record in
             GrinderEditor(record: record) { draft in draft.apply(to: record); record.markUpdated(); return save() }
         }
+        .sheet(item: $selected, onDismiss: {
+            if let pendingEdit { editing = pendingEdit; self.pendingEdit = nil }
+        }) { record in
+            GrinderDetailView(
+                grinder: record,
+                onEdit: { pendingEdit = record; selected = nil },
+                onDelete: { if delete(record) { selected = nil } }
+            )
+        }
         .alert("No se pudo guardar el molino", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("Aceptar") {}
         } message: { Text(errorMessage ?? "") }
     }
 
-    private func softDelete(_ offsets: IndexSet) { offsets.forEach { grinders[$0].markDeleted() }; save() }
+    private func delete(_ grinder: GrinderRecord) -> Bool { grinder.markDeleted(); return save() }
     @discardableResult private func save() -> Bool {
         do { try context.save(); return true }
         catch { context.rollback(); errorMessage = error.localizedDescription; return false }
@@ -62,6 +79,8 @@ struct EquipmentInventoryView: View {
     ) private var equipment: FetchedResults<EquipmentRecord>
     @State private var adding = false
     @State private var editing: EquipmentRecord?
+    @State private var selected: EquipmentRecord?
+    @State private var pendingEdit: EquipmentRecord?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -71,7 +90,7 @@ struct EquipmentInventoryView: View {
                     .listRowBackground(Color.clear)
             } else {
                 ForEach(equipment) { item in
-                    Button { editing = item } label: {
+                    Button { selected = item } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
                                 Image(systemName: item.isFavorite ? "star.fill" : equipmentIcon(item.equipmentType))
@@ -84,7 +103,9 @@ struct EquipmentInventoryView: View {
                                 .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
                             if !item.configuration.isEmpty { Text(item.configuration).font(.caption).foregroundStyle(CupaTheme.forest) }
                         }.padding(.vertical, 5).opacity(item.isActive ? 1 : 0.55)
-                    }.buttonStyle(.plain)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("equipment.row.\(item.id.uuidString)")
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                         if item.isBrewingMethod {
                             Button { toggleCalculatorPin(item) } label: {
@@ -93,23 +114,36 @@ struct EquipmentInventoryView: View {
                             .tint(CupaTheme.gold)
                         }
                     }
-                }.onDelete(perform: softDelete)
+                }
             }
         }
         .scrollContentBackground(.hidden)
-        .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar equipo") }
+        .toolbar {
+            Button { adding = true } label: { Image(systemName: "plus") }
+                .accessibilityLabel("Agregar equipo")
+                .accessibilityIdentifier("equipment.add")
+        }
         .sheet(isPresented: $adding) {
             EquipmentEditor(record: nil) { draft in _ = draft.insert(in: context); return save() }
         }
         .sheet(item: $editing) { record in
             EquipmentEditor(record: record) { draft in draft.apply(to: record); record.markUpdated(); return save() }
         }
+        .sheet(item: $selected, onDismiss: {
+            if let pendingEdit { editing = pendingEdit; self.pendingEdit = nil }
+        }) { record in
+            EquipmentDetailView(
+                equipment: record,
+                onEdit: { pendingEdit = record; selected = nil },
+                onDelete: { if delete(record) { selected = nil } }
+            )
+        }
         .alert("No se pudo guardar el equipo", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("Aceptar") {}
         } message: { Text(errorMessage ?? "") }
     }
 
-    private func softDelete(_ offsets: IndexSet) { offsets.forEach { equipment[$0].markDeleted() }; save() }
+    private func delete(_ item: EquipmentRecord) -> Bool { item.markDeleted(); return save() }
     private func toggleCalculatorPin(_ item: EquipmentRecord) { item.isFavorite.toggle(); item.markUpdated(); save() }
     @discardableResult private func save() -> Bool {
         do { try context.save(); return true }
@@ -163,16 +197,69 @@ private struct GrinderEditor: View {
                     TextField("Notas", text: $notes, axis: .vertical).lineLimit(2...5)
                 }
             }
+            .onChange(of: minimum) { _, newValue in maximum = max(maximum, newValue) }
             .navigationTitle(record == nil ? "Agregar molino" : "Editar molino")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { if onSave(GrinderDraft(name: name, brand: brand, model: model, type: type, unit: unit, minimum: minimum, maximum: max(minimum, maximum), calibration: calibration, notes: notes)) { dismiss() } }
+                    Button("Guardar") { if onSave(GrinderDraft(name: name.trimmingCharacters(in: .whitespacesAndNewlines), brand: brand.trimmingCharacters(in: .whitespacesAndNewlines), model: model.trimmingCharacters(in: .whitespacesAndNewlines), type: type, unit: unit, minimum: minimum, maximum: max(minimum, maximum), calibration: calibration.trimmingCharacters(in: .whitespacesAndNewlines), notes: notes.trimmingCharacters(in: .whitespacesAndNewlines))) { dismiss() } }
                         .disabled(model.trimmingCharacters(in: .whitespaces).isEmpty && name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
     }
+}
+
+private struct GrinderDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var grinder: GrinderRecord
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(grinder.name, systemImage: grinder.grinderType == "ELECTRIC" ? "bolt.fill" : "gearshape.2.fill")
+                            .font(.title3.bold()).foregroundStyle(CupaTheme.forest)
+                        if !identity.isEmpty { Text(identity).font(.subheadline).foregroundStyle(CupaTheme.secondaryText) }
+                    }.padding(.vertical, 4)
+                }
+                Section("Especificaciones") {
+                    inventoryDetailRow("Tipo", grinder.grinderType == "ELECTRIC" ? "Eléctrico" : "Manual")
+                    inventoryDetailRow("Escala", "\(grinder.minimumSetting)–\(grinder.maximumSetting) \(grinderScaleLabel(grinder.scaleUnit))")
+                    if !grinder.calibrationNotes.isEmpty { inventoryDetailRow("Calibración", grinder.calibrationNotes) }
+                    if !grinder.notes.isEmpty { inventoryDetailRow("Notas", grinder.notes) }
+                }
+                Section("Registro") {
+                    inventoryDetailRow("Creado", grinder.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    inventoryDetailRow("Actualizado", grinder.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                    inventoryDetailRow("Sincronización", syncStatusLabel(grinder.syncStatus))
+                }
+                Section {
+                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar molino", systemImage: "trash") }
+                }
+            }
+            .navigationTitle("Detalle del molino")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Editar", action: onEdit).accessibilityIdentifier("grinders.detail.edit")
+                }
+            }
+            .confirmationDialog("¿Eliminar este molino?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Eliminar molino", role: .destructive, action: onDelete)
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Se retirará del inventario y de futuras selecciones. Las preparaciones guardadas conservarán su nombre y ajuste históricos.")
+            }
+        }
+    }
+
+    private var identity: String { [grinder.brand, grinder.model].filter { !$0.isEmpty }.joined(separator: " · ") }
 }
 
 private struct EquipmentDraft {
@@ -205,6 +292,7 @@ private struct EquipmentEditor: View {
                     Picker("Categoría", selection: $type) { ForEach(equipmentTypes) { Text($0.label).tag($0.code) } }
                     TextField("Marca", text: $brand); TextField("Modelo", text: $model)
                     TextField("Capacidad (ml)", text: $capacity).keyboardType(.numberPad)
+                    if !capacityIsValid { Text("Escribe una capacidad entera mayor que cero.").font(.caption).foregroundStyle(.red) }
                 }
                 Section("Configuración") {
                     TextField("Configuración o especificaciones", text: $configuration, axis: .vertical).lineLimit(2...5)
@@ -220,9 +308,64 @@ private struct EquipmentEditor: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { if onSave(EquipmentDraft(name: name, type: type, brand: brand, model: model, capacity: Int(capacity), configuration: configuration, notes: notes, favorite: favorite, active: active)) { dismiss() } }
-                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Guardar") { if onSave(EquipmentDraft(name: name.trimmingCharacters(in: .whitespacesAndNewlines), type: type, brand: brand.trimmingCharacters(in: .whitespacesAndNewlines), model: model.trimmingCharacters(in: .whitespacesAndNewlines), capacity: parsedCapacity, configuration: configuration.trimmingCharacters(in: .whitespacesAndNewlines), notes: notes.trimmingCharacters(in: .whitespacesAndNewlines), favorite: favorite, active: active)) { dismiss() } }
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !capacityIsValid)
                 }
+            }
+        }
+    }
+
+    private var normalizedCapacity: String { capacity.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var parsedCapacity: Int? { normalizedCapacity.isEmpty ? nil : Int(normalizedCapacity) }
+    private var capacityIsValid: Bool { normalizedCapacity.isEmpty || (parsedCapacity ?? 0) > 0 }
+}
+
+private struct EquipmentDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var equipment: EquipmentRecord
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(equipment.name, systemImage: equipmentIcon(equipment.equipmentType))
+                            .font(.title3.bold()).foregroundStyle(CupaTheme.forest)
+                        Text(equipmentTypeLabel(equipment.equipmentType)).font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                    }.padding(.vertical, 4)
+                }
+                Section("Especificaciones") {
+                    if !equipment.brand.isEmpty { inventoryDetailRow("Marca", equipment.brand) }
+                    if !equipment.model.isEmpty { inventoryDetailRow("Modelo", equipment.model) }
+                    if let capacity = equipment.capacityMl { inventoryDetailRow("Capacidad", "\(capacity) ml") }
+                    if !equipment.configuration.isEmpty { inventoryDetailRow("Configuración", equipment.configuration) }
+                    if !equipment.notes.isEmpty { inventoryDetailRow("Notas", equipment.notes) }
+                }
+                Section("Disponibilidad") {
+                    inventoryDetailRow(equipment.isBrewingMethod ? "Calculadora" : "Favorito", equipment.isFavorite ? "Sí" : "No")
+                    inventoryDetailRow("Equipo activo", equipment.isActive ? "Sí" : "No")
+                    inventoryDetailRow("Sincronización", syncStatusLabel(equipment.syncStatus))
+                }
+                Section {
+                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar equipo", systemImage: "trash") }
+                }
+            }
+            .navigationTitle("Detalle del equipo")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Editar", action: onEdit).accessibilityIdentifier("equipment.detail.edit")
+                }
+            }
+            .confirmationDialog("¿Eliminar este equipo?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Eliminar equipo", role: .destructive, action: onDelete)
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Se retirará del inventario y de la calculadora. Las preparaciones guardadas conservarán sus referencias y nombres históricos.")
             }
         }
     }
@@ -240,6 +383,19 @@ private let equipmentTypes = [
 ]
 
 private func equipmentTypeLabel(_ code: String) -> String { equipmentTypes.first { $0.code == code }?.label ?? code.capitalized }
+private func grinderScaleLabel(_ code: String) -> String {
+    switch code { case "CLICKS": "clicks"; case "MICRONS": "micras"; case "SETTING_NUMERIC": "niveles"; default: "descriptiva" }
+}
+private func syncStatusLabel(_ status: SyncStatus) -> String {
+    switch status { case .synced: "Sincronizado"; case .pendingCreate: "Pendiente de alta"; case .pendingUpdate: "Cambios pendientes"; case .pendingDelete: "Eliminación pendiente"; case .conflict: "Conflicto"; case .error: "Error" }
+}
+@ViewBuilder private func inventoryDetailRow(_ title: String, _ value: String) -> some View {
+    HStack(alignment: .top) {
+        Text(title)
+        Spacer()
+        Text(value).multilineTextAlignment(.trailing).fontWeight(.semibold).foregroundStyle(CupaTheme.forest)
+    }
+}
 private func equipmentIcon(_ code: String) -> String {
     switch code { case "KETTLE": "kettle"; case "SCALE": "scalemass"; case "BREWER_METHOD": "mug"; default: "wrench.and.screwdriver" }
 }

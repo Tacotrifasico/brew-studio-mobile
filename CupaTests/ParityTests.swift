@@ -168,9 +168,13 @@ final class LocalPersistenceTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let storeURL = directory.appendingPathComponent("Cupa.sqlite"); let beanId = UUID()
+        var grinderId: UUID!; var equipmentId: UUID!
         try autoreleasepool {
             let first = PersistenceController(storeURL: storeURL, enablePersistentHistory: false); let context = first.container.viewContext
             _ = CoffeeBeanRecord(context: context, id: beanId, name: "Persistente", brand: "Local", remainingQuantityGrams: 175)
+            let grinder = GrinderRecord(context: context, name: "C40", brand: "Comandante", model: "MK4", grinderType: "MANUAL", scaleUnit: "CLICKS", minimumSetting: 0, maximumSetting: 40, calibrationNotes: "Cero real", notes: "Viaje")
+            let equipment = EquipmentRecord(context: context, name: "V60 02", equipmentType: "BREWER_METHOD", brand: "Hario", model: "02", capacityMl: 600, configuration: "Plástico", notes: "Con servidor", isFavorite: true, isActive: true)
+            grinderId = grinder.id; equipmentId = equipment.id
             XCTAssertNoThrow(try context.save())
             XCTAssertNoThrow(try first.container.persistentStoreCoordinator.remove(first.container.persistentStoreCoordinator.persistentStores[0]))
         }
@@ -180,6 +184,14 @@ final class LocalPersistenceTests: XCTestCase {
             request.predicate = NSPredicate(format: "id == %@", beanId as CVarArg)
             let bean = try XCTUnwrap(context.fetch(request).first)
             XCTAssertEqual(bean.name, "Persistente"); XCTAssertEqual(bean.remainingQuantityGrams, 175)
+            let grinderRequest = NSFetchRequest<GrinderRecord>(entityName: "GrinderRecord")
+            grinderRequest.predicate = NSPredicate(format: "id == %@", grinderId as CVarArg)
+            let grinder = try XCTUnwrap(context.fetch(grinderRequest).first)
+            XCTAssertEqual(grinder.brand, "Comandante"); XCTAssertEqual(grinder.calibrationNotes, "Cero real")
+            let equipmentRequest = NSFetchRequest<EquipmentRecord>(entityName: "EquipmentRecord")
+            equipmentRequest.predicate = NSPredicate(format: "id == %@", equipmentId as CVarArg)
+            let equipment = try XCTUnwrap(context.fetch(equipmentRequest).first)
+            XCTAssertEqual(equipment.capacityMl, 600); XCTAssertTrue(equipment.isFavorite)
             try reopened.container.persistentStoreCoordinator.remove(reopened.container.persistentStoreCoordinator.persistentStores[0])
         }
     }
@@ -200,7 +212,7 @@ final class LocalPersistenceTests: XCTestCase {
         XCTAssertEqual(opened.openWarning, "Abierto hace 15 días. Puede perder aroma más rápido.")
     }
 
-    func testCoffeeAndExperimentCRUDInMemory() throws {
+    func testCoffeeExperimentGrinderAndEquipmentCRUDInMemory() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
         let bean = CoffeeBeanRecord(context: context, name: "Prueba", brand: "Tostador", remainingQuantityGrams: 250)
@@ -221,15 +233,32 @@ final class LocalPersistenceTests: XCTestCase {
         XCTAssertTrue(equipment.isBrewingMethod)
         XCTAssertTrue(equipment.isFavorite)
 
+        grinder.maximumSetting = 42; grinder.calibrationNotes = "Cero ajustado"; grinder.markUpdated()
+        equipment.capacityMl = 700; equipment.configuration = "Cerámica"; equipment.isFavorite = false; equipment.markUpdated()
+        try context.save()
+        XCTAssertEqual(grinders.first?.maximumSetting, 42)
+        XCTAssertEqual(grinder.syncStatus, .pendingUpdate)
+        XCTAssertEqual(equipmentItems.first?.configuration, "Cerámica")
+        XCTAssertEqual(equipment.syncStatus, .pendingUpdate)
+
+        let preparation = PreparationState(techniqueName: "Prueba histórica", methodId: equipment.id, methodName: equipment.name, grinderId: grinder.id, grindDescription: "22 clicks")
+        let brew = BrewSessionRecord(context: context, state: preparation, beanName: "", grinderName: grinder.name)
+        try context.save()
         bean.markDeleted()
         grinder.markDeleted()
-        equipment.markUpdated()
+        equipment.markDeleted()
         try context.save()
         let activeRequest = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
         activeRequest.predicate = NSPredicate(format: "deletedAt == nil")
         XCTAssertTrue(try context.fetch(activeRequest).isEmpty)
+        let activeGrinders = NSFetchRequest<GrinderRecord>(entityName: "GrinderRecord"); activeGrinders.predicate = NSPredicate(format: "deletedAt == nil")
+        let activeEquipment = NSFetchRequest<EquipmentRecord>(entityName: "EquipmentRecord"); activeEquipment.predicate = NSPredicate(format: "deletedAt == nil")
+        XCTAssertTrue(try context.fetch(activeGrinders).isEmpty)
+        XCTAssertTrue(try context.fetch(activeEquipment).isEmpty)
         XCTAssertEqual(grinder.syncStatus, .pendingDelete)
-        XCTAssertEqual(equipment.syncStatus, .pendingUpdate)
+        XCTAssertEqual(equipment.syncStatus, .pendingDelete)
+        XCTAssertEqual(brew.grinderId, grinder.id); XCTAssertEqual(brew.methodId, equipment.id)
+        XCTAssertEqual(brew.grinderNameSnapshot, "C40"); XCTAssertEqual(brew.methodNameSnapshot, "V60 02")
     }
 }
 

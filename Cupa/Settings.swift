@@ -40,6 +40,9 @@ struct SettingsView: View {
                     if let privacyPolicyURL {
                         Link("Consultar política de privacidad", destination: privacyPolicyURL)
                     }
+                    if let supportURL {
+                        Link("Contactar soporte y moderación", destination: supportURL)
+                    }
                 }
                 Section("Cuenta") { Button("Abrir cuenta") { showAccount = true } }
                 Section("Aplicación") { LabeledContent("Versión", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"); LabeledContent("Entorno", value: Bundle.main.object(forInfoDictionaryKey: "APP_ENVIRONMENT") as? String ?? "Development") }
@@ -51,8 +54,14 @@ struct SettingsView: View {
     }
 
     private var privacyPolicyURL: URL? {
-        guard let value = Bundle.main.object(forInfoDictionaryKey: "PRIVACY_POLICY_URL") as? String,
-              let url = URL(string: value), ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+        configuredURL(for: "PRIVACY_POLICY_URL")
+    }
+
+    private var supportURL: URL? { configuredURL(for: "SUPPORT_URL") }
+
+    private func configuredURL(for key: String) -> URL? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+              let url = URL(string: value), url.scheme?.lowercased() == "https" else { return nil }
         return url
     }
 }

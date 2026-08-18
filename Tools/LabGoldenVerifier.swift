@@ -37,7 +37,8 @@ struct LabGoldenVerifier {
         verifyLocalSuggestionFallback()
         verifyProfilePersistence()
         verifySocialImportAttribution()
-        print("4 golden tests, agregados, preparación, cata, outbox, IA, perfil y social aprobados")
+        verifyEntitySyncMapping()
+        print("4 golden tests, agregados, preparación, cata, sincronización, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -203,5 +204,20 @@ struct LabGoldenVerifier {
         try! SocialService(configuration: .init(supabaseURL: nil, supabaseAnonKey: nil)).importShare(share, context: context)
         let imported = try! context.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord"))
         precondition(imported.first?.originalEntityId == originalId && imported.first?.copyMode == "IMPORT")
+    }
+
+    @MainActor private static func verifyEntitySyncMapping() {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        let bean = CoffeeBeanRecord(context: context, name: "Local", brand: "Tostador", remainingQuantityGrams: 200); try! context.save()
+        let defaults = UserDefaults(suiteName: "CupaEntitySyncVerifier.\(UUID().uuidString)")!
+        let coordinator = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: nil, supabaseAnonKey: nil), defaults: defaults)
+        try! coordinator.enqueuePending(ownerId: owner); precondition(bean.ownerId == owner)
+        let outbox = try! context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")); precondition(outbox.count == 1)
+        let data = outbox[0].payloadJSON.data(using: .utf8)!; var row = (try! JSONSerialization.jsonObject(with: data) as! [[String: Any]])[0]
+        precondition(row["owner_id"] as? String == owner.uuidString)
+        row["name"] = "Remoto"; row["updated_at"] = "2099-08-17T00:00:00Z"; row["version"] = 8
+        let descriptor = CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" }!
+        try! coordinator.merge(row, descriptor: descriptor, expectedOwner: owner)
+        precondition(bean.name == "Remoto" && bean.syncStatus == .synced && bean.version == 8)
     }
 }

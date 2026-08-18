@@ -402,3 +402,44 @@ final class SocialTests: XCTestCase {
         XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/rest/v1/brew_shares", "/rest/v1/content_reports", "/rest/v1/blocked_users"])
     }
 }
+
+final class EntitySyncTests: XCTestCase {
+    @MainActor func testPendingOwnershipEncodingRemoteMergeAndJSONSnapshots() throws {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        let bean = CoffeeBeanRecord(context: context, name: "Local", brand: "Tostador", origin: "México", remainingQuantityGrams: 200)
+        let brewState = PreparationState(techniqueName: "V60", methodName: "V60", steps: [.init(id: UUID(), number: 1, title: "Bloom", durationSeconds: 45, waterAddedMl: 50, waterAccumulatedMl: 50, gesture: "BLOOM", intensity: "HIGH", note: "")], elapsedSeconds: 45, status: .completed)
+        _ = BrewSessionRecord(context: context, state: brewState, beanName: "Local", grinderName: "C40")
+        try context.save()
+        let coordinator = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: nil, supabaseAnonKey: nil), defaults: UserDefaults(suiteName: "EntitySyncTests.\(UUID().uuidString)")!)
+        try coordinator.enqueuePending(ownerId: owner)
+        XCTAssertEqual(bean.ownerId, owner)
+        let outbox = try context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord"))
+        XCTAssertEqual(outbox.count, 2)
+        let coffeePayload = try XCTUnwrap(outbox.first { $0.entityName == "coffee_beans" }?.payloadJSON.data(using: .utf8))
+        var coffeeRow = try XCTUnwrap((JSONSerialization.jsonObject(with: coffeePayload) as? [[String: Any]])?.first)
+        XCTAssertEqual(coffeeRow["owner_id"] as? String, owner.uuidString)
+        coffeeRow["name"] = "Remoto"; coffeeRow["updated_at"] = "2099-08-17T00:00:00Z"; coffeeRow["version"] = 8
+        let descriptor = try XCTUnwrap(CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" })
+        try coordinator.merge(coffeeRow, descriptor: descriptor, expectedOwner: owner)
+        XCTAssertEqual(bean.name, "Remoto"); XCTAssertEqual(bean.syncStatus, .synced); XCTAssertEqual(bean.version, 8)
+
+        let brewPayload = try XCTUnwrap(outbox.first { $0.entityName == "brew_sessions" }?.payloadJSON.data(using: .utf8))
+        let brewRow = try XCTUnwrap((JSONSerialization.jsonObject(with: brewPayload) as? [[String: Any]])?.first)
+        XCTAssertTrue(brewRow["steps_snapshot"] is [[String: Any]])
+        var foreign = coffeeRow; foreign["owner_id"] = UUID().uuidString; foreign["name"] = "Intruso"
+        try coordinator.merge(foreign, descriptor: descriptor, expectedOwner: owner); XCTAssertEqual(bean.name, "Remoto")
+    }
+
+    @MainActor func testEndToEndSyncPushesThenPullsEveryDescriptor() async throws {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        let bean = CoffeeBeanRecord(context: context, name: "Pendiente", brand: "Tostador"); try context.save()
+        let transport = MockTransport(responseData: Data("[]".utf8), statusCode: 200)
+        let coordinator = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport, defaults: UserDefaults(suiteName: "EndToEndSync.\(UUID().uuidString)")!)
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+        guard case .completed = coordinator.state else { return XCTFail("La sincronización no terminó: \(coordinator.state)") }
+        XCTAssertEqual(bean.syncStatus, .synced); XCTAssertEqual(bean.ownerId, owner)
+        XCTAssertTrue(transport.requests.contains { $0.httpMethod == "POST" && $0.url?.path == "/rest/v1/coffee_beans" })
+        let pulledTables = Set(transport.requests.filter { $0.httpMethod == "GET" }.compactMap { $0.url?.lastPathComponent })
+        XCTAssertEqual(pulledTables, Set(CoreSyncSchema.descriptors.map(\.table)))
+    }
+}

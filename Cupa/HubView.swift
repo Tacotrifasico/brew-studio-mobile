@@ -24,7 +24,10 @@ struct HubView: View {
             }
             .background(CupaTheme.background.ignoresSafeArea())
             .navigationTitle("Brew Studio Hub")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Cerrar") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { if account.tokens != nil { Button { synchronize() } label: { Image(systemName: "arrow.triangle.2.circlepath") } } }
+                ToolbarItem(placement: .confirmationAction) { Button("Cerrar") { dismiss() } }
+            }
             .sheet(isPresented: $showAccount) { AccountView(model: account) }
             .task { loadProfile(); await loadFeed() }
             .alert("Perfil", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("Aceptar") {} } message: { Text(message ?? "") }
@@ -134,5 +137,19 @@ struct HubView: View {
     private func block(_ share: SocialShare) { socialAction { try await $0.block(userId: share.ownerId, accessToken: account.tokens!.accessToken) }; feed.removeAll { $0.ownerId == share.ownerId } }
     private func socialAction(_ operation: @escaping (SocialService) async throws -> Void) {
         Task { do { try await operation(SocialService(configuration: account.configuration)); message = "Acción completada."; await loadFeed() } catch { message = error.localizedDescription } }
+    }
+    private func synchronize() {
+        guard let tokens = account.tokens else { return }
+        Task {
+            let coordinator = EntitySyncCoordinator(context: context, configuration: account.configuration)
+            await coordinator.sync(ownerId: tokens.userId, accessToken: tokens.accessToken)
+            switch coordinator.state {
+            case .completed: message = "Datos sincronizados."
+            case .offline: message = "Sin backend: los cambios siguen guardados offline."
+            case let .failed(error): message = error
+            default: break
+            }
+            loadProfile(); await loadFeed()
+        }
     }
 }

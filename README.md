@@ -18,6 +18,8 @@ Configuración permite tema del sistema, claro u oscuro y preferencias de unidad
 
 La comunidad permite publicar e importar recetas/técnicas con atribución, marcar contenido, bloquear autores y reportar publicaciones. Sin backend configurado se muestra un estado vacío real y los datos privados permanecen locales.
 
+Al iniciar sesión, la sincronización reclama los datos creados offline, sube la outbox y descarga cambios incrementales de todos los agregados para restaurarlos en otro dispositivo. La validación contra el proyecto Supabase real requiere las dos variables públicas descritas en `BLOCKERS.md`.
+
 El target `CupaTests` contiene pruebas XCTest. Si CoreSimulator no inicia, `Tools/LabGoldenVerifier.swift` valida cuatro casos dorados, restauración de estado y persistencia Core Data desde macOS; el comando está en `TEST_PLAN.md`.
 
 Supabase, sincronización multiusuario, Gemini mediante backend y los demás CRUD siguen el estado documentado en `PARITY_MATRIX.md` y `BLOCKERS.md`.

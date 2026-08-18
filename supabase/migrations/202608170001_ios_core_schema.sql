@@ -14,7 +14,8 @@ $$;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null default '', alias text not null default '', avatar_url text,
-  biography text not null default '', preferences jsonb not null default '{}'::jsonb,
+  biography text not null default '', avatar_color text not null default '#3F7A63', favorite_methods text not null default '',
+  preferences jsonb not null default '{}'::jsonb,
   is_private boolean not null default true, created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(), version bigint not null default 1, deleted_at timestamptz
 );
@@ -133,6 +134,14 @@ create table if not exists public.cup_sessions (
   created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1, deleted_at timestamptz
 );
 
+create table if not exists public.lab_experiments (
+  id uuid primary key default gen_random_uuid(), owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  method text not null, coffee_grams numeric not null, water_ml integer not null, ratio numeric not null, temperature_c integer not null,
+  grind_clicks integer not null, freshness text not null, time_seconds integer not null, altitude_meters integer not null default 0,
+  city_name text not null default '', notes text not null default '', extraction_index numeric not null, summary text not null default '',
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1, deleted_at timestamptz
+);
+
 create table if not exists public.ai_request_log (
   id uuid primary key default gen_random_uuid(), owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   prompt_version text not null, created_at timestamptz not null default now()
@@ -180,6 +189,7 @@ create index if not exists brew_sessions_owner_updated_idx on public.brew_sessio
 create index if not exists tastings_owner_updated_idx on public.tastings(owner_id, updated_at);
 create index if not exists tasting_observations_parent_idx on public.tasting_observations(tasting_id, elapsed_seconds);
 create index if not exists cup_sessions_owner_updated_idx on public.cup_sessions(owner_id, updated_at);
+create index if not exists lab_experiments_owner_updated_idx on public.lab_experiments(owner_id, updated_at);
 create index if not exists ai_request_log_owner_created_idx on public.ai_request_log(owner_id, created_at desc);
 create index if not exists brew_shares_feed_idx on public.brew_shares(visibility, status, created_at desc);
 create index if not exists brew_shares_target_idx on public.brew_shares(target_user_id, created_at desc);
@@ -188,7 +198,7 @@ create index if not exists content_reports_status_idx on public.content_reports(
 do $$
 declare table_name text;
 begin
-  foreach table_name in array array['profiles','coffee_beans','grinders','equipment','recipes','recipe_ingredients','recipe_steps','techniques','technique_steps','brew_sessions','tastings','tasting_observations','cup_sessions']
+  foreach table_name in array array['profiles','coffee_beans','grinders','equipment','recipes','recipe_ingredients','recipe_steps','techniques','technique_steps','brew_sessions','tastings','tasting_observations','cup_sessions','lab_experiments']
   loop
     execute format('alter table public.%I enable row level security', table_name);
   end loop;
@@ -203,7 +213,7 @@ end $$;
 do $$
 declare table_name text; owner_column text;
 begin
-  foreach table_name in array array['coffee_beans','grinders','equipment','recipes','recipe_ingredients','recipe_steps','techniques','technique_steps','brew_sessions','tastings','tasting_observations','cup_sessions']
+  foreach table_name in array array['coffee_beans','grinders','equipment','recipes','recipe_ingredients','recipe_steps','techniques','technique_steps','brew_sessions','tastings','tasting_observations','cup_sessions','lab_experiments']
   loop
     begin
       execute format('create policy %I on public.%I for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid())', table_name || '_owner_all', table_name);
@@ -233,7 +243,7 @@ end $$;
 do $$
 declare table_name text;
 begin
-  foreach table_name in array array['profiles','coffee_beans','grinders','equipment','recipes','recipe_ingredients','recipe_steps','techniques','technique_steps','brew_sessions','tastings','tasting_observations','cup_sessions']
+  foreach table_name in array array['profiles','coffee_beans','grinders','equipment','recipes','recipe_ingredients','recipe_steps','techniques','technique_steps','brew_sessions','tastings','tasting_observations','cup_sessions','lab_experiments']
   loop
     execute format('drop trigger if exists %I on public.%I', table_name || '_set_updated_at', table_name);
     execute format('create trigger %I before update on public.%I for each row execute function public.set_updated_at()', table_name || '_set_updated_at', table_name);

@@ -40,4 +40,6 @@ Relaciones por UUID estables. Una sesión histórica conserva identificadores y 
 
 `BrewShare` conserva tipo/UUID de la entidad, autor público, visibilidad, destino opcional, mensaje y snapshot tipado. `ShareLike`, `ShareSave`, `BlockedUser` y `ContentReport` son tablas separadas con claves compuestas o unicidad para impedir duplicados. Una importación crea un agregado local nuevo y conserva atribución; nunca adopta el UUID editable del autor.
 
+`SyncOperation` es una outbox local compactada por tabla y UUID. Conserva operación, payload, intentos, próximo reintento y último error. No se sincroniza a Supabase: coordina el envío de todas las entidades privadas y desaparece lógicamente sólo después de una respuesta remota exitosa.
+
 `syncStatus`: `synced`, `pendingCreate`, `pendingUpdate`, `pendingDelete`, `conflict`, `error`.

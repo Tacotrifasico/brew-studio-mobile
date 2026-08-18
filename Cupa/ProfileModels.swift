@@ -31,7 +31,8 @@ struct ProfileRepository {
     func remoteJSON(_ record: UserProfileRecord) throws -> Data {
         try JSONSerialization.data(withJSONObject: [[
             "id": record.id.uuidString, "display_name": record.displayName, "alias": record.alias,
-            "biography": record.biography, "preferences": ["avatar_color": record.avatarColor, "favorite_methods": record.favoriteMethods],
+            "biography": record.biography, "avatar_color": record.avatarColor, "favorite_methods": record.favoriteMethods,
+            "preferences": ["avatar_color": record.avatarColor, "favorite_methods": record.favoriteMethods],
             "is_private": record.isPrivate, "updated_at": ISO8601DateFormatter().string(from: record.updatedAt), "version": record.version
         ]])
     }

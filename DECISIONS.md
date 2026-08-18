@@ -59,3 +59,7 @@ Los colores semánticos usan proveedores dinámicos de UIKit para responder a cl
 ## D-015 — Publicaciones por snapshot y moderación mínima
 
 Compartir crea un snapshot explícito de receta o técnica; importar genera UUID nuevos y conserva `originalEntityId` y `copyMode=IMPORT`. El feed sólo consulta contenido real `PUBLIC/ACTIVE`. RLS excluye relaciones bloqueadas y separa mensajes directos. Likes y guardados sólo son visibles/editables por su usuario; reportes son visibles al denunciante y quedan listos para revisión administrativa. Correos y otros identificadores sensibles nunca forman parte del payload público.
+
+## D-016 — Sincronización incremental por descriptor
+
+Cada tipo Core Data tiene un descriptor explícito de tabla, columnas y conversiones; no se serializan propiedades internas por reflexión indiscriminada. Al autenticarse, los registros locales sin propietario se reclaman para ese usuario, se compactan en outbox y se suben antes de descargar cambios incrementales. El pull respeta orden de padres/hijos, propietario, `updated_at`, versión y borrado lógico. El checkpoint sólo avanza cuando todas las tablas terminan, por lo que un fallo no pierde cambios.

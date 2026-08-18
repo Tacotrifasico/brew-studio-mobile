@@ -35,6 +35,7 @@
 - Cuenta: estado seguro sin configuración y contrato de login GoTrue (ruta, anon header y mapeo de tokens): XCTest compilado.
 - Eliminación de cuenta: ruta autenticada, confirmación explícita y ausencia de credenciales administrativas en el request iOS: XCTest compilado.
 - Sincronización: elección por fecha/versión, rechazo de propietario distinto, compactación de outbox, reintento exponencial y finalización: verificador ejecutado.
+- Sincronización integral: asignación de propietario a datos offline, JSON/JSONB, push de pendientes, pull incremental de todos los descriptores, merge remoto y checkpoint: XCTest compilado + mapeo ejecutado.
 - Gemini: llamada autenticada a Edge Function, validación de respuesta y fallback local determinista cuando no hay configuración: verificador ejecutado + XCTest compilado.
 - Perfil: creación, edición con UUID estable, normalización de alias, aislamiento entre dos propietarios y DTO sin correo: verificador ejecutado.
 - Configuración: restauración de tema oscuro, Fahrenheit y unidades: XCTest compilado.
@@ -46,6 +47,6 @@ Comando alternativo de verificación cuando CoreSimulator no inicia:
 
 ```bash
 MAC_SDK=$(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun --sdk macosx --show-sdk-path)
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -target arm64-apple-macosx15.0 -sdk "$MAC_SDK" -module-cache-path /private/tmp/cupa-swift-module-cache -framework Combine -framework CoreData -framework Security Cupa/CalculatorModel.swift Cupa/LabModel.swift Cupa/PreparationModel.swift Cupa/RecipeTechniqueModels.swift Cupa/TastingModels.swift Cupa/ProfileModels.swift Cupa/AccountServices.swift Cupa/SyncEngine.swift Cupa/SuggestionServices.swift Cupa/SocialModels.swift Cupa/PersistenceModels.swift Cupa/RecipeTechniqueRepository.swift Tools/LabGoldenVerifier.swift -o /private/tmp/cupa-domain-verifier
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -target arm64-apple-macosx15.0 -sdk "$MAC_SDK" -module-cache-path /private/tmp/cupa-swift-module-cache -framework Combine -framework CoreData -framework Security Cupa/CalculatorModel.swift Cupa/LabModel.swift Cupa/PreparationModel.swift Cupa/RecipeTechniqueModels.swift Cupa/TastingModels.swift Cupa/ProfileModels.swift Cupa/AccountServices.swift Cupa/SyncEngine.swift Cupa/EntitySyncCoordinator.swift Cupa/SuggestionServices.swift Cupa/SocialModels.swift Cupa/PersistenceModels.swift Cupa/RecipeTechniqueRepository.swift Tools/LabGoldenVerifier.swift -o /private/tmp/cupa-domain-verifier
 /private/tmp/cupa-domain-verifier
 ```

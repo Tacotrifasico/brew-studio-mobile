@@ -6,6 +6,7 @@ enum CupaTab: Hashable {
 
 struct AppShell: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.managedObjectContext) private var context
     @State private var selection: CupaTab = .home
     @StateObject private var calculator = CalculatorModel()
     @StateObject private var lab = LabModel()
@@ -42,6 +43,10 @@ struct AppShell: View {
         }
         .task { lab.update { $0.temperatureUnit = settings.temperatureUnit }; await account.restoreAndRefreshIfNeeded() }
         .onChange(of: settings.temperatureUnit) { _, unit in lab.update { $0.temperatureUnit = unit } }
+        .onChange(of: account.tokens) { _, tokens in
+            guard let tokens else { return }
+            Task { await EntitySyncCoordinator(context: context, configuration: account.configuration).sync(ownerId: tokens.userId, accessToken: tokens.accessToken) }
+        }
         .preferredColorScheme(settings.preferredColorScheme)
     }
 }

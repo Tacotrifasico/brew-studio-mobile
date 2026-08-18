@@ -14,7 +14,7 @@
 - [ ] Pruebas críticas aprobadas (dominio aprobado; UI e integración real pendientes).
 - [x] Build Release del código aprobado sin firma.
 - [x] Archive técnico generado sin firma y sin catálogo por fallo local de `actool`.
-- [ ] Bundle ID, versión, cifrado, icono, launch screen y permisos revisados (bundle/versión/cifrado aprobados; ícono preparado y falta validar catálogo).
-- [x] Development, Staging y Production separados.
+- [ ] Bundle ID, versión, cifrado, icono, launch screen y permisos revisados (bundle/versión/cifrado/launch aprobados; no se usan APIs con permiso; ícono preparado y falta validar catálogo).
+- [x] Development, Staging y Production separados y compilables; metadata expandida dentro de cada bundle validada.
 - [ ] Privacidad, accesibilidad y localización revisadas.
 - [x] Acciones de cuenta Apple y legales documentadas.

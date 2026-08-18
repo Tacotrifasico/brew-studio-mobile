@@ -2,7 +2,7 @@
 
 ## Configuración local
 
-1. Copiar los valores públicos de Supabase a `Config/Development.xcconfig` para desarrollo y a `Config/Production.xcconfig` para distribución.
+1. Copiar los valores públicos de Supabase al archivo del ambiente: `Config/Development.xcconfig`, `Config/Staging.xcconfig` o `Config/Production.xcconfig`.
 2. Usar la URL del proyecto y una **publishable key** (o la anon key heredada), nunca una secret key ni `service_role` en el proyecto iOS.
 3. Mantener los archivos reales con secretos de servidor fuera del repositorio. `GEMINI_API_KEY` sólo se configura como secreto de Edge Functions.
 
@@ -34,10 +34,13 @@ Después se debe validar con dos cuentas distintas que cada usuario sólo pueda 
 ## Xcode y TestFlight
 
 1. Abrir `Cupa.xcodeproj`.
-2. Seleccionar el equipo Apple correcto en Signing & Capabilities y comprobar que el bundle ID `com.tacotrifasico.cupa` pertenece a ese equipo.
-3. Configurar versión y build, confirmar el AppIcon incluido, definir `PRIVACY_POLICY_URL` y `SUPPORT_URL`, clasificación por edad y metadatos.
-4. Ejecutar pruebas, un build Release y después Product → Archive con un destino iOS genérico.
-5. Validar el Archive y subirlo a App Store Connect; probar primero mediante TestFlight interno.
+2. Usar el esquema `Cupa` para Development/Production o `Cupa-Staging` para el backend de prueba. Staging usa `com.tacotrifasico.cupa.staging` y el nombre visible “Cupa Staging”, por lo que puede convivir con producción.
+3. Seleccionar el equipo Apple correcto en Signing & Capabilities y comprobar que el bundle ID `com.tacotrifasico.cupa` pertenece a ese equipo.
+4. Configurar versión y build, confirmar el AppIcon incluido, definir `PRIVACY_POLICY_URL` y `SUPPORT_URL`, clasificación por edad y metadatos.
+5. Ejecutar pruebas, un build Release y después Product → Archive con un destino iOS genérico.
+6. Validar el Archive y subirlo a App Store Connect; probar primero mediante TestFlight interno.
+
+El `Info.plist` expande dentro del bundle el ambiente y sus valores públicos. Una URL Supabase remota sólo se acepta con HTTPS; HTTP se admite únicamente para `localhost` o `127.0.0.1` durante desarrollo local. Una configuración vacía o insegura mantiene la cuenta deshabilitada en vez de construir solicitudes inválidas.
 
 La compilación sin firma y un Archive técnico ya están validados. El Archive firmado requiere certificado y perfil válidos. En esta instalación también debe repararse `CoreSimulatorService/simdiskimaged`: actualmente `actool` no puede descubrir runtimes y falla al compilar el catálogo AppIcon incluso para iPhone genérico.
 

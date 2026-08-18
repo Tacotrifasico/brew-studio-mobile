@@ -23,4 +23,4 @@ Repositories
 
 Las vistas no realizan consultas HTTP ni contienen fórmulas de negocio. Las entidades de dominio no dependen de SwiftUI.
 
-`AccountModel` coordina la sesión y `SupabaseAuthService` implementa el contrato GoTrue mediante un transporte inyectable. `SyncOutboxRepository` compacta mutaciones locales y `SupabaseDataService` prepara upsert, borrado lógico y descarga incremental. Development y Production usan archivos `.xcconfig`; Staging queda listo para asociarse a un esquema cuando se configure el proyecto remoto.
+`AccountModel` coordina la sesión y `SupabaseAuthService` implementa el contrato GoTrue mediante un transporte inyectable. `SyncOutboxRepository` compacta mutaciones locales y `SupabaseDataService` prepara upsert, borrado lógico y descarga incremental. Development, Staging y Production usan configuraciones `.xcconfig` operativas. `Cupa` ejecuta Development y archiva Production; `Cupa-Staging` ejecuta, prueba y archiva Staging con bundle separado.

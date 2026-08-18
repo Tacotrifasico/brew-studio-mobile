@@ -151,3 +151,7 @@ Celsius/Fahrenheit usa `settings.temperature` como única preferencia entre Conf
 ## D-038 — Navegación estable y color accesible por tema
 
 Las cinco secciones conservan el orden Android y comparten un único modelo de selección para que cambiar de pestaña no reconstruya el estado de trabajo. La paleta define un color de texto sobre acentos para cada apariencia en vez de asumir blanco, y todos los pares usados como texto normal alcanzan contraste WCAG AA de 4.5:1 en claro y oscuro. Las métricas críticas usan estilos relativos de Dynamic Type; las filas ajustables pueden cambiar de distribución antes de truncar y mantienen etiquetas y valores accesibles para VoiceOver.
+
+## D-039 — Ambientes compilables y configuración dentro del bundle
+
+Un archivo `.xcconfig` sin configuración de Xcode asociada no constituye un ambiente real. El proyecto define Development, Staging y Production; Staging dispone de esquema compartido, nombre visible y bundle ID propios para convivir con producción. Se usa un `Info.plist` explícito porque la generación automática no estaba incorporando las claves personalizadas: el binario ahora recibe `APP_ENVIRONMENT`, Supabase y las URLs legales. Las URLs remotas de Supabase exigen HTTPS y los valores vacíos se normalizan a ausencia; HTTP sólo se permite para desarrollo local en localhost.

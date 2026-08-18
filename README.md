@@ -12,7 +12,7 @@ Esta etapa incluye navegación principal, diseño visual base, calculadora bidir
 
 La pantalla de cuenta está preparada para Supabase Auth y almacena tokens en Keychain. La sincronización dispone de outbox persistente, reintentos y resolución de conflictos; la migración y RLS están en `supabase/migrations`. Mientras no se definan `SUPABASE_URL` y `SUPABASE_ANON_KEY`, la app indica que la cuenta aún no está conectada y todos los módulos locales siguen funcionando.
 
-Gemini se invoca únicamente desde una Edge Function autenticada y la app conserva un fallback local. Las instrucciones de configuración, despliegue y Archive están en `DEPLOYMENT.md`.
+Gemini se invoca únicamente desde una Edge Function autenticada y la app conserva un fallback local. Las instrucciones de configuración, despliegue y Archive están en `DEPLOYMENT.md`. El esquema `Cupa` usa Development al ejecutar y Production al archivar; `Cupa-Staging` utiliza un backend y bundle separados para pruebas previas a producción.
 
 Antes del primer envío remoto a Gemini, la app explica qué parámetros se compartirán con Google y solicita permiso revocable. El manifiesto `PrivacyInfo.xcprivacy` declara los datos sincronizados y el uso local de preferencias sin tracking.
 

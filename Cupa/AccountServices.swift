@@ -8,10 +8,22 @@ struct AppConfiguration: Equatable {
     init(bundle: Bundle = .main, environment: [String: String] = ProcessInfo.processInfo.environment) {
         let rawURL = environment["SUPABASE_URL"] ?? bundle.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
         let rawKey = environment["SUPABASE_ANON_KEY"] ?? bundle.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String
-        supabaseURL = rawURL.flatMap(URL.init(string:)); supabaseAnonKey = rawKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+        supabaseURL = Self.validatedSupabaseURL(rawURL)
+        let cleanKey = rawKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+        supabaseAnonKey = cleanKey?.isEmpty == false ? cleanKey : nil
     }
 
     init(supabaseURL: URL?, supabaseAnonKey: String?) { self.supabaseURL = supabaseURL; self.supabaseAnonKey = supabaseAnonKey }
+
+    private static func validatedSupabaseURL(_ rawValue: String?) -> URL? {
+        guard let value = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              let host = url.host?.lowercased() else { return nil }
+        let isLocalDevelopment = scheme == "http" && (host == "localhost" || host == "127.0.0.1")
+        return scheme == "https" || isLocalDevelopment ? url : nil
+    }
 }
 
 struct AuthTokens: Codable, Equatable {

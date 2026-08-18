@@ -43,13 +43,14 @@ struct LabGoldenVerifier {
         verifyRecipeTextImport()
         verifyPreparationRecovery()
         verifyTastingCoolingAndPersistence()
+        verifyAppConfiguration()
         verifySyncConflictAndOutbox()
         verifyLocalSuggestionFallback()
         verifyProfilePersistence()
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
-        print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, sincronización, IA, perfil y social aprobados")
+        print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, ambientes, sincronización, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -57,6 +58,17 @@ struct LabGoldenVerifier {
         let actual = [output.aroma, output.acidity, output.sweetness, output.body, output.bitterness, output.finish]
         precondition(abs(output.extractionIndex - extraction) <= 0.000_01, "\(name): índice \(output.extractionIndex)")
         precondition(actual == scores, "\(name): esperado \(scores), recibido \(actual)")
+    }
+
+    private static func verifyAppConfiguration() {
+        let empty = AppConfiguration(environment: ["SUPABASE_URL": "", "SUPABASE_ANON_KEY": "   "])
+        precondition(!empty.isSupabaseConfigured && empty.supabaseURL == nil && empty.supabaseAnonKey == nil)
+        let insecure = AppConfiguration(environment: ["SUPABASE_URL": "http://example.com", "SUPABASE_ANON_KEY": "public-key"])
+        precondition(!insecure.isSupabaseConfigured && insecure.supabaseURL == nil)
+        let production = AppConfiguration(environment: ["SUPABASE_URL": " https://project.supabase.co ", "SUPABASE_ANON_KEY": " public-key "])
+        precondition(production.supabaseURL?.absoluteString == "https://project.supabase.co" && production.supabaseAnonKey == "public-key")
+        let local = AppConfiguration(environment: ["SUPABASE_URL": "http://127.0.0.1:54321", "SUPABASE_ANON_KEY": "local-key"])
+        precondition(local.isSupabaseConfigured)
     }
 
     @MainActor private static func verifyCoffeeInventoryActions() {

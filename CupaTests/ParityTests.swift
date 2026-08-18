@@ -684,6 +684,25 @@ final class AccountAndSyncTests: XCTestCase {
         XCTAssertEqual(model.state, .unavailable)
     }
 
+    func testEnvironmentConfigurationRejectsEmptyAndInsecureRemoteValues() {
+        let empty = AppConfiguration(bundle: Bundle(for: Self.self), environment: ["SUPABASE_URL": "", "SUPABASE_ANON_KEY": "   "])
+        XCTAssertFalse(empty.isSupabaseConfigured)
+        XCTAssertNil(empty.supabaseURL)
+        XCTAssertNil(empty.supabaseAnonKey)
+
+        let insecure = AppConfiguration(bundle: Bundle(for: Self.self), environment: ["SUPABASE_URL": "http://example.com", "SUPABASE_ANON_KEY": "public-key"])
+        XCTAssertFalse(insecure.isSupabaseConfigured)
+        XCTAssertNil(insecure.supabaseURL)
+
+        let production = AppConfiguration(bundle: Bundle(for: Self.self), environment: ["SUPABASE_URL": " https://project.supabase.co ", "SUPABASE_ANON_KEY": " public-key "])
+        XCTAssertEqual(production.supabaseURL?.absoluteString, "https://project.supabase.co")
+        XCTAssertEqual(production.supabaseAnonKey, "public-key")
+        XCTAssertTrue(production.isSupabaseConfigured)
+
+        let local = AppConfiguration(bundle: Bundle(for: Self.self), environment: ["SUPABASE_URL": "http://127.0.0.1:54321", "SUPABASE_ANON_KEY": "local-key"])
+        XCTAssertTrue(local.isSupabaseConfigured)
+    }
+
     func testSupabaseSignInContractAndTokenMapping() async throws {
         let userId = UUID(); let body = try JSONSerialization.data(withJSONObject: [
             "access_token": "access", "refresh_token": "refresh", "expires_in": 3600,

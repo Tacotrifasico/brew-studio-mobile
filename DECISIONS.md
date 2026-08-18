@@ -43,3 +43,7 @@ El cronómetro conserva en `UserDefaults` el último instante observado y el est
 ## D-011 — Cata, observaciones y taza como agregados separados
 
 Una `Tasting` puede guardarse sin preparación y enlazarse opcionalmente a un `BrewSession`. Cada lectura durante el enfriamiento es una `TastingObservation` con UUID, etapa, tiempo y perfil propios. `CupSession` enlaza ambos agregados y conserva snapshots mínimos; no convierte receta, técnica o cata en la misma entidad. Las etapas térmicas preservan los límites de Android: caliente antes de 4 min, pico antes de 10 min, descenso antes de 16 min y agotada desde entonces.
+
+## D-012 — Tokens en Keychain y outbox persistente
+
+La sesión Supabase se guarda en Keychain con acceso posterior al primer desbloqueo y nunca en `UserDefaults`. La anon key es configuración pública por ambiente; `service_role` está prohibida en el cliente. Las mutaciones offline se compactan por entidad en una outbox Core Data, reintentan con espera exponencial y resuelven conflictos primero por `updated_at` y después por versión. Una diferencia de propietario nunca se combina y se trata como violación de aislamiento.

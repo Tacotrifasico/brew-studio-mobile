@@ -22,6 +22,9 @@
 		A1000000000000000000000E /* PreparationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* PreparationViews.swift */; };
 		A1000000000000000000000F /* TastingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* TastingModels.swift */; };
 		A10000000000000000000010 /* TastingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* TastingViews.swift */; };
+		A10000000000000000000011 /* AccountServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* AccountServices.swift */; };
+		A10000000000000000000012 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* AccountView.swift */; };
+		A10000000000000000000013 /* SyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* SyncEngine.swift */; };
 		B10000000000000000000001 /* ParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ParityTests.swift */; };
 		B10000000000000000000002 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* XCTest.framework */; };
 /* End PBXBuildFile section */
@@ -53,9 +56,16 @@
 		A2000000000000000000000E /* PreparationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparationViews.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* TastingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TastingModels.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* TastingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TastingViews.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* AccountServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountServices.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* SyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngine.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* ParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParityTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* CupaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CupaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000003 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		C20000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		C20000000000000000000002 /* Development.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Development.xcconfig; sourceTree = "<group>"; };
+		C20000000000000000000003 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
+		C20000000000000000000004 /* Production.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Production.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +91,7 @@
 			isa = PBXGroup;
 			children = (
 				A40000000000000000000002 /* Cupa */,
+				C40000000000000000000001 /* Config */,
 				B50000000000000000000001 /* CupaTests */,
 				A40000000000000000000003 /* Products */,
 				B50000000000000000000002 /* Frameworks */,
@@ -105,6 +116,9 @@
 				A2000000000000000000000E /* PreparationViews.swift */,
 				A2000000000000000000000F /* TastingModels.swift */,
 				A20000000000000000000010 /* TastingViews.swift */,
+				A20000000000000000000011 /* AccountServices.swift */,
+				A20000000000000000000012 /* AccountView.swift */,
+				A20000000000000000000013 /* SyncEngine.swift */,
 			);
 			path = Cupa;
 			sourceTree = "<group>";
@@ -132,6 +146,17 @@
 				B20000000000000000000003 /* XCTest.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		C40000000000000000000001 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				C20000000000000000000001 /* Base.xcconfig */,
+				C20000000000000000000002 /* Development.xcconfig */,
+				C20000000000000000000003 /* Staging.xcconfig */,
+				C20000000000000000000004 /* Production.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -247,6 +272,9 @@
 				A1000000000000000000000E /* PreparationViews.swift in Sources */,
 				A1000000000000000000000F /* TastingModels.swift in Sources */,
 				A10000000000000000000010 /* TastingViews.swift in Sources */,
+				A10000000000000000000011 /* AccountServices.swift in Sources */,
+				A10000000000000000000012 /* AccountView.swift in Sources */,
+				A10000000000000000000013 /* SyncEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -306,6 +334,7 @@
 		};
 		AA0000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C20000000000000000000002 /* Development.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
@@ -316,6 +345,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Cupa;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
+				INFOPLIST_KEY_APP_ENVIRONMENT = "$(APP_ENVIRONMENT)";
+				INFOPLIST_KEY_SUPABASE_ANON_KEY = "$(SUPABASE_ANON_KEY)";
+				INFOPLIST_KEY_SUPABASE_URL = "$(SUPABASE_URL)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -333,6 +365,7 @@
 		};
 		AA0000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C20000000000000000000004 /* Production.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
@@ -341,6 +374,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Cupa;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
+				INFOPLIST_KEY_APP_ENVIRONMENT = "$(APP_ENVIRONMENT)";
+				INFOPLIST_KEY_SUPABASE_ANON_KEY = "$(SUPABASE_ANON_KEY)";
+				INFOPLIST_KEY_SUPABASE_URL = "$(SUPABASE_URL)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

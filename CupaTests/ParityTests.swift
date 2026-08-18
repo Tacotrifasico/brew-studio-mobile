@@ -273,3 +273,54 @@ final class TastingModelTests: XCTestCase {
         XCTAssertEqual(cups.first?.techniqueNameSnapshot, "Cata independiente")
     }
 }
+
+private final class MemoryTokenStore: TokenStore {
+    var value: AuthTokens?
+    func load() throws -> AuthTokens? { value }
+    func save(_ tokens: AuthTokens) throws { value = tokens }
+    func clear() throws { value = nil }
+}
+
+private final class MockTransport: NetworkTransport {
+    var requests: [URLRequest] = []; var responseData: Data; var statusCode: Int
+    init(responseData: Data = Data(), statusCode: Int = 200) { self.responseData = responseData; self.statusCode = statusCode }
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        requests.append(request)
+        return (responseData, HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!)
+    }
+}
+
+final class AccountAndSyncTests: XCTestCase {
+    @MainActor func testAccountIsUnavailableWithoutPublicConfiguration() {
+        let model = AccountModel(configuration: .init(supabaseURL: nil, supabaseAnonKey: nil), transport: MockTransport(), store: MemoryTokenStore())
+        XCTAssertEqual(model.state, .unavailable)
+    }
+
+    func testSupabaseSignInContractAndTokenMapping() async throws {
+        let userId = UUID(); let body = try JSONSerialization.data(withJSONObject: [
+            "access_token": "access", "refresh_token": "refresh", "expires_in": 3600,
+            "user": ["id": userId.uuidString, "email": "brew@example.com"]
+        ])
+        let transport = MockTransport(responseData: body)
+        let service = SupabaseAuthService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
+        let tokens = try await service.signIn(email: "brew@example.com", password: "password123")
+        XCTAssertEqual(tokens.userId, userId); XCTAssertEqual(tokens.email, "brew@example.com")
+        XCTAssertEqual(transport.requests.first?.url?.path, "/auth/v1/token")
+        XCTAssertEqual(transport.requests.first?.value(forHTTPHeaderField: "apikey"), "public-anon")
+        XCTAssertNil(transport.requests.first?.value(forHTTPHeaderField: "Authorization"))
+    }
+
+    @MainActor func testConflictResolutionAndPersistentRetryOutbox() throws {
+        let owner = UUID(); let older = Date(timeIntervalSince1970: 100); let newer = Date(timeIntervalSince1970: 200)
+        XCTAssertEqual(LastWriteWinsResolver.resolve(local: .init(ownerId: owner, updatedAt: newer, version: 2, deletedAt: nil), remote: .init(ownerId: owner, updatedAt: older, version: 9, deletedAt: nil)), .local)
+        XCTAssertEqual(LastWriteWinsResolver.resolve(local: .init(ownerId: owner, updatedAt: older, version: 1, deletedAt: nil), remote: .init(ownerId: UUID(), updatedAt: newer, version: 2, deletedAt: nil)), .ownerMismatch)
+
+        let persistence = PersistenceController(inMemory: true); let repository = SyncOutboxRepository(context: persistence.container.viewContext); let entityId = UUID()
+        let first = try repository.enqueue(entityName: "recipes", entityId: entityId, ownerId: owner, operation: .pendingCreate, payloadJSON: "{\"name\":\"V60\"}")
+        let same = try repository.enqueue(entityName: "recipes", entityId: entityId, ownerId: owner, operation: .pendingUpdate, payloadJSON: "{\"name\":\"V60 editada\"}")
+        XCTAssertEqual(first.id, same.id); XCTAssertEqual(try repository.ready().count, 1)
+        let now = Date(); try repository.markFailed(same, message: "offline", now: now)
+        XCTAssertTrue(same.nextAttemptAt > now); XCTAssertTrue(try repository.ready(now: now).isEmpty)
+        try repository.markSucceeded(same); XCTAssertTrue(try repository.ready(now: .distantFuture).isEmpty)
+    }
+}

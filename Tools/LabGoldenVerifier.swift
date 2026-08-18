@@ -33,7 +33,8 @@ struct LabGoldenVerifier {
         verifyRecipeTechniqueAggregates()
         verifyPreparationRecovery()
         verifyTastingCoolingAndPersistence()
-        print("4 golden tests, agregados, preparación y cata recuperable aprobados")
+        verifySyncConflictAndOutbox()
+        print("4 golden tests, agregados, preparación, cata y outbox aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -154,5 +155,21 @@ struct LabGoldenVerifier {
         precondition(try! repository.observations(tastingId: tasting.id).count == 1)
         let cups = try! context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))
         precondition(cups.first?.brewSessionId == brew.id && cups.first?.tastingId == tasting.id)
+    }
+
+    @MainActor private static func verifySyncConflictAndOutbox() {
+        let owner = UUID(); let older = Date(timeIntervalSince1970: 10); let newer = Date(timeIntervalSince1970: 20)
+        let choice = LastWriteWinsResolver.resolve(
+            local: .init(ownerId: owner, updatedAt: newer, version: 1, deletedAt: nil),
+            remote: .init(ownerId: owner, updatedAt: older, version: 9, deletedAt: nil)
+        )
+        precondition(choice == .local)
+        let persistence = PersistenceController(inMemory: true); let repository = SyncOutboxRepository(context: persistence.container.viewContext)
+        let entityId = UUID(); let first = try! repository.enqueue(entityName: "recipes", entityId: entityId, ownerId: owner, operation: .pendingCreate, payloadJSON: "{}")
+        let same = try! repository.enqueue(entityName: "recipes", entityId: entityId, ownerId: owner, operation: .pendingUpdate, payloadJSON: "{\"edited\":true}")
+        precondition(first.id == same.id && (try! repository.ready().count) == 1)
+        let now = Date(); try! repository.markFailed(same, message: "offline", now: now)
+        precondition((try! repository.ready(now: now)).isEmpty && same.nextAttemptAt > now)
+        try! repository.markSucceeded(same); precondition((try! repository.ready(now: .distantFuture)).isEmpty)
     }
 }

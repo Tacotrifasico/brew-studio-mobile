@@ -11,10 +11,11 @@ struct AppShell: View {
     @StateObject private var lab = LabModel()
     @StateObject private var preparation = PreparationModel()
     @StateObject private var tasting = TastingModel()
+    @StateObject private var account = AccountModel()
 
     var body: some View {
         TabView(selection: $selection) {
-            NavigationStack { HomeView(selection: $selection) }
+            NavigationStack { HomeView(selection: $selection, account: account) }
                 .tag(CupaTab.home)
                 .tabItem { Label("Taller", systemImage: "house") }
 
@@ -38,5 +39,6 @@ struct AppShell: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
         }
+        .task { await account.restoreAndRefreshIfNeeded() }
     }
 }

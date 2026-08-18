@@ -398,10 +398,20 @@ struct PersistenceController {
         ]
         cupSessionEntity.uniquenessConstraints = [["id"], ["tastingId"]]
 
+        let syncOperationEntity = NSEntityDescription()
+        syncOperationEntity.name = "SyncOperationRecord"; syncOperationEntity.managedObjectClassName = NSStringFromClass(SyncOperationRecord.self)
+        syncOperationEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("entityName", .stringAttributeType, defaultValue: ""), attribute("entityId", .UUIDAttributeType),
+            attribute("operation", .stringAttributeType, defaultValue: SyncStatus.pendingCreate.rawValue), attribute("payloadJSON", .stringAttributeType, defaultValue: "{}"),
+            attribute("attemptCount", .integer64AttributeType, defaultValue: 0), attribute("nextAttemptAt", .dateAttributeType),
+            attribute("lastError", .stringAttributeType, defaultValue: "")
+        ]
+        syncOperationEntity.uniquenessConstraints = [["id"], ["entityName", "entityId"]]
+
         model.entities = [
             coffeeEntity, experimentEntity, grinderEntity, equipmentEntity,
             recipeEntity, ingredientEntity, recipeStepEntity, techniqueEntity, techniqueStepEntity, brewSessionEntity,
-            tastingEntity, tastingObservationEntity, cupSessionEntity
+            tastingEntity, tastingObservationEntity, cupSessionEntity, syncOperationEntity
         ]
         return model
     }

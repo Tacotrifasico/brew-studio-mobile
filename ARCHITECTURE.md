@@ -8,8 +8,8 @@ Feature ViewModels
 Domain Engines ──────→ Calculator / Lab / Freshness
     ↓
 Repositories
-    ├── Core Data cache + outbox offline
-    └── Supabase remote data source
+    ├── Core Data cache + outbox offline + retry
+    └── Supabase Auth/REST + Keychain session
              └── Edge Function Gemini
 ```
 
@@ -22,3 +22,5 @@ Repositories
 - `Services`: autenticación, Supabase, Gemini, configuración y telemetría no sensible.
 
 Las vistas no realizan consultas HTTP ni contienen fórmulas de negocio. Las entidades de dominio no dependen de SwiftUI.
+
+`AccountModel` coordina la sesión y `SupabaseAuthService` implementa el contrato GoTrue mediante un transporte inyectable. `SyncOutboxRepository` compacta mutaciones locales y `SupabaseDataService` prepara upsert, borrado lógico y descarga incremental. Development y Production usan archivos `.xcconfig`; Staging queda listo para asociarse a un esquema cuando se configure el proyecto remoto.

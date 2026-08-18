@@ -186,8 +186,16 @@ struct TechniqueInventoryView: View {
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.updatedAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"), animation: .default)
     private var techniques: FetchedResults<TechniqueRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueStepRecord.stepNumber, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
+    private var techniqueSteps: FetchedResults<TechniqueStepRecord>
+    @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var beans: FetchedResults<CoffeeBeanRecord>
+    @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var grinders: FetchedResults<GrinderRecord>
+    @Binding var selection: CupaTab
+    @ObservedObject var preparation: PreparationModel
     @State private var search = ""; @State private var mode = "ALL"; @State private var adding = false
-    @State private var editing: TechniqueRecord?; @State private var errorMessage: String?
+    @State private var selectedTechnique: TechniqueRecord?; @State private var editing: TechniqueRecord?; @State private var pendingEdit: TechniqueRecord?
+    @State private var errorMessage: String?
 
     private var visible: [TechniqueRecord] { techniques.filter { (mode == "ALL" || $0.executionMode == mode) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.methodName.localizedCaseInsensitiveContains(search)) } }
 
@@ -199,7 +207,7 @@ struct TechniqueInventoryView: View {
                     .listRowBackground(Color.clear)
             } else {
                 ForEach(visible) { technique in
-                    Button { editing = technique } label: {
+                    Button { selectedTechnique = technique } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack { Text(technique.name).font(.headline); Spacer(); if technique.syncStatus != .synced { syncIndicator } }
                             Text("\(technique.methodName) · 1:\(technique.ratio.formatted(.number.precision(.fractionLength(0...1)))) · \(formatDuration(Int(technique.totalTimeSeconds)))")
@@ -216,9 +224,136 @@ struct TechniqueInventoryView: View {
         .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar técnica").accessibilityIdentifier("techniques.add") }
         .sheet(isPresented: $adding) { TechniqueEditorView(technique: nil) }
         .sheet(item: $editing) { TechniqueEditorView(technique: $0) }
+        .sheet(item: $selectedTechnique, onDismiss: {
+            if let pendingEdit { editing = pendingEdit; self.pendingEdit = nil }
+        }) { technique in
+            TechniqueDetailView(
+                technique: technique,
+                steps: techniqueSteps.filter { $0.techniqueId == technique.id },
+                recipeName: recipes.first { $0.id == technique.recipeId }?.name,
+                beanName: beans.first { $0.id == technique.beanId }?.name,
+                grinderName: grinders.first { $0.id == technique.grinderId }?.name,
+                onPrepare: { prepare(technique); selectedTechnique = nil },
+                onEdit: { pendingEdit = technique; selectedTechnique = nil },
+                onDelete: { delete(technique); selectedTechnique = nil }
+            )
+        }
         .alert("No se pudo guardar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "Error desconocido") }
     }
+    private func prepare(_ technique: TechniqueRecord) {
+        do {
+            preparation.load(technique: technique, steps: try RecipeTechniqueRepository(context: context).techniqueSteps(techniqueId: technique.id))
+            selection = .brew
+        } catch { errorMessage = error.localizedDescription }
+    }
+    private func delete(_ technique: TechniqueRecord) { do { try RecipeTechniqueRepository(context: context).deleteTechnique(technique) } catch { errorMessage = error.localizedDescription } }
     private func delete(_ offsets: IndexSet) { do { for index in offsets { try RecipeTechniqueRepository(context: context).deleteTechnique(visible[index]) } } catch { errorMessage = error.localizedDescription } }
+}
+
+private struct TechniqueDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var technique: TechniqueRecord
+    let steps: [TechniqueStepRecord]
+    let recipeName: String?
+    let beanName: String?
+    let grinderName: String?
+    let onPrepare: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "list.number").font(.title2).foregroundStyle(CupaTheme.forest)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(technique.name).font(.title3.bold())
+                                Text("\(technique.methodName) · \(executionModeLabel(technique.executionMode))")
+                                    .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                            }
+                        }
+                        if !technique.techniqueDescription.isEmpty { Text(technique.techniqueDescription).foregroundStyle(CupaTheme.secondaryText) }
+                    }.padding(.vertical, 4)
+                }
+
+                Section("Parámetros") {
+                    detailRow("Café", "\(technique.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g")
+                    detailRow("Agua", "\(technique.waterMl) ml")
+                    detailRow("Proporción", "1:\(technique.ratio.formatted(.number.precision(.fractionLength(0...1))))")
+                    detailRow("Temperatura", "\(technique.temperatureC) °C")
+                    detailRow("Duración", formatDuration(Int(technique.totalTimeSeconds)))
+                    detailRow("Molienda", technique.grindDescription.isEmpty ? "\(technique.grindValue.formatted(.number.precision(.fractionLength(0...1)))) \(technique.grindUnit.lowercased())" : technique.grindDescription)
+                }
+
+                if recipeName != nil || beanName != nil || grinderName != nil {
+                    Section("Inventario vinculado") {
+                        if let recipeName { detailRow("Receta", recipeName) }
+                        if let beanName { detailRow("Café", beanName) }
+                        if let grinderName { detailRow("Molino", grinderName) }
+                    }
+                }
+
+                Section("Secuencia") {
+                    ForEach(steps) { step in
+                        HStack(alignment: .top, spacing: 12) {
+                            Text("\(step.stepNumber)").font(.caption.bold()).foregroundStyle(.white)
+                                .frame(width: 27, height: 27).background(CupaTheme.forest, in: Circle())
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(step.title).fontWeight(.semibold)
+                                HStack(spacing: 12) {
+                                    Label(formatDuration(Int(step.durationSeconds)), systemImage: "timer")
+                                    Label("\(step.waterAddedMl) ml · \(step.waterAccumulatedMl) total", systemImage: "drop")
+                                }.font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                                Text("\(gestureLabel(step.gesture)) · \(step.intensity.capitalized)")
+                                    .font(.caption.bold()).foregroundStyle(CupaTheme.forest)
+                                if step.coverage != nil || step.flow != nil {
+                                    HStack(spacing: 12) {
+                                        if let coverage = step.coverage { Label("\(coverage.formatted(.number.precision(.fractionLength(0...1))))%", systemImage: "circle.dotted") }
+                                        if let flow = step.flow { Label("\(flow.formatted(.number.precision(.fractionLength(0...1)))) ml/s", systemImage: "water.waves") }
+                                    }.font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                                }
+                                if !step.stepNote.isEmpty { Text(step.stepNote).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                                if let secondary = step.secondaryAction, !secondary.isEmpty {
+                                    Label(secondary, systemImage: "arrow.triangle.branch").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                                }
+                            }
+                        }.padding(.vertical, 4)
+                    }
+                }
+
+                if !technique.notes.isEmpty { Section("Notas") { Text(technique.notes) } }
+
+                Section {
+                    Button(action: onPrepare) { Label("Preparar con esta técnica", systemImage: "play.fill") }
+                        .accessibilityIdentifier("techniques.detail.prepare")
+                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar técnica", systemImage: "trash") }
+                }
+            }
+            .navigationTitle("Detalle de técnica")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Editar", action: onEdit).accessibilityIdentifier("techniques.detail.edit") }
+            }
+            .confirmationDialog("¿Eliminar esta técnica?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Eliminar técnica", role: .destructive, action: onDelete)
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Se quitará de la biblioteca; las preparaciones guardadas conservarán sus snapshots.")
+            }
+        }
+    }
+
+    private func detailRow(_ title: String, _ value: String) -> some View {
+        HStack { Text(title); Spacer(); Text(value).foregroundStyle(CupaTheme.forest).fontWeight(.semibold) }
+    }
+
+    private func gestureLabel(_ code: String) -> String {
+        code.replacingOccurrences(of: "_", with: " ").capitalized
+    }
 }
 
 private struct RecipeEditorView: View {

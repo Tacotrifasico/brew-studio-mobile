@@ -285,14 +285,23 @@ struct LabGoldenVerifier {
         precondition(copy.originalEntityId == recipe.id)
         precondition(try! repository.ingredients(recipeId: copy.id).count == 1)
 
-        let techniqueDraft = TechniqueDraftModel(
+        var techniqueDraft = TechniqueDraftModel(
             name: "V60 guiada", methodName: "V60", doseGrams: 15, waterMl: 240, ratio: 16, temperatureC: 93,
-            steps: [.init(title: "Bloom", durationSeconds: 45, waterAddedMl: 50), .init(title: "Vertido 1", durationSeconds: 40, waterAddedMl: 100), .init(title: "Vertido 2", durationSeconds: 35, waterAddedMl: 90)]
+            steps: [.init(title: "Bloom", durationSeconds: 45, waterAddedMl: 50, note: "Saturar", coverage: 100, flow: 3.2, secondaryAction: "Agitar"), .init(title: "Vertido 1", durationSeconds: 40, waterAddedMl: 100), .init(title: "Vertido 2", durationSeconds: 35, waterAddedMl: 90)]
         )
         let technique = try! repository.saveTechnique(techniqueDraft)
-        let techniqueSteps = try! repository.techniqueSteps(techniqueId: technique.id)
+        var techniqueSteps = try! repository.techniqueSteps(techniqueId: technique.id)
         precondition(techniqueSteps.map(\.waterAccumulatedMl) == [50, 150, 240])
-        precondition(technique.totalTimeSeconds == 120)
+        precondition(technique.totalTimeSeconds == 120 && techniqueSteps.first?.secondaryAction == "Agitar")
+        techniqueDraft.steps.swapAt(0, 2); techniqueDraft.steps.remove(at: 1); techniqueDraft.steps[0].flow = 2.5
+        _ = try! repository.saveTechnique(techniqueDraft)
+        techniqueSteps = try! repository.techniqueSteps(techniqueId: technique.id)
+        precondition(techniqueSteps.map(\.title) == ["Vertido 2", "Bloom"])
+        precondition(techniqueSteps.map(\.waterAccumulatedMl) == [90, 140] && technique.totalTimeSeconds == 80)
+        let suite = "CupaTechniqueFlowVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preparation = PreparationModel(defaults: defaults); preparation.load(technique: technique, steps: techniqueSteps)
+        precondition(preparation.state.techniqueId == technique.id && preparation.state.steps.map(\.title) == ["Vertido 2", "Bloom"])
         try! repository.deleteTechnique(technique)
         precondition(try! repository.techniqueSteps(techniqueId: technique.id).isEmpty)
     }

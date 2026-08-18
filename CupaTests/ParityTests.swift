@@ -305,11 +305,11 @@ final class RecipeTechniqueRepositoryTests: XCTestCase {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
         let repository = RecipeTechniqueRepository(context: context)
-        let draft = TechniqueDraftModel(
+        var draft = TechniqueDraftModel(
             name: "V60 guiada", methodName: "V60", doseGrams: 15, waterMl: 240, ratio: 16,
             temperatureC: 93, executionMode: "GUIDED", grindValue: 24, grindDescription: "Media fina",
             steps: [
-                .init(title: "Bloom", durationSeconds: 45, waterAddedMl: 50, intensity: "HIGH", gesture: "BLOOM"),
+                .init(title: "Bloom", durationSeconds: 45, waterAddedMl: 50, intensity: "HIGH", gesture: "BLOOM", note: "Saturar", coverage: 100, flow: 3.2, secondaryAction: "Agitar"),
                 .init(title: "Primer vertido", durationSeconds: 40, waterAddedMl: 100, intensity: "MEDIUM", gesture: "CIRCULAR_POUR"),
                 .init(title: "Segundo vertido", durationSeconds: 35, waterAddedMl: 90, intensity: "LOW", gesture: "CENTER_POUR")
             ]
@@ -319,6 +319,26 @@ final class RecipeTechniqueRepositoryTests: XCTestCase {
         XCTAssertEqual(steps.map(\.waterAccumulatedMl), [50, 150, 240])
         XCTAssertEqual(steps.map(\.stepNumber), [1, 2, 3])
         XCTAssertEqual(technique.totalTimeSeconds, 120)
+        XCTAssertEqual(steps.first?.secondaryAction, "Agitar")
+        XCTAssertEqual(steps.first?.coverage, 100)
+
+        draft.steps.swapAt(0, 2)
+        draft.steps.remove(at: 1)
+        draft.steps[0].flow = 2.5
+        _ = try repository.saveTechnique(draft)
+        let editedSteps = try repository.techniqueSteps(techniqueId: technique.id)
+        XCTAssertEqual(editedSteps.map(\.title), ["Segundo vertido", "Bloom"])
+        XCTAssertEqual(editedSteps.map(\.waterAccumulatedMl), [90, 140])
+        XCTAssertEqual(editedSteps.first?.flow, 2.5)
+        XCTAssertEqual(technique.totalTimeSeconds, 80)
+
+        let suite = "TechniqueDetailPreparationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite)); defer { defaults.removePersistentDomain(forName: suite) }
+        let preparation = PreparationModel(defaults: defaults)
+        preparation.load(technique: technique, steps: editedSteps)
+        XCTAssertEqual(preparation.state.techniqueId, technique.id)
+        XCTAssertEqual(preparation.state.steps.map(\.title), ["Segundo vertido", "Bloom"])
+        XCTAssertEqual(preparation.state.steps.map(\.waterAccumulatedMl), [90, 140])
 
         try repository.deleteTechnique(technique)
         XCTAssertEqual(technique.syncStatus, .pendingDelete)

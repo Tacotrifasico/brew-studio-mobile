@@ -123,3 +123,7 @@ Tocar una receta abre una vista de lectura con intención, método, etiquetas, i
 ## D-031 — Métodos del inventario reutilizados por la calculadora
 
 Los equipos activos de tipo `BREWER_METHOD` forman el catálogo personalizado de métodos, como en Android. `isFavorite` significa “fijado en la calculadora” para ese tipo y se edita tanto desde Almacén como desde el gestor de métodos; los cuatro métodos base fijados inicialmente viven en `UserDefaults`. No se crea una entidad duplicada. Los métodos base conservan sus siete ratios exactos y un equipo personalizado usa 1:15, el mismo fallback del `onMethodSelected` Android. Su UUID se conserva en el estado, favoritos y transferencias a Laboratorio y Preparación.
+
+## D-032 — Detalle de técnica como frontera antes de ejecutar o mutar
+
+La biblioteca abre primero un detalle legible con parámetros y secuencia completa, en vez de entrar directamente al formulario. Desde ahí se puede ejecutar la técnica, editarla o eliminarla con confirmación. Ejecutar carga el agregado persistido y sus pasos ordenados en el mismo `PreparationModel` recuperable usado por la pestaña Preparar; no crea una copia provisional. El borrado lógico mantiene intactos los snapshots de sesiones históricas.

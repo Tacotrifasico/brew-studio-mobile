@@ -769,7 +769,7 @@ struct StorageView: View {
             case .grinders: GrinderInventoryView()
             case .equipment: EquipmentInventoryView()
             case .recipes: RecipeInventoryView()
-            case .techniques: TechniqueInventoryView()
+            case .techniques: TechniqueInventoryView(selection: $selection, preparation: preparation)
             case .cups: CupHistoryView()
             }
         }

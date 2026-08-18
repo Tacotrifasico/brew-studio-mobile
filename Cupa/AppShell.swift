@@ -10,6 +10,7 @@ struct AppShell: View {
     @StateObject private var calculator = CalculatorModel()
     @StateObject private var lab = LabModel()
     @StateObject private var preparation = PreparationModel()
+    @StateObject private var tasting = TastingModel()
 
     var body: some View {
         TabView(selection: $selection) {
@@ -21,7 +22,7 @@ struct AppShell: View {
                 .tag(CupaTab.brew)
                 .tabItem { Label("Preparar", systemImage: "mug") }
 
-            NavigationStack { TastingView() }
+            NavigationStack { TastingView(model: tasting, selection: $selection) }
                 .tag(CupaTab.tasting)
                 .tabItem { Label("Cata", systemImage: "heart") }
 
@@ -34,6 +35,8 @@ struct AppShell: View {
                 .tabItem { Label("Almacén", systemImage: "shippingbox") }
         }
         .tint(CupaTheme.forest)
-        .onChange(of: scenePhase) { _, phase in if phase == .active || phase == .background { preparation.synchronizeClock() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
+        }
     }
 }

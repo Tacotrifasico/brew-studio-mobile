@@ -39,3 +39,7 @@ Además de XCTest, `Tools/LabGoldenVerifier.swift` permite ejecutar el motor pur
 ## D-010 — Preparación recuperable con snapshots históricos
 
 El cronómetro conserva en `UserDefaults` el último instante observado y el estado activo. Al volver del fondo suma el tiempo transcurrido y avanza de forma determinista en modos guiado o automático; el modo manual sólo cambia de paso por acción del usuario. Al finalizar crea un `BrewSession` en Core Data con UUID de las entidades relacionadas y snapshots de técnica, método, café, molino y pasos, para que el historial no se corrompa si el inventario se edita o elimina después.
+
+## D-011 — Cata, observaciones y taza como agregados separados
+
+Una `Tasting` puede guardarse sin preparación y enlazarse opcionalmente a un `BrewSession`. Cada lectura durante el enfriamiento es una `TastingObservation` con UUID, etapa, tiempo y perfil propios. `CupSession` enlaza ambos agregados y conserva snapshots mínimos; no convierte receta, técnica o cata en la misma entidad. Las etapas térmicas preservan los límites de Android: caliente antes de 4 min, pico antes de 10 min, descenso antes de 16 min y agotada desde entonces.

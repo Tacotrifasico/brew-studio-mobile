@@ -230,3 +230,46 @@ final class PreparationModelTests: XCTestCase {
         XCTAssertEqual(model.state.activeStepIndex, 0)
     }
 }
+
+final class TastingModelTests: XCTestCase {
+    @MainActor func testCoolingRecoveryObservationAndIndependentAggregates() throws {
+        let suite = "TastingModelTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let preparation = PreparationState(techniqueName: "V60 guiada", methodName: "V60", elapsedSeconds: 180, status: .completed)
+        let brew = BrewSessionRecord(context: context, state: preparation, beanName: "Etiopía", grinderName: "C40")
+        try context.save()
+
+        let model = TastingModel(defaults: defaults)
+        model.state.brewSessionId = brew.id; model.state.selectedFlavorNotes = ["Mora", "Jazmín"]
+        model.start(); let tick = try XCTUnwrap(model.state.lastTickAt)
+        model.synchronizeClock(now: tick.addingTimeInterval(601))
+        XCTAssertEqual(model.stageCode, "DECLINING")
+        model.state.freeNotes = "Aparece cacao al enfriar"; model.addObservation(); model.pause()
+
+        let restored = TastingModel(defaults: defaults)
+        XCTAssertEqual(restored.state.coolingElapsedSeconds, 601)
+        XCTAssertEqual(restored.state.observations.first?.stage, "DECLINING")
+        let repository = TastingRepository(context: context)
+        let tasting = try repository.save(restored.state, brew: brew)
+        XCTAssertNotEqual(tasting.id, brew.id)
+        XCTAssertEqual(tasting.techniqueId, brew.techniqueId)
+        XCTAssertEqual(tasting.selectedFlavorNotes, ["Mora", "Jazmín"])
+        XCTAssertEqual(try repository.observations(tastingId: tasting.id).count, 1)
+        let cups = try context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))
+        XCTAssertEqual(cups.first?.brewSessionId, brew.id)
+        XCTAssertEqual(cups.first?.tastingId, tasting.id)
+    }
+
+    @MainActor func testTastingSoftDeletePreservesCupSnapshot() throws {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let repository = TastingRepository(context: context); var state = TastingState()
+        state.observations = [.init(elapsedSeconds: 90, stage: "HOT", notes: "Floral", aroma: 4, acidity: 3, sweetness: 4, body: 2, bitterness: 1, finish: 4)]
+        let tasting = try repository.save(state, brew: nil)
+        try repository.delete(tasting)
+        XCTAssertEqual(tasting.trackedSyncStatus, .pendingDelete)
+        XCTAssertTrue(try repository.observations(tastingId: tasting.id).isEmpty)
+        let cups = try context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))
+        XCTAssertEqual(cups.first?.techniqueNameSnapshot, "Cata independiente")
+    }
+}

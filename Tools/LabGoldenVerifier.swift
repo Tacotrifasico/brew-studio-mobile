@@ -32,7 +32,8 @@ struct LabGoldenVerifier {
         verifyLocalPersistence()
         verifyRecipeTechniqueAggregates()
         verifyPreparationRecovery()
-        print("4 golden tests, agregados y recuperación de preparación aprobados")
+        verifyTastingCoolingAndPersistence()
+        print("4 golden tests, agregados, preparación y cata recuperable aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -134,5 +135,24 @@ struct LabGoldenVerifier {
         try! context.save()
         let sessions = try! context.fetch(NSFetchRequest<BrewSessionRecord>(entityName: "BrewSessionRecord"))
         precondition(sessions.first?.stepsSnapshotJSON.contains("Bloom") == true)
+    }
+
+    @MainActor private static func verifyTastingCoolingAndPersistence() {
+        let suite = "CupaTastingVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let brewState = PreparationState(techniqueName: "V60", methodName: "V60", elapsedSeconds: 180, status: .completed)
+        let brew = BrewSessionRecord(context: context, state: brewState, beanName: "Etiopía", grinderName: "C40")
+        try! context.save()
+        let model = TastingModel(defaults: defaults); model.state.brewSessionId = brew.id
+        model.state.selectedFlavorNotes = ["Mora", "Jazmín"]; model.start(); let tick = model.state.lastTickAt!
+        model.synchronizeClock(now: tick.addingTimeInterval(601)); model.state.freeNotes = "Cacao"; model.addObservation(); model.pause()
+        precondition(model.stageCode == "DECLINING")
+        let restored = TastingModel(defaults: defaults); precondition(restored.state.coolingElapsedSeconds == 601)
+        let repository = TastingRepository(context: context); let tasting = try! repository.save(restored.state, brew: brew)
+        precondition(tasting.id != brew.id && tasting.selectedFlavorNotes == ["Mora", "Jazmín"])
+        precondition(try! repository.observations(tastingId: tasting.id).count == 1)
+        let cups = try! context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))
+        precondition(cups.first?.brewSessionId == brew.id && cups.first?.tastingId == tasting.id)
     }
 }

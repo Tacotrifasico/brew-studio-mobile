@@ -361,9 +361,47 @@ struct PersistenceController {
         ]
         brewSessionEntity.uniquenessConstraints = [["id"]]
 
+        let tastingEntity = NSEntityDescription()
+        tastingEntity.name = "TastingRecord"; tastingEntity.managedObjectClassName = NSStringFromClass(TastingRecord.self)
+        tastingEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("brewSessionId", .UUIDAttributeType, optional: true), attribute("recipeId", .UUIDAttributeType, optional: true),
+            attribute("techniqueId", .UUIDAttributeType, optional: true), attribute("beanId", .UUIDAttributeType, optional: true),
+            attribute("activeFlavorFamily", .stringAttributeType, defaultValue: "FRUITY"), attribute("selectedFlavorNotesJSON", .stringAttributeType, defaultValue: "[]"),
+            attribute("expectedNotes", .stringAttributeType, defaultValue: ""), attribute("texture", .stringAttributeType, defaultValue: "sedosa"),
+            attribute("cleanliness", .stringAttributeType, defaultValue: "alta"), attribute("persistence", .stringAttributeType, defaultValue: "media"),
+            attribute("aroma", .doubleAttributeType, defaultValue: 3), attribute("acidity", .doubleAttributeType, defaultValue: 3),
+            attribute("sweetness", .doubleAttributeType, defaultValue: 3), attribute("body", .doubleAttributeType, defaultValue: 3),
+            attribute("bitterness", .doubleAttributeType, defaultValue: 3), attribute("finishScore", .doubleAttributeType, defaultValue: 3),
+            attribute("rating", .doubleAttributeType, defaultValue: 4), attribute("nps", .integer64AttributeType, defaultValue: 8),
+            attribute("evaluatorNotes", .stringAttributeType, defaultValue: ""), attribute("coolingElapsedSeconds", .integer64AttributeType, defaultValue: 0),
+            attribute("cupLifeState", .stringAttributeType, defaultValue: "FRESH"), attribute("evaluatedAt", .dateAttributeType)
+        ]
+        tastingEntity.uniquenessConstraints = [["id"]]
+
+        let tastingObservationEntity = NSEntityDescription()
+        tastingObservationEntity.name = "TastingObservationRecord"; tastingObservationEntity.managedObjectClassName = NSStringFromClass(TastingObservationRecord.self)
+        tastingObservationEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("tastingId", .UUIDAttributeType), attribute("elapsedSeconds", .integer64AttributeType, defaultValue: 0),
+            attribute("stage", .stringAttributeType, defaultValue: "HOT"), attribute("notes", .stringAttributeType, defaultValue: ""),
+            attribute("aroma", .doubleAttributeType, defaultValue: 3), attribute("acidity", .doubleAttributeType, defaultValue: 3),
+            attribute("sweetness", .doubleAttributeType, defaultValue: 3), attribute("body", .doubleAttributeType, defaultValue: 3),
+            attribute("bitterness", .doubleAttributeType, defaultValue: 3), attribute("finishScore", .doubleAttributeType, defaultValue: 3)
+        ]
+        tastingObservationEntity.uniquenessConstraints = [["id"]]
+
+        let cupSessionEntity = NSEntityDescription()
+        cupSessionEntity.name = "CupSessionRecord"; cupSessionEntity.managedObjectClassName = NSStringFromClass(CupSessionRecord.self)
+        cupSessionEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("brewSessionId", .UUIDAttributeType, optional: true), attribute("tastingId", .UUIDAttributeType),
+            attribute("techniqueNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("beanNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("rating", .doubleAttributeType, defaultValue: 0)
+        ]
+        cupSessionEntity.uniquenessConstraints = [["id"], ["tastingId"]]
+
         model.entities = [
             coffeeEntity, experimentEntity, grinderEntity, equipmentEntity,
-            recipeEntity, ingredientEntity, recipeStepEntity, techniqueEntity, techniqueStepEntity, brewSessionEntity
+            recipeEntity, ingredientEntity, recipeStepEntity, techniqueEntity, techniqueStepEntity, brewSessionEntity,
+            tastingEntity, tastingObservationEntity, cupSessionEntity
         ]
         return model
     }

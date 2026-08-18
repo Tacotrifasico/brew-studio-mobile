@@ -20,6 +20,8 @@
 		A1000000000000000000000C /* RecipeTechniqueViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* RecipeTechniqueViews.swift */; };
 		A1000000000000000000000D /* PreparationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* PreparationModel.swift */; };
 		A1000000000000000000000E /* PreparationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* PreparationViews.swift */; };
+		A1000000000000000000000F /* TastingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* TastingModels.swift */; };
+		A10000000000000000000010 /* TastingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* TastingViews.swift */; };
 		B10000000000000000000001 /* ParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ParityTests.swift */; };
 		B10000000000000000000002 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* XCTest.framework */; };
 /* End PBXBuildFile section */
@@ -49,6 +51,8 @@
 		A2000000000000000000000C /* RecipeTechniqueViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeTechniqueViews.swift; sourceTree = "<group>"; };
 		A2000000000000000000000D /* PreparationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparationModel.swift; sourceTree = "<group>"; };
 		A2000000000000000000000E /* PreparationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparationViews.swift; sourceTree = "<group>"; };
+		A2000000000000000000000F /* TastingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TastingModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 /* TastingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TastingViews.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* ParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParityTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* CupaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CupaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000003 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
@@ -99,6 +103,8 @@
 				A2000000000000000000000C /* RecipeTechniqueViews.swift */,
 				A2000000000000000000000D /* PreparationModel.swift */,
 				A2000000000000000000000E /* PreparationViews.swift */,
+				A2000000000000000000000F /* TastingModels.swift */,
+				A20000000000000000000010 /* TastingViews.swift */,
 			);
 			path = Cupa;
 			sourceTree = "<group>";
@@ -239,6 +245,8 @@
 				A1000000000000000000000C /* RecipeTechniqueViews.swift in Sources */,
 				A1000000000000000000000D /* PreparationModel.swift in Sources */,
 				A1000000000000000000000E /* PreparationViews.swift in Sources */,
+				A1000000000000000000000F /* TastingModels.swift in Sources */,
+				A10000000000000000000010 /* TastingViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

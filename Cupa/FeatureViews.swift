@@ -222,52 +222,6 @@ struct BrewView: View {
 
 }
 
-struct TastingView: View {
-    @State private var aroma = 3.0
-    @State private var sweetness = 3.0
-    @State private var acidity = 3.0
-    @State private var bodyLevel = 3.0
-    @State private var notes = ""
-    @State private var saved = false
-
-    var body: some View {
-        ZStack {
-            CupaTheme.background.ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 20) {
-                    SectionHeader(eyebrow: "Cata", title: "Mapa sensorial", subtitle: "Registra cómo cambia la taza mientras se enfría.")
-                    CupaCard {
-                        VStack(spacing: 18) {
-                            sensorySlider("Aroma", value: $aroma)
-                            sensorySlider("Dulzor", value: $sweetness)
-                            sensorySlider("Acidez", value: $acidity)
-                            sensorySlider("Cuerpo", value: $bodyLevel)
-                        }
-                    }
-                    CupaCard {
-                        TextField("Notas: cacao, frutos rojos…", text: $notes, axis: .vertical)
-                            .lineLimit(4...8)
-                    }
-                    Button(saved ? "Cata guardada" : "Guardar cata") { saved = true }
-                        .buttonStyle(.borderedProminent)
-                        .tint(CupaTheme.forest)
-                        .disabled(saved)
-                }
-                .padding()
-            }
-        }
-        .navigationTitle("Cata")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func sensorySlider(_ title: String, value: Binding<Double>) -> some View {
-        VStack(spacing: 8) {
-            HStack { Text(title); Spacer(); Text("\(Int(value.wrappedValue))/5").bold() }
-            Slider(value: value, in: 1...5, step: 1).tint(CupaTheme.terracotta)
-        }
-    }
-}
-
 private enum LabControlCategory: String, CaseIterable, Identifiable {
     case ratio = "Ratio"
     case extraction = "Calor"

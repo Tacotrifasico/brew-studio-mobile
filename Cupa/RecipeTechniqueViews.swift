@@ -10,7 +10,8 @@ struct RecipeInventoryView: View {
     @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var ingredients: FetchedResults<RecipeIngredientRecord>
     @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var recipeSteps: FetchedResults<RecipeStepRecord>
     @State private var search = ""; @State private var kind = "ALL"; @State private var adding = false
-    @State private var editing: RecipeRecord?; @State private var importing = false; @State private var importedDraft: RecipeDraftModel?
+    @State private var selectedRecipe: RecipeRecord?; @State private var editing: RecipeRecord?; @State private var pendingEdit: RecipeRecord?
+    @State private var importing = false; @State private var importedDraft: RecipeDraftModel?
     @State private var errorMessage: String?
 
     private var visible: [RecipeRecord] {
@@ -33,7 +34,7 @@ struct RecipeInventoryView: View {
                     .listRowBackground(Color.clear)
             } else {
                 ForEach(visible) { recipe in
-                    Button { editing = recipe } label: {
+                    Button { selectedRecipe = recipe } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Image(systemName: recipe.isFavorite ? "star.fill" : "book.pages").foregroundStyle(recipe.isFavorite ? CupaTheme.gold : CupaTheme.forest)
@@ -54,7 +55,7 @@ struct RecipeInventoryView: View {
                 }.onDelete(perform: delete)
             }
         }
-        .searchable(text: $search, prompt: "Buscar nombre o etiqueta")
+        .searchable(text: $search, prompt: "Buscar en recetario")
         .scrollContentBackground(.hidden)
         .toolbar {
             Button { importedDraft = nil; importing = true } label: { Image(systemName: "wand.and.stars") }.accessibilityLabel("Importar receta desde texto").accessibilityIdentifier("recipes.import")
@@ -62,6 +63,19 @@ struct RecipeInventoryView: View {
         }
         .sheet(isPresented: $adding) { RecipeEditorView(recipe: nil, initialDraft: importedDraft) }
         .sheet(item: $editing) { RecipeEditorView(recipe: $0) }
+        .sheet(item: $selectedRecipe, onDismiss: {
+            if let pendingEdit { editing = pendingEdit; self.pendingEdit = nil }
+        }) { recipe in
+            RecipeDetailView(
+                recipe: recipe,
+                ingredients: ingredients.filter { $0.recipeId == recipe.id },
+                steps: recipeSteps.filter { $0.recipeId == recipe.id },
+                onFavorite: { toggleFavorite(recipe) },
+                onDuplicate: { duplicate(recipe); selectedRecipe = nil },
+                onEdit: { pendingEdit = recipe; selectedRecipe = nil },
+                onDelete: { delete(recipe); selectedRecipe = nil }
+            )
+        }
         .sheet(isPresented: $importing, onDismiss: {
             if importedDraft != nil { adding = true }
         }) {
@@ -74,6 +88,7 @@ struct RecipeInventoryView: View {
 
     private func duplicate(_ recipe: RecipeRecord) { do { _ = try RecipeTechniqueRepository(context: context).duplicateRecipe(recipe) } catch { errorMessage = error.localizedDescription } }
     private func toggleFavorite(_ recipe: RecipeRecord) { do { try RecipeTechniqueRepository(context: context).toggleFavorite(recipe) } catch { errorMessage = error.localizedDescription } }
+    private func delete(_ recipe: RecipeRecord) { do { try RecipeTechniqueRepository(context: context).deleteRecipe(recipe) } catch { errorMessage = error.localizedDescription } }
     private func delete(_ offsets: IndexSet) { do { for index in offsets { try RecipeTechniqueRepository(context: context).deleteRecipe(visible[index]) } } catch { errorMessage = error.localizedDescription } }
     private func matchesSearch(_ recipe: RecipeRecord) -> Bool {
         guard !search.isEmpty else { return true }
@@ -81,6 +96,89 @@ struct RecipeInventoryView: View {
             recipe.intention.localizedCaseInsensitiveContains(search) ||
             ingredients.contains { $0.recipeId == recipe.id && $0.name.localizedCaseInsensitiveContains(search) } ||
             recipeSteps.contains { $0.recipeId == recipe.id && $0.instruction.localizedCaseInsensitiveContains(search) }
+    }
+}
+
+private struct RecipeDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var recipe: RecipeRecord
+    let ingredients: [RecipeIngredientRecord]
+    let steps: [RecipeStepRecord]
+    let onFavorite: () -> Void
+    let onDuplicate: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            Image(systemName: recipe.isFavorite ? "star.fill" : "book.pages")
+                                .font(.title2).foregroundStyle(recipe.isFavorite ? CupaTheme.gold : CupaTheme.forest)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(recipe.name).font(.title3.bold())
+                                Text(recipeKindLabel(recipe.recipeKind) + (recipe.suggestedMethodName.isEmpty ? "" : " · \(recipe.suggestedMethodName)"))
+                                    .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                            }
+                        }
+                        if !recipe.intention.isEmpty {
+                            Text("“\(recipe.intention)”").font(.body.italic()).foregroundStyle(CupaTheme.secondaryText)
+                        }
+                        if !recipe.tags.isEmpty { Label(recipe.tags, systemImage: "tag").font(.caption).foregroundStyle(CupaTheme.forest) }
+                    }.padding(.vertical, 4)
+                }
+
+                Section("Ingredientes") {
+                    ForEach(ingredients) { ingredient in
+                        HStack {
+                            Text(ingredient.name)
+                            Spacer()
+                            Text(quantity(ingredient)).foregroundStyle(CupaTheme.forest).fontWeight(.semibold)
+                        }
+                    }
+                }
+
+                Section("Pasos de preparación") {
+                    ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
+                        HStack(alignment: .top, spacing: 12) {
+                            Text("\(index + 1)").font(.caption.bold()).foregroundStyle(.white)
+                                .frame(width: 26, height: 26).background(CupaTheme.forest, in: Circle())
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(step.instruction)
+                                if let seconds = step.durationSeconds {
+                                    Label(formatDuration(seconds), systemImage: "timer").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                                }
+                            }
+                        }.padding(.vertical, 3)
+                    }
+                }
+
+                Section {
+                    Button(action: onFavorite) { Label(recipe.isFavorite ? "Quitar de favoritas" : "Marcar como favorita", systemImage: recipe.isFavorite ? "star.slash" : "star") }
+                    Button(action: onDuplicate) { Label("Duplicar receta", systemImage: "plus.square.on.square") }
+                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar receta", systemImage: "trash") }
+                }
+            }
+            .navigationTitle("Detalle de receta")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Editar", action: onEdit).accessibilityIdentifier("recipes.detail.edit") }
+            }
+            .confirmationDialog("¿Eliminar esta receta?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Eliminar receta", role: .destructive, action: onDelete)
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Se quitará del recetario; el historial ya guardado conservará sus datos.")
+            }
+        }
+    }
+
+    private func quantity(_ ingredient: RecipeIngredientRecord) -> String {
+        "\(ingredient.amount.formatted(.number.precision(.fractionLength(0...2)))) \(unitLabel(ingredient.unit))"
     }
 }
 

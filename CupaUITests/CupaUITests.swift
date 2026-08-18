@@ -26,6 +26,9 @@ final class CupaUITests: XCTestCase {
         app.tabBars.buttons["Almacén"].tap()
         XCTAssertTrue(app.navigationBars["Almacén"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Tazas"].exists)
+        app.buttons["Recetas"].tap()
+        XCTAssertTrue(app.buttons["recipes.add"].exists)
+        XCTAssertTrue(app.buttons["recipes.import"].exists)
 
         app.tabBars.buttons["Cata"].tap()
         XCTAssertTrue(app.navigationBars["Cata"].waitForExistence(timeout: 3))

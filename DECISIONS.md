@@ -115,3 +115,7 @@ El formulario Android vigente del molino expone marca, modelo, rango operativo y
 ## D-029 — Importación de recetas local y revisable
 
 El importador replica el contrato heurístico de Android en el dispositivo: reconoce encabezados, cantidades, unidades, pasos, perfil, categoría y método sin enviar el texto a Gemini ni exigir conexión. El resultado abre el editor normal antes de persistirse, de modo que una inferencia imperfecta nunca se guarda sin revisión del usuario. La búsqueda incluye también intención, ingredientes e instrucciones, y favoritas es un filtro real sobre el mismo agregado Core Data.
+
+## D-030 — Detalle de receta antes de mutar
+
+Tocar una receta abre una vista de lectura con intención, método, etiquetas, ingredientes y pasos ordenados, como en Android. Editar espera a que el detalle termine de cerrarse antes de presentar el formulario, evitando dos hojas simultáneas. El borrado exige confirmación y explica que los snapshots históricos no se eliminan; favorita, duplicación y edición reutilizan el mismo repositorio del listado.

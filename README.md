@@ -1,0 +1,13 @@
+# Cupa para iOS
+
+Migración nativa en curso de Brew Studio Mobile a iPhone.
+
+## Abrir
+
+1. Abre `Cupa.xcodeproj` con Xcode.
+2. En la parte superior, elige un simulador de iPhone.
+3. Pulsa el botón triangular **Run**.
+
+Esta etapa incluye navegación principal, diseño visual base, calculadora bidireccional portada desde Android, favoritos locales, temporizador, formulario de cata, laboratorio interactivo y CRUD offline de cafés con Core Data y borrado lógico.
+
+Supabase, sincronización multiusuario, Gemini mediante backend y los demás CRUD siguen el estado documentado en `PARITY_MATRIX.md` y `BLOCKERS.md`.

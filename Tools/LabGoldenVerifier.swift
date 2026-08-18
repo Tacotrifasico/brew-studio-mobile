@@ -30,6 +30,7 @@ struct LabGoldenVerifier {
         )
         verifyStateRestoration()
         verifyCalculatorFavorites()
+        verifyCalculatorQuickPreparation()
         verifyTransfersAndHistoricalSnapshots()
         verifyLocalPersistence()
         verifyRecipeTechniqueAggregates()
@@ -70,9 +71,27 @@ struct LabGoldenVerifier {
         let calculator = CalculatorModel(defaults: defaults)
         calculator.changeCoffee("18"); calculator.changeRatio("15"); calculator.toggleFavorite()
         precondition(calculator.isCurrentFavorite)
-        precondition(CalculatorModel(defaults: defaults).savedPresets.first?.coffee == 18)
+        let restored = CalculatorModel(defaults: defaults)
+        precondition(restored.savedPresets.first?.coffee == 18)
+        precondition(restored.method == "V60" && restored.coffee == 18 && restored.ratio == 15 && restored.water == 270)
         calculator.toggleFavorite()
         precondition(CalculatorModel(defaults: defaults).savedPresets.isEmpty)
+    }
+
+    @MainActor private static func verifyCalculatorQuickPreparation() {
+        let suite = "CupaQuickPreparationVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let calculator = CalculatorModel(defaults: defaults); let preparation = PreparationModel(defaults: defaults)
+        calculator.changeCoffee("15"); calculator.changeRatio("16"); preparation.load(calculator: calculator)
+        precondition(preparation.state.techniqueName == "V60 Estándar" && preparation.state.temperatureC == 93)
+        precondition(preparation.state.executionMode == "GUIDED" && preparation.state.steps.map(\.durationSeconds) == [35, 45, 40])
+        precondition(preparation.state.steps.map(\.waterAddedMl) == [50, 95, 95])
+        precondition(preparation.state.steps.map(\.waterAccumulatedMl) == [50, 145, 240])
+        calculator.selectMethod("AeroPress"); preparation.load(calculator: calculator)
+        precondition(preparation.state.steps.map(\.title) == ["Preinfusión (Bloom)", "Vertido de volumen", "Presión continua"])
+        precondition(preparation.state.steps.map(\.waterAccumulatedMl) == [40, 195, 195])
+        calculator.selectMethod("Espresso"); preparation.load(calculator: calculator)
+        precondition(preparation.state.steps.count == 1 && preparation.state.steps[0].durationSeconds == 30)
     }
 
     @MainActor private static func verifyTransfersAndHistoricalSnapshots() {

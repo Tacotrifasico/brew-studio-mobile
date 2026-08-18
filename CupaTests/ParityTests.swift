@@ -91,8 +91,10 @@ final class SocialContentPolicyTests: XCTestCase {
 }
 
 final class CalculatorParityTests: XCTestCase {
-    @MainActor func testBidirectionalCalculationsMatchAndroidRules() {
-        let calculator = CalculatorModel()
+    @MainActor func testBidirectionalCalculationsMatchAndroidRules() throws {
+        let suite = "CalculatorBidirectionalTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let calculator = CalculatorModel(defaults: defaults)
         calculator.changeCoffee("18.5")
         XCTAssertEqual(calculator.water, 296)
         calculator.changeRatio("15.5")
@@ -102,8 +104,10 @@ final class CalculatorParityTests: XCTestCase {
         XCTAssertEqual(calculator.coffeeInput, "19.4")
     }
 
-    @MainActor func testAllReferenceMethodsUseExpectedRatios() {
-        let calculator = CalculatorModel()
+    @MainActor func testAllReferenceMethodsUseExpectedRatios() throws {
+        let suite = "CalculatorMethodsTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let calculator = CalculatorModel(defaults: defaults)
         let expected: [(String, Double)] = [
             ("V60", 16), ("AeroPress", 13), ("Prensa francesa", 15),
             ("Chemex", 16), ("Espresso", 2), ("Moka", 10), ("Cold brew", 8)
@@ -123,7 +127,11 @@ final class CalculatorParityTests: XCTestCase {
         calculator.changeRatio("15")
         calculator.toggleFavorite()
         XCTAssertTrue(calculator.isCurrentFavorite)
-        XCTAssertEqual(CalculatorModel(defaults: defaults).savedPresets.first?.coffee, 18)
+        let restored = CalculatorModel(defaults: defaults)
+        XCTAssertEqual(restored.savedPresets.first?.coffee, 18)
+        XCTAssertEqual(restored.coffee, 18)
+        XCTAssertEqual(restored.ratio, 15)
+        XCTAssertEqual(restored.water, 270)
         calculator.toggleFavorite()
         XCTAssertFalse(calculator.isCurrentFavorite)
         XCTAssertTrue(CalculatorModel(defaults: defaults).savedPresets.isEmpty)
@@ -257,12 +265,16 @@ final class PreparationModelTests: XCTestCase {
         XCTAssertTrue(sessions.first?.stepsSnapshotJSON.contains("Bloom") == true)
     }
 
-    @MainActor func testManualNavigationAndReset() {
+    @MainActor func testCalculatorQuickStepsAndReset() {
         let suite = "PreparationManualTests.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let model = PreparationModel(defaults: defaults)
-        model.load(calculator: CalculatorModel())
-        XCTAssertEqual(model.state.executionMode, "MANUAL")
+        let calculator = CalculatorModel(defaults: defaults)
+        calculator.selectMethod("V60"); calculator.changeCoffee("15"); calculator.changeRatio("16")
+        model.load(calculator: calculator)
+        XCTAssertEqual(model.state.executionMode, "GUIDED")
+        XCTAssertEqual(model.state.steps.map(\.durationSeconds), [35, 45, 40])
+        XCTAssertEqual(model.state.steps.map(\.waterAccumulatedMl), [50, 145, 240])
         model.start(); model.pause(); model.reset()
         XCTAssertEqual(model.state.status, .ready)
         XCTAssertEqual(model.state.elapsedSeconds, 0)

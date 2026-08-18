@@ -75,3 +75,7 @@ El AppIcon usa el recurso gráfico vigente de Android convertido a PNG RGB de 10
 ## D-019 — Referencias estables del Laboratorio y snapshots de receta
 
 Laboratorio conserva UUID opcionales de receta, técnica, método/equipo, café y molino, además de sus parámetros editables. Al transferir a Preparación se preservan esos UUID y el nombre de la técnica; al finalizar, `BrewSession` guarda también `methodId` y `recipeNameSnapshot`. Las referencias sirven para sincronización y navegación, mientras los snapshots conservan el significado histórico tras una edición o borrado lógico. Los atributos nuevos son opcionales o tienen valores por defecto y Core Data mantiene migración ligera automática.
+
+## D-020 — Preparación rápida equivalente y entradas válidas persistentes
+
+Calculadora persiste únicamente el último estado numérico válido; el texto incompleto mientras el usuario edita nunca reemplaza ese snapshot. `onActionPrepare` usa los títulos, duraciones, instrucciones y distribución de agua de `generateQuickSteps` en Android, con avance guiado y temperatura de 93 °C. Para volúmenes menores que el bloom de 40/50 ml se limita primero el bloom y se reparte el remanente, evitando cantidades negativas sin cambiar los resultados de los casos normales de la referencia.

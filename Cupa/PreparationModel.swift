@@ -54,10 +54,10 @@ final class PreparationModel: ObservableObject {
     func load(calculator: CalculatorModel) {
         timer?.invalidate(); timer = nil
         state = PreparationState(
-            techniqueName: "Preparación libre", methodName: calculator.method,
+            techniqueName: "\(calculator.method) Estándar", methodName: calculator.method,
             doseGrams: calculator.coffee, waterMl: calculator.water, ratio: calculator.ratio,
-            temperatureC: 92, executionMode: "MANUAL",
-            steps: [.init(id: UUID(), number: 1, title: "Preparación libre", durationSeconds: 180, waterAddedMl: calculator.water, waterAccumulatedMl: calculator.water, gesture: "MANUAL", intensity: "MEDIUM", note: "Sigue tu vertido y usa el cronómetro.")]
+            temperatureC: 93, executionMode: "GUIDED",
+            steps: Self.quickSteps(method: calculator.method, waterMl: calculator.water)
         )
     }
 
@@ -105,6 +105,27 @@ final class PreparationModel: ObservableObject {
         }
         state.activeStepIndex = max(0, state.steps.count - 1)
         if state.executionMode == "AUTOMATED" { complete() }
+    }
+    private static func quickSteps(method: String, waterMl: Int) -> [PreparationStepSnapshot] {
+        let total = max(1, waterMl)
+        switch method {
+        case "Espresso":
+            return [.init(id: UUID(), number: 1, title: "Extracción de Presión", durationSeconds: 30, waterAddedMl: total, waterAccumulatedMl: total, gesture: "TAP", intensity: "alta", note: "Mantén la presión uniforme.")]
+        case "AeroPress":
+            let bloom = min(40, total); let remainder = total - bloom
+            return [
+                .init(id: UUID(), number: 1, title: "Preinfusión (Bloom)", durationSeconds: 30, waterAddedMl: bloom, waterAccumulatedMl: bloom, gesture: "TAP", intensity: "alta", note: "Remueve por 10 segundos."),
+                .init(id: UUID(), number: 2, title: "Vertido de volumen", durationSeconds: 40, waterAddedMl: remainder, waterAccumulatedMl: total, gesture: "TAP", intensity: "media", note: "Pon el émbolo para vacío."),
+                .init(id: UUID(), number: 3, title: "Presión continua", durationSeconds: 30, waterAddedMl: 0, waterAccumulatedMl: total, gesture: "TAP", intensity: "alta", note: "Presiona despacio.")
+            ]
+        default:
+            let bloom = min(50, total); let remainder = total - bloom; let firstPour = remainder / 2
+            return [
+                .init(id: UUID(), number: 1, title: "Preinfusión Bloom", durationSeconds: 35, waterAddedMl: bloom, waterAccumulatedMl: bloom, gesture: "TAP", intensity: "alta", note: "Moja todo el grano uniformemente."),
+                .init(id: UUID(), number: 2, title: "Primer Vertido", durationSeconds: 45, waterAddedMl: firstPour, waterAccumulatedMl: bloom + firstPour, gesture: "TAP", intensity: "media", note: "Vierte en círculos suaves."),
+                .init(id: UUID(), number: 3, title: "Segundo Vertido final", durationSeconds: 40, waterAddedMl: total - bloom - firstPour, waterAccumulatedMl: total, gesture: "TAP", intensity: "baja", note: "Completa la secuencia.")
+            ]
+        }
     }
     private func persist() { if let data = try? JSONEncoder().encode(state) { defaults.set(data, forKey: key) } }
 }

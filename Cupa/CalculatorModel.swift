@@ -27,6 +27,13 @@ struct BrewPreset: Identifiable, Codable, Equatable {
     }
 }
 
+private struct CalculatorStateSnapshot: Codable {
+    let method: String
+    let coffee: Double
+    let ratio: Double
+    let water: Int
+}
+
 @MainActor
 final class CalculatorModel: ObservableObject {
     @Published var method = "V60"
@@ -57,6 +64,7 @@ final class CalculatorModel: ObservableObject {
     ]
 
     private let userDefaults: UserDefaults
+    private let stateKey = "cupa.calculatorState.v1"
 
     var presets: [BrewPreset] { savedPresets + builtInPresets }
 
@@ -79,6 +87,14 @@ final class CalculatorModel: ObservableObject {
            let decoded = try? JSONDecoder().decode([BrewPreset].self, from: data) {
             savedPresets = decoded
         }
+        if let data = defaults.data(forKey: stateKey),
+           let restored = try? JSONDecoder().decode(CalculatorStateSnapshot.self, from: data),
+           methods.contains(restored.method), restored.coffee >= 1, restored.ratio >= 1, restored.water >= 1 {
+            method = restored.method; coffee = restored.coffee; ratio = restored.ratio; water = restored.water
+            coffeeInput = format(restored.coffee, forceDecimal: true)
+            ratioInput = format(restored.ratio, forceDecimal: true); waterInput = String(restored.water)
+            microcopy = "Se restauró tu última preparación."
+        }
     }
 
     func changeCoffee(_ input: String) {
@@ -88,6 +104,7 @@ final class CalculatorModel: ObservableObject {
         water = Int(parsed * ratio)
         waterInput = String(water)
         microcopy = "Listo para preparar con \(format(parsed)) g de café."
+        persistState()
     }
 
     func changeRatio(_ input: String) {
@@ -97,6 +114,7 @@ final class CalculatorModel: ObservableObject {
         water = Int(coffee * parsed)
         waterInput = String(water)
         microcopy = "Proporción ajustada a 1:\(format(parsed))."
+        persistState()
     }
 
     func changeWater(_ input: String) {
@@ -106,6 +124,7 @@ final class CalculatorModel: ObservableObject {
         coffee = ((Double(parsed) / ratio) * 10).rounded() / 10
         coffeeInput = format(coffee, forceDecimal: true)
         microcopy = "Agua total ajustada a \(parsed) ml."
+        persistState()
     }
 
     func selectMethod(_ selected: String) {
@@ -115,6 +134,7 @@ final class CalculatorModel: ObservableObject {
         water = Int(coffee * ratio)
         waterInput = String(water)
         microcopy = "Método cambiado a \(selected). Proporción sugerida 1:\(format(ratio))."
+        persistState()
     }
 
     func apply(_ preset: BrewPreset) {
@@ -126,6 +146,7 @@ final class CalculatorModel: ObservableObject {
         ratioInput = format(ratio, forceDecimal: true)
         waterInput = String(water)
         microcopy = "Se cargó: \(preset.label)."
+        persistState()
     }
 
     func adjustCoffee(_ amount: Double) { changeCoffee(format(max(1, coffee + amount), forceDecimal: true)) }
@@ -163,6 +184,11 @@ final class CalculatorModel: ObservableObject {
 
     private func parseDecimal(_ value: String) -> Double? {
         Double(value.replacingOccurrences(of: ",", with: "."))
+    }
+
+    private func persistState() {
+        let snapshot = CalculatorStateSnapshot(method: method, coffee: coffee, ratio: ratio, water: water)
+        if let data = try? JSONEncoder().encode(snapshot) { userDefaults.set(data, forKey: stateKey) }
     }
 
     private func format(_ value: Double, forceDecimal: Bool = false) -> String {

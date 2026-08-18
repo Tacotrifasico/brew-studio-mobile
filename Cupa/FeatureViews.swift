@@ -591,7 +591,35 @@ struct LabView: View {
     }
 }
 
+private enum StorageCategory: String, CaseIterable, Identifiable {
+    case coffee = "Cafés"
+    case grinders = "Molinos"
+    case equipment = "Equipos"
+    var id: Self { self }
+}
+
 struct StorageView: View {
+    @State private var category = StorageCategory.coffee
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("Inventario", selection: $category) {
+                ForEach(StorageCategory.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .padding()
+            switch category {
+            case .coffee: CoffeeInventoryView()
+            case .grinders: GrinderInventoryView()
+            case .equipment: EquipmentInventoryView()
+            }
+        }
+        .background(CupaTheme.background)
+        .navigationTitle("Almacén")
+    }
+}
+
+private struct CoffeeInventoryView: View {
     @Environment(\.managedObjectContext) private var modelContext
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.updatedAt, ascending: false)],
@@ -647,7 +675,6 @@ struct StorageView: View {
             }
             .scrollContentBackground(.hidden)
         }
-        .navigationTitle("Almacén")
         .toolbar {
             Button { showAddBean = true } label: { Image(systemName: "plus") }
         }

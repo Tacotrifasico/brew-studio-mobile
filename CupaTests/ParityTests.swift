@@ -98,17 +98,27 @@ final class LocalPersistenceTests: XCTestCase {
         let bean = CoffeeBeanRecord(context: context, name: "Prueba", brand: "Tostador", remainingQuantityGrams: 250)
         let state = LabState(altitudeMeters: 1500, cityName: "Guatemala (1,500m)")
         _ = LabExperimentRecord(context: context, state: state, profile: LabEngine.calculate(state))
+        let grinder = GrinderRecord(context: context, name: "C40", brand: "Comandante", model: "C40 MK4", grinderType: "MANUAL", scaleUnit: "CLICKS", minimumSetting: 0, maximumSetting: 40, calibrationNotes: "Cero real", notes: "")
+        let equipment = EquipmentRecord(context: context, name: "V60 02", equipmentType: "BREWER_METHOD", brand: "Hario", model: "02", capacityMl: 600, configuration: "Plástico", notes: "", isFavorite: true, isActive: true)
         try context.save()
 
         let beans = try context.fetch(NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord"))
         let experiments = try context.fetch(NSFetchRequest<LabExperimentRecord>(entityName: "LabExperimentRecord"))
+        let grinders = try context.fetch(NSFetchRequest<GrinderRecord>(entityName: "GrinderRecord"))
+        let equipmentItems = try context.fetch(NSFetchRequest<EquipmentRecord>(entityName: "EquipmentRecord"))
         XCTAssertEqual(beans.map(\.name), ["Prueba"])
         XCTAssertEqual(experiments.first?.altitudeMeters, 1500)
+        XCTAssertEqual(grinders.first?.maximumSetting, 40)
+        XCTAssertEqual(equipmentItems.first?.capacityMl, 600)
 
         bean.markDeleted()
+        grinder.markDeleted()
+        equipment.markUpdated()
         try context.save()
         let activeRequest = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
         activeRequest.predicate = NSPredicate(format: "deletedAt == nil")
         XCTAssertTrue(try context.fetch(activeRequest).isEmpty)
+        XCTAssertEqual(grinder.syncStatus, .pendingDelete)
+        XCTAssertEqual(equipment.syncStatus, .pendingUpdate)
     }
 }

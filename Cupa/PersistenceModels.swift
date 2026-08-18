@@ -116,6 +116,85 @@ final class LabExperimentRecord: NSManagedObject {
 
 extension LabExperimentRecord: Identifiable {}
 
+@objc(GrinderRecord)
+final class GrinderRecord: NSManagedObject {
+    @NSManaged var id: UUID
+    @NSManaged var ownerId: UUID?
+    @NSManaged var name: String
+    @NSManaged var brand: String
+    @NSManaged var model: String
+    @NSManaged var grinderType: String
+    @NSManaged var scaleUnit: String
+    @NSManaged var minimumSetting: Int64
+    @NSManaged var maximumSetting: Int64
+    @NSManaged var calibrationNotes: String
+    @NSManaged var notes: String
+    @NSManaged var createdAt: Date
+    @NSManaged var updatedAt: Date
+    @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String
+    @NSManaged var deletedAt: Date?
+
+    convenience init(context: NSManagedObjectContext, name: String, brand: String, model: String, grinderType: String, scaleUnit: String, minimumSetting: Int, maximumSetting: Int, calibrationNotes: String, notes: String) {
+        self.init(context: context)
+        id = UUID(); ownerId = nil; self.name = name; self.brand = brand; self.model = model
+        self.grinderType = grinderType; self.scaleUnit = scaleUnit
+        self.minimumSetting = Int64(minimumSetting); self.maximumSetting = Int64(maximumSetting)
+        self.calibrationNotes = calibrationNotes; self.notes = notes
+        createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+
+    var syncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .error }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+    func markUpdated() { updatedAt = .now; version += 1; syncStatus = .pendingUpdate }
+    func markDeleted() { deletedAt = .now; updatedAt = .now; version += 1; syncStatus = .pendingDelete }
+}
+
+extension GrinderRecord: Identifiable {}
+
+@objc(EquipmentRecord)
+final class EquipmentRecord: NSManagedObject {
+    @NSManaged var id: UUID
+    @NSManaged var ownerId: UUID?
+    @NSManaged var name: String
+    @NSManaged var equipmentType: String
+    @NSManaged var brand: String
+    @NSManaged var model: String
+    @NSManaged var capacityMlValue: NSNumber?
+    @NSManaged var configuration: String
+    @NSManaged var notes: String
+    @NSManaged var isFavorite: Bool
+    @NSManaged var isActive: Bool
+    @NSManaged var createdAt: Date
+    @NSManaged var updatedAt: Date
+    @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String
+    @NSManaged var deletedAt: Date?
+
+    var capacityMl: Int? {
+        get { capacityMlValue?.intValue }
+        set { capacityMlValue = newValue.map(NSNumber.init(value:)) }
+    }
+    convenience init(context: NSManagedObjectContext, name: String, equipmentType: String, brand: String, model: String, capacityMl: Int?, configuration: String, notes: String, isFavorite: Bool, isActive: Bool) {
+        self.init(context: context)
+        id = UUID(); ownerId = nil; self.name = name; self.equipmentType = equipmentType
+        self.brand = brand; self.model = model; self.capacityMl = capacityMl
+        self.configuration = configuration; self.notes = notes; self.isFavorite = isFavorite; self.isActive = isActive
+        createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+
+    var syncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .error }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+    func markUpdated() { updatedAt = .now; version += 1; syncStatus = .pendingUpdate }
+    func markDeleted() { deletedAt = .now; updatedAt = .now; version += 1; syncStatus = .pendingDelete }
+}
+
+extension EquipmentRecord: Identifiable {}
+
 struct PersistenceController {
     static let shared = PersistenceController()
     let container: NSPersistentContainer
@@ -184,7 +263,41 @@ struct PersistenceController {
             attribute("deletedAt", .dateAttributeType, optional: true)
         ]
         experimentEntity.uniquenessConstraints = [["id"]]
-        model.entities = [coffeeEntity, experimentEntity]
+
+        let grinderEntity = NSEntityDescription()
+        grinderEntity.name = "GrinderRecord"
+        grinderEntity.managedObjectClassName = NSStringFromClass(GrinderRecord.self)
+        grinderEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("name", .stringAttributeType, defaultValue: ""), attribute("brand", .stringAttributeType, defaultValue: ""),
+            attribute("model", .stringAttributeType, defaultValue: ""), attribute("grinderType", .stringAttributeType, defaultValue: "MANUAL"),
+            attribute("scaleUnit", .stringAttributeType, defaultValue: "CLICKS"), attribute("minimumSetting", .integer64AttributeType, defaultValue: 0),
+            attribute("maximumSetting", .integer64AttributeType, defaultValue: 40), attribute("calibrationNotes", .stringAttributeType, defaultValue: ""),
+            attribute("notes", .stringAttributeType, defaultValue: "")
+        ]
+        grinderEntity.uniquenessConstraints = [["id"]]
+
+        let equipmentEntity = NSEntityDescription()
+        equipmentEntity.name = "EquipmentRecord"
+        equipmentEntity.managedObjectClassName = NSStringFromClass(EquipmentRecord.self)
+        equipmentEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("name", .stringAttributeType, defaultValue: ""), attribute("equipmentType", .stringAttributeType, defaultValue: "BREWER_METHOD"),
+            attribute("brand", .stringAttributeType, defaultValue: ""), attribute("model", .stringAttributeType, defaultValue: ""),
+            attribute("capacityMlValue", .integer64AttributeType, optional: true), attribute("configuration", .stringAttributeType, defaultValue: ""),
+            attribute("notes", .stringAttributeType, defaultValue: ""), attribute("isFavorite", .booleanAttributeType, defaultValue: false),
+            attribute("isActive", .booleanAttributeType, defaultValue: true)
+        ]
+        equipmentEntity.uniquenessConstraints = [["id"]]
+
+        model.entities = [coffeeEntity, experimentEntity, grinderEntity, equipmentEntity]
         return model
+    }
+
+    private static func syncProperties(attribute: (String, NSAttributeType, Bool, Any?) -> NSAttributeDescription) -> [NSAttributeDescription] {
+        [
+            attribute("id", .UUIDAttributeType, false, nil), attribute("ownerId", .UUIDAttributeType, true, nil),
+            attribute("createdAt", .dateAttributeType, false, nil), attribute("updatedAt", .dateAttributeType, false, nil),
+            attribute("version", .integer64AttributeType, false, 1), attribute("syncStatusRaw", .stringAttributeType, false, SyncStatus.pendingCreate.rawValue),
+            attribute("deletedAt", .dateAttributeType, true, nil)
+        ]
     }
 }

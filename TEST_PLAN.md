@@ -27,7 +27,7 @@
 
 - `LabGoldenVerifier`: cuatro perfiles dorados aprobados (nivel del mar, CDMX/hervor, subextracción y sobreextracción).
 - Restauración de altitud, unidad y tiempo mediante `UserDefaults`: aprobada.
-- Alta, consulta y borrado lógico de café y alta de experimento en Core Data en memoria: aprobados.
+- Alta, consulta y borrado lógico de café y molino; alta y actualización de equipo; alta de experimento en Core Data en memoria: aprobados.
 - Target `CupaTests`: compilación para iOS Simulator aprobada. La ejecución XCTest queda pendiente hasta reparar CoreSimulator local.
 
 Comando alternativo de verificación cuando CoreSimulator no inicia:

@@ -20,8 +20,8 @@ Estados permitidos: No iniciado, Parcial, Implementado sin validar, Validado, Bl
 | Preparación | Cronómetro | ViewModel Android | Parcial | Memoria | Parcial | Pendiente | Ninguno | Pausa, reanuda, reinicia y recupera estado | Parcial |
 | Cafés | Crear y listar | `StorageScreen.kt`, Room | Implementado sin validar | Core Data | Parcial | Compilación iPhone/simulador | Validar relanzamiento en simulador | Datos reales sobreviven reinicio | Implementado sin validar |
 | Cafés | Editar y borrado lógico | Android Room | Implementado sin validar | Core Data | Parcial | Compilación iPhone/simulador | Pruebas de historial pendientes | Historial no se corrompe | Implementado sin validar |
-| Molinos | CRUD | Android Room | No iniciado | Ninguno | No iniciado | Pendiente | Ninguno | CRUD persistente y sincronizable | No iniciado |
-| Equipos | CRUD | Android Room | No iniciado | Ninguno | No iniciado | Pendiente | Ninguno | CRUD persistente y sincronizable | No iniciado |
+| Molinos | CRUD | `Instrument`, `GrinderProfile` | Implementado sin validar | Core Data | Implementado sin validar | CRUD ejecutado + test target compilado | Flujo UI pendiente por CoreSimulator | CRUD persistente y sincronizable | Implementado sin validar |
+| Equipos | CRUD | Android `Instrument` | Implementado sin validar | Core Data | Implementado sin validar | CRUD ejecutado + test target compilado | Flujo UI pendiente por CoreSimulator | CRUD persistente y sincronizable | Implementado sin validar |
 | Recetas | CRUD, ingredientes y pasos | Android Room | No iniciado | Ninguno | No iniciado | Pendiente | Ninguno | Flujo offline completo | No iniciado |
 | Técnicas | CRUD y orden de pasos | Android Room | No iniciado | Ninguno | No iniciado | Pendiente | Ninguno | Entidad independiente y ejecutable | No iniciado |
 | Cata | Perfil y notas | `CataScreen.kt` | Parcial | Memoria | Parcial | Pendiente | Ninguno | Guardar/editar sesión real | Parcial |

@@ -81,8 +81,8 @@ struct PreparationExecutionView: View {
                 .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Reiniciar preparación")
                 .disabled(model.state.steps.isEmpty)
         }
-        if model.state.status != .completed && model.state.elapsedSeconds > 0 {
-            Button("Finalizar y guardar sesión", action: finish).buttonStyle(.bordered).tint(CupaTheme.forest)
+        if model.state.elapsedSeconds > 0 && model.state.savedAt == nil {
+            Button(model.state.status == .completed ? "Guardar sesión finalizada" : "Finalizar y guardar sesión", action: finish).buttonStyle(.bordered).tint(CupaTheme.forest)
                 .accessibilityIdentifier("preparation.finish")
         }
     }
@@ -97,7 +97,7 @@ struct PreparationExecutionView: View {
         let beanName = beans.first(where: { $0.id == model.state.beanId })?.name ?? ""
         let grinderName = grinders.first(where: { $0.id == model.state.grinderId })?.name ?? ""
         _ = BrewSessionRecord(context: context, state: model.state, recipeName: recipeName, beanName: beanName, grinderName: grinderName)
-        do { try context.save(); model.complete(); savedConfirmation = true } catch { context.rollback(); errorMessage = error.localizedDescription }
+        do { try context.save(); model.markSaved(); savedConfirmation = true } catch { context.rollback(); errorMessage = error.localizedDescription }
     }
     private func timeString(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }
 }

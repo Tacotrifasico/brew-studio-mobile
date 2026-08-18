@@ -87,6 +87,13 @@ struct LabGoldenVerifier {
         precondition(preparation.state.executionMode == "GUIDED" && preparation.state.steps.map(\.durationSeconds) == [35, 45, 40])
         precondition(preparation.state.steps.map(\.waterAddedMl) == [50, 95, 95])
         precondition(preparation.state.steps.map(\.waterAccumulatedMl) == [50, 145, 240])
+        preparation.start(); let tick = preparation.state.lastTickAt!
+        preparation.synchronizeClock(now: tick.addingTimeInterval(130))
+        precondition(preparation.state.status == .completed && preparation.state.elapsedSeconds == 120 && preparation.state.savedAt == nil)
+        precondition(PreparationModel(defaults: defaults).state.status == .completed)
+        let savedSessionId = preparation.state.sessionId
+        preparation.markSaved(); precondition(PreparationModel(defaults: defaults).state.status == .ready)
+        preparation.reset(); precondition(preparation.state.savedAt == nil && preparation.state.sessionId != savedSessionId)
         calculator.selectMethod("AeroPress"); preparation.load(calculator: calculator)
         precondition(preparation.state.steps.map(\.title) == ["Preinfusión (Bloom)", "Vertido de volumen", "Presión continua"])
         precondition(preparation.state.steps.map(\.waterAccumulatedMl) == [40, 195, 195])

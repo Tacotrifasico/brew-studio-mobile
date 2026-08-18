@@ -79,3 +79,7 @@ Laboratorio conserva UUID opcionales de receta, técnica, método/equipo, café 
 ## D-020 — Preparación rápida equivalente y entradas válidas persistentes
 
 Calculadora persiste únicamente el último estado numérico válido; el texto incompleto mientras el usuario edita nunca reemplaza ese snapshot. `onActionPrepare` usa los títulos, duraciones, instrucciones y distribución de agua de `generateQuickSteps` en Android, con avance guiado y temperatura de 93 °C. Para volúmenes menores que el bloom de 40/50 ml se limita primero el bloom y se reparte el remanente, evitando cantidades negativas sin cambiar los resultados de los casos normales de la referencia.
+
+## D-021 — Finalización recuperable y guardado idempotente de preparación
+
+Los modos `GUIDED` y `AUTOMATED` terminan al alcanzar la suma exacta de sus pasos y acotan el tiempo si la app vuelve del fondo después del límite. Una sesión completada pero todavía no guardada se restaura para no perder trabajo; después de crear `BrewSession`, `savedAt` oculta la acción repetida. Reiniciar una sesión ya guardada asigna un UUID nuevo, evitando colisiones o duplicados históricos.

@@ -13,7 +13,7 @@ struct PreparationState: Codable, Equatable {
     var doseGrams = 15.0; var waterMl = 240; var ratio = 16.0; var temperatureC = 92; var grindDescription = ""
     var executionMode = "MANUAL"; var steps: [PreparationStepSnapshot] = []
     var elapsedSeconds = 0; var activeStepIndex = 0; var status = PreparationStatus.ready
-    var startedAt: Date?; var lastTickAt: Date?; var updatedAt = Date()
+    var startedAt: Date?; var lastTickAt: Date?; var savedAt: Date?; var updatedAt = Date()
 }
 
 @MainActor
@@ -23,7 +23,7 @@ final class PreparationModel: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: key), let restored = try? JSONDecoder().decode(PreparationState.self, from: data), restored.status != .completed {
+        if let data = defaults.data(forKey: key), let restored = try? JSONDecoder().decode(PreparationState.self, from: data), restored.status != .completed || restored.savedAt == nil {
             state = restored
         } else { state = PreparationState() }
         if state.status == .running { synchronizeClock(); scheduleTimer() }
@@ -79,10 +79,16 @@ final class PreparationModel: ObservableObject {
     }
     func pause() { synchronizeClock(); timer?.invalidate(); timer = nil; state.status = .paused; state.lastTickAt = nil; state.updatedAt = .now }
     func resume() { guard state.status == .paused else { return }; state.status = .running; state.lastTickAt = .now; state.updatedAt = .now; scheduleTimer() }
-    func reset() { timer?.invalidate(); timer = nil; state.elapsedSeconds = 0; state.activeStepIndex = 0; state.status = .ready; state.startedAt = nil; state.lastTickAt = nil; state.updatedAt = .now }
+    func reset() {
+        timer?.invalidate(); timer = nil
+        if state.savedAt != nil { state.sessionId = UUID(); state.savedAt = nil }
+        state.elapsedSeconds = 0; state.activeStepIndex = 0; state.status = .ready
+        state.startedAt = nil; state.lastTickAt = nil; state.updatedAt = .now
+    }
     func nextStep() { guard !state.steps.isEmpty else { return }; state.activeStepIndex = min(state.steps.count - 1, state.activeStepIndex + 1); state.elapsedSeconds = state.steps.prefix(state.activeStepIndex).reduce(0) { $0 + $1.durationSeconds }; state.updatedAt = .now }
     func previousStep() { guard !state.steps.isEmpty else { return }; state.activeStepIndex = max(0, state.activeStepIndex - 1); state.elapsedSeconds = state.steps.prefix(state.activeStepIndex).reduce(0) { $0 + $1.durationSeconds }; state.updatedAt = .now }
     func complete() { synchronizeClock(); timer?.invalidate(); timer = nil; state.status = .completed; state.lastTickAt = nil; state.updatedAt = .now }
+    func markSaved() { complete(); state.savedAt = .now; state.updatedAt = .now }
 
     func synchronizeClock(now: Date = .now) {
         guard state.status == .running, let last = state.lastTickAt else { return }
@@ -104,7 +110,9 @@ final class PreparationModel: ObservableObject {
             if state.elapsedSeconds < accumulated { state.activeStepIndex = index; return }
         }
         state.activeStepIndex = max(0, state.steps.count - 1)
-        if state.executionMode == "AUTOMATED" { complete() }
+        state.elapsedSeconds = accumulated
+        state.status = .completed; state.lastTickAt = nil; state.updatedAt = .now
+        timer?.invalidate(); timer = nil
     }
     private static func quickSteps(method: String, waterMl: Int) -> [PreparationStepSnapshot] {
         let total = max(1, waterMl)

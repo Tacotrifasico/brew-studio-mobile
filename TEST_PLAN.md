@@ -33,7 +33,7 @@
 - Alta, consulta y borrado lógico de café y molino; alta y actualización de equipo; alta de experimento en Core Data en memoria: aprobados.
 - Receta: alta, edición por UUID, reordenamiento, duplicación profunda y borrado lógico de hijos: aprobados.
 - Técnica: alta, orden, duración total, agua acumulada y borrado lógico de pasos: aprobados.
-- Preparación: carga desde técnica, avance guiado tras 46 segundos, pausa, recuperación desde `UserDefaults` y snapshot persistente de `BrewSession`: aprobados.
+- Preparación: carga desde técnica, avance guiado tras 46 segundos, cierre en tiempo total, recuperación pendiente de guardado, prevención de duplicados, nuevo UUID y snapshot persistente de `BrewSession`: aprobados.
 - Cata: recuperación del enfriamiento a 601 segundos, transición a descenso, observación sensorial independiente, vínculo opcional con `BrewSession`, creación de `CupSession` y borrado lógico: aprobados.
 - Cuenta: estado seguro sin configuración y contrato de login GoTrue (ruta, anon header y mapeo de tokens): XCTest compilado.
 - Eliminación de cuenta: ruta autenticada, confirmación explícita y ausencia de credenciales administrativas en el request iOS: XCTest compilado.

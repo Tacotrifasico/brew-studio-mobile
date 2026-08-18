@@ -4,17 +4,17 @@
 - [ ] Supabase y RLS validados con dos usuarios.
 - [ ] Core Data funciona offline y sincroniza al reconectar.
 - [ ] Sesión recuperada tras reinicio y datos tras reinstalación/login.
-- [ ] Calculadora y Laboratorio pasan pruebas de paridad.
+- [x] Calculadora y Laboratorio pasan pruebas de paridad.
 - [ ] CRUD completo de entidades separadas.
 - [ ] Conflictos y errores de sincronización validados.
 - [ ] Gemini seguro con fallback local.
 - [ ] Tema claro/oscuro completo.
 - [ ] Sin botones muertos, mocks ni placeholders de producción.
-- [ ] Sin TODO críticos ni secretos.
-- [ ] Pruebas críticas aprobadas.
-- [ ] Build Release aprobado.
-- [ ] Archive generado.
-- [ ] Bundle ID, versión, icono, launch screen y permisos revisados.
-- [ ] Development, Staging y Production separados.
+- [x] Sin TODO críticos ni secretos.
+- [ ] Pruebas críticas aprobadas (dominio aprobado; UI e integración real pendientes).
+- [x] Build Release del código aprobado sin firma.
+- [x] Archive técnico generado sin firma y sin catálogo por fallo local de `actool`.
+- [ ] Bundle ID, versión, icono, launch screen y permisos revisados (ícono preparado; falta validar catálogo).
+- [x] Development, Staging y Production separados.
 - [ ] Privacidad, accesibilidad y localización revisadas.
-- [ ] Acciones de cuenta Apple y legales documentadas.
+- [x] Acciones de cuenta Apple y legales documentadas.

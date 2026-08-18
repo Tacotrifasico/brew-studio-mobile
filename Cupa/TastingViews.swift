@@ -116,6 +116,7 @@ struct TastingView: View {
     private var actions: some View {
         HStack {
             Button(editingExisting ? "Actualizar cata" : "Guardar cata", action: save).buttonStyle(.borderedProminent).tint(CupaTheme.forest)
+                .accessibilityIdentifier("tasting.save")
             Button("Nueva") { model.newTasting(); editingExisting = false }.buttonStyle(.bordered)
             Button("Llevar al Laboratorio") { selection = .lab }.buttonStyle(.bordered)
         }.font(.caption)
@@ -134,6 +135,7 @@ struct TastingView: View {
                             }
                         }.buttonStyle(.plain)
                         Spacer(); Button(role: .destructive) { remove(tasting) } label: { Image(systemName: "trash") }
+                            .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Eliminar cata")
                     }
                 }
             }

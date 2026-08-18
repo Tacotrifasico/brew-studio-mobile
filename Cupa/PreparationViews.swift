@@ -39,6 +39,9 @@ struct PreparationExecutionView: View {
                         Text("1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))").font(.subheadline.bold()).foregroundStyle(CupaTheme.forest)
                     }
                     Text(timeString(model.state.elapsedSeconds)).font(.system(size: 52, weight: .bold, design: .rounded)).monospacedDigit()
+                        .minimumScaleFactor(0.6)
+                        .accessibilityLabel("Tiempo transcurrido")
+                        .accessibilityValue(timeString(model.state.elapsedSeconds))
                     if let step = model.activeStep {
                         VStack(spacing: 8) {
                             Text("PASO \(step.number) DE \(model.state.steps.count)").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
@@ -61,18 +64,25 @@ struct PreparationExecutionView: View {
 
     @ViewBuilder private var controls: some View {
         HStack {
-            Button { model.previousStep() } label: { Image(systemName: "backward.end") }.disabled(model.state.activeStepIndex == 0)
+            Button { model.previousStep() } label: { Image(systemName: "backward.end") }
+                .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Paso anterior")
+                .disabled(model.state.activeStepIndex == 0)
             switch model.state.status {
             case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest).disabled(model.state.steps.isEmpty)
             case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta)
             case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest)
             case .completed: Label("Finalizada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forest)
             }
-            Button { model.nextStep() } label: { Image(systemName: "forward.end") }.disabled(model.state.activeStepIndex >= model.state.steps.count - 1)
-            Button { model.reset() } label: { Image(systemName: "arrow.counterclockwise") }.disabled(model.state.steps.isEmpty)
+            Button { model.nextStep() } label: { Image(systemName: "forward.end") }
+                .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Paso siguiente")
+                .disabled(model.state.activeStepIndex >= model.state.steps.count - 1)
+            Button { model.reset() } label: { Image(systemName: "arrow.counterclockwise") }
+                .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Reiniciar preparación")
+                .disabled(model.state.steps.isEmpty)
         }
         if model.state.status != .completed && model.state.elapsedSeconds > 0 {
             Button("Finalizar y guardar sesión", action: finish).buttonStyle(.bordered).tint(CupaTheme.forest)
+                .accessibilityIdentifier("preparation.finish")
         }
     }
 

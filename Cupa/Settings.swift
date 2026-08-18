@@ -22,6 +22,7 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel; @ObservedObject var account: AccountModel
     @Environment(\.dismiss) private var dismiss
     @State private var showAccount = false
+    @AppStorage("privacy.geminiConsent.v1") private var geminiConsent = false
     var body: some View {
         NavigationStack {
             Form {
@@ -30,7 +31,16 @@ struct SettingsView: View {
                     Picker("Temperatura", selection: $model.temperatureUnit) { Text("Celsius").tag(TemperatureUnit.celsius); Text("Fahrenheit").tag(TemperatureUnit.fahrenheit) }
                     Toggle("Unidades métricas", isOn: $model.metricUnits)
                 }
-                Section("Privacidad") { Text("Este build no envía telemetría sensible ni solicita permisos de notificaciones.").font(.caption).foregroundStyle(.secondary) }
+                Section("Privacidad") {
+                    Toggle("Permitir sugerencias con Google Gemini", isOn: $geminiConsent)
+                    Text("Al activarlo, sólo se envían los parámetros de preparación y el perfil sensorial que solicites analizar. No se envían tu correo, nombre ni identificador.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Este build no envía telemetría sensible ni solicita permisos de notificaciones.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if let privacyPolicyURL {
+                        Link("Consultar política de privacidad", destination: privacyPolicyURL)
+                    }
+                }
                 Section("Cuenta") { Button("Abrir cuenta") { showAccount = true } }
                 Section("Aplicación") { LabeledContent("Versión", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"); LabeledContent("Entorno", value: Bundle.main.object(forInfoDictionaryKey: "APP_ENVIRONMENT") as? String ?? "Development") }
             }
@@ -38,5 +48,11 @@ struct SettingsView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Cerrar") { dismiss() } } }
             .sheet(isPresented: $showAccount) { AccountView(model: account) }
         }
+    }
+
+    private var privacyPolicyURL: URL? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "PRIVACY_POLICY_URL") as? String,
+              let url = URL(string: value), ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+        return url
     }
 }

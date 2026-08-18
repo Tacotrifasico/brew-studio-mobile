@@ -14,9 +14,13 @@ La pantalla de cuenta está preparada para Supabase Auth y almacena tokens en Ke
 
 Gemini se invoca únicamente desde una Edge Function autenticada y la app conserva un fallback local. Las instrucciones de configuración, despliegue y Archive están en `DEPLOYMENT.md`.
 
+Antes del primer envío remoto a Gemini, la app explica qué parámetros se compartirán con Google y solicita permiso revocable. El manifiesto `PrivacyInfo.xcprivacy` declara los datos sincronizados y el uso local de preferencias sin tracking.
+
 Configuración permite tema del sistema, claro u oscuro y preferencias de unidades. Brew Hub ofrece perfil editable, privacidad y estadísticas derivadas exclusivamente de los datos reales guardados.
 
 La comunidad permite publicar e importar recetas/técnicas con atribución, marcar contenido, bloquear autores y reportar publicaciones. Sin backend configurado se muestra un estado vacío real y los datos privados permanecen locales.
+
+El proyecto incluye el AppIcon de la referencia Android y semántica VoiceOver para controles de icono, áreas táctiles mínimas e identificadores de automatización para los flujos principales.
 
 Al iniciar sesión, la sincronización reclama los datos creados offline, sube la outbox y descarga cambios incrementales de todos los agregados para restaurarlos en otro dispositivo. La validación contra el proyecto Supabase real requiere las dos variables públicas descritas en `BLOCKERS.md`.
 

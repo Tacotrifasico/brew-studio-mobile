@@ -25,7 +25,7 @@ struct HubView: View {
             .background(CupaTheme.background.ignoresSafeArea())
             .navigationTitle("Brew Studio Hub")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { if account.tokens != nil { Button { synchronize() } label: { Image(systemName: "arrow.triangle.2.circlepath") } } }
+                ToolbarItem(placement: .topBarLeading) { if account.tokens != nil { Button { synchronize() } label: { Image(systemName: "arrow.triangle.2.circlepath") }.accessibilityLabel("Sincronizar datos") } }
                 ToolbarItem(placement: .confirmationAction) { Button("Cerrar") { dismiss() } }
             }
             .sheet(isPresented: $showAccount) { AccountView(model: account) }
@@ -59,11 +59,11 @@ struct HubView: View {
         List {
             Section("Recetas") {
                 if recipes.isEmpty { Text("Sin recetas guardadas") }
-                else { ForEach(recipes) { recipe in HStack { Text(recipe.name); Spacer(); Button { publish(recipe: recipe) } label: { Image(systemName: "square.and.arrow.up") } } } }
+                else { ForEach(recipes) { recipe in HStack { Text(recipe.name); Spacer(); Button { publish(recipe: recipe) } label: { Image(systemName: "square.and.arrow.up") }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("Publicar receta \(recipe.name)") } } }
             }
             Section("Técnicas") {
                 if techniques.isEmpty { Text("Sin técnicas guardadas") }
-                else { ForEach(techniques) { technique in HStack { VStack(alignment: .leading) { Text(technique.name); Text(technique.methodName).font(.caption).foregroundStyle(.secondary) }; Spacer(); Button { publish(technique: technique) } label: { Image(systemName: "square.and.arrow.up") } } } }
+                else { ForEach(techniques) { technique in HStack { VStack(alignment: .leading) { Text(technique.name); Text(technique.methodName).font(.caption).foregroundStyle(.secondary) }; Spacer(); Button { publish(technique: technique) } label: { Image(systemName: "square.and.arrow.up") }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("Publicar técnica \(technique.name)") } } }
             }
         }.scrollContentBackground(.hidden)
     }
@@ -87,6 +87,7 @@ struct HubView: View {
                         Button("Importar") { importShare(share) }
                         Button { socialAction { try await $0.like(shareId: share.id, accessToken: account.tokens!.accessToken) } } label: { Label("Me gusta", systemImage: "heart") }
                         Menu { Button("Reportar contenido", role: .destructive) { socialAction { try await $0.report(shareId: share.id, reason: "USER_REPORTED", accessToken: account.tokens!.accessToken) } }; Button("Bloquear usuario", role: .destructive) { block(share) } } label: { Image(systemName: "ellipsis") }
+                            .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Más acciones para \(share.name)")
                     }.font(.caption)
                 }.padding(.vertical, 5)
             }.scrollContentBackground(.hidden).refreshable { await loadFeed() }

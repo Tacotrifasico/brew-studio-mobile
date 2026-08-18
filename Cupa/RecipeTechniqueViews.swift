@@ -50,7 +50,7 @@ struct RecipeInventoryView: View {
         }
         .searchable(text: $search, prompt: "Buscar nombre o etiqueta")
         .scrollContentBackground(.hidden)
-        .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar receta") }
+        .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar receta").accessibilityIdentifier("recipes.add") }
         .sheet(isPresented: $adding) { RecipeEditorView(recipe: nil) }
         .sheet(item: $editing) { RecipeEditorView(recipe: $0) }
         .alert("No se pudo guardar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "Error desconocido") }
@@ -91,7 +91,7 @@ struct TechniqueInventoryView: View {
         }
         .searchable(text: $search, prompt: "Buscar técnica o método")
         .scrollContentBackground(.hidden)
-        .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar técnica") }
+        .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar técnica").accessibilityIdentifier("techniques.add") }
         .sheet(isPresented: $adding) { TechniqueEditorView(technique: nil) }
         .sheet(item: $editing) { TechniqueEditorView(technique: $0) }
         .alert("No se pudo guardar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "Error desconocido") }

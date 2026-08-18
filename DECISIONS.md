@@ -63,3 +63,11 @@ Compartir crea un snapshot explícito de receta o técnica; importar genera UUID
 ## D-016 — Sincronización incremental por descriptor
 
 Cada tipo Core Data tiene un descriptor explícito de tabla, columnas y conversiones; no se serializan propiedades internas por reflexión indiscriminada. Al autenticarse, los registros locales sin propietario se reclaman para ese usuario, se compactan en outbox y se suben antes de descargar cambios incrementales. El pull respeta orden de padres/hijos, propietario, `updated_at`, versión y borrado lógico. El checkpoint sólo avanza cuando todas las tablas terminan, por lo que un fallo no pierde cambios.
+
+## D-017 — Privacidad declarada y consentimiento explícito para IA
+
+`PrivacyInfo.xcprivacy` declara los datos sincronizados, ausencia de tracking y el uso local de `UserDefaults` con la razón aprobada `CA92.1`. Gemini sólo recibe parámetros de preparación y perfil sensorial después de una autorización explícita y revocable; sin permiso se fuerza el motor local. La URL legal se inyecta por ambiente con `PRIVACY_POLICY_URL` y nunca se fija una política ficticia en el código.
+
+## D-018 — Ícono derivado de la referencia Android
+
+El AppIcon usa el recurso gráfico vigente de Android convertido a PNG RGB de 1024 × 1024, sin inventar una identidad visual nueva. Se conserva en un catálogo estándar de Xcode para que App Store genere sus variantes.

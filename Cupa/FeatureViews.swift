@@ -25,8 +25,12 @@ struct HomeView: View {
                         Button { showHub = true } label: {
                             Label(account.tokens?.email ?? "Mi perfil", systemImage: "person.crop.circle").font(.subheadline.weight(.semibold))
                         }
+                        .accessibilityIdentifier("home.profile")
                         Spacer()
                         Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                            .frame(minWidth: 44, minHeight: 44)
+                            .accessibilityLabel("Abrir configuración")
+                            .accessibilityIdentifier("home.settings")
                     }
                     .foregroundStyle(CupaTheme.forest)
 
@@ -124,17 +128,17 @@ struct BrewView: View {
                                 .frame(maxWidth: .infinity, alignment: .trailing)
 
                             HStack(spacing: 8) {
-                                calculatorInput("CAFÉ (g)", text: Binding(
+                                calculatorInput("CAFÉ (g)", identifier: "calculator.coffee", text: Binding(
                                     get: { calculator.coffeeInput },
                                     set: { calculator.changeCoffee($0) }
                                 ), minus: { calculator.adjustCoffee(-1) }, plus: { calculator.adjustCoffee(1) })
 
-                                calculatorInput("RATIO (1:x)", text: Binding(
+                                calculatorInput("RATIO (1:x)", identifier: "calculator.ratio", text: Binding(
                                     get: { calculator.ratioInput },
                                     set: { calculator.changeRatio($0) }
                                 ), minus: { calculator.adjustRatio(-0.1) }, plus: { calculator.adjustRatio(0.1) })
 
-                                calculatorInput("AGUA (ml)", text: Binding(
+                                calculatorInput("AGUA (ml)", identifier: "calculator.water", text: Binding(
                                     get: { calculator.waterInput },
                                     set: { calculator.changeWater($0) }
                                 ), minus: { calculator.adjustWater(-10) }, plus: { calculator.adjustWater(10) })
@@ -171,10 +175,14 @@ struct BrewView: View {
                                 Text(calculator.microcopy).font(.caption)
                                 Spacer()
                                 Button { calculator.resetRatio() } label: { Image(systemName: "arrow.counterclockwise") }
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .accessibilityLabel("Restablecer proporción")
                                 Button { calculator.toggleFavorite() } label: {
                                     Image(systemName: calculator.isCurrentFavorite ? "heart.fill" : "heart")
                                         .foregroundStyle(calculator.isCurrentFavorite ? CupaTheme.terracotta : CupaTheme.secondaryText)
                                 }
+                                .frame(minWidth: 44, minHeight: 44)
+                                .accessibilityLabel(calculator.isCurrentFavorite ? "Quitar de favoritos" : "Guardar como favorito")
                             }
                             .foregroundStyle(CupaTheme.secondaryText)
 
@@ -187,6 +195,7 @@ struct BrewView: View {
                                 Button("Preparar con estos datos") { preparation.load(calculator: calculator) }
                                     .buttonStyle(.borderedProminent)
                                     .tint(CupaTheme.forest)
+                                    .accessibilityIdentifier("calculator.prepare")
                             }
                         }
                     }
@@ -209,7 +218,7 @@ struct BrewView: View {
         }
     }
 
-    private func calculatorInput(_ title: String, text: Binding<String>, minus: @escaping () -> Void, plus: @escaping () -> Void) -> some View {
+    private func calculatorInput(_ title: String, identifier: String, text: Binding<String>, minus: @escaping () -> Void, plus: @escaping () -> Void) -> some View {
         VStack(spacing: 7) {
             Text(title).font(.system(size: 9, weight: .bold)).foregroundStyle(CupaTheme.secondaryText)
             TextField("", text: text)
@@ -217,10 +226,16 @@ struct BrewView: View {
                 .multilineTextAlignment(.center)
                 .font(.headline.monospacedDigit())
                 .onSubmit { calculator.validateInputs() }
+                .accessibilityLabel(title)
+                .accessibilityIdentifier(identifier)
             HStack {
                 Button(action: minus) { Image(systemName: "minus.circle.fill") }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel("Disminuir \(title)")
                 Spacer()
                 Button(action: plus) { Image(systemName: "plus.circle.fill") }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel("Aumentar \(title)")
             }
             .foregroundStyle(categoryColor)
         }
@@ -256,6 +271,8 @@ struct LabView: View {
     @State private var saveConfirmation = false
     @State private var suggestion: BrewSuggestion?
     @State private var suggestionLoading = false
+    @State private var showGeminiConsent = false
+    @AppStorage("privacy.geminiConsent.v1") private var geminiConsent = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -296,6 +313,12 @@ struct LabView: View {
             Button("Aceptar", role: .cancel) {}
         } message: {
             Text("La hipótesis quedó disponible offline en este dispositivo.")
+        }
+        .alert("Compartir datos con Gemini", isPresented: $showGeminiConsent) {
+            Button("Usar sólo sugerencia local", role: .cancel) { requestSuggestion(allowRemote: false) }
+            Button("Permitir y continuar") { geminiConsent = true; requestSuggestion(allowRemote: true) }
+        } message: {
+            Text("Cupa enviará a Google Gemini los parámetros de esta preparación y su perfil sensorial para generar una sugerencia. No se envían tu correo, nombre ni identificador. Puedes retirar este permiso en Configuración.")
         }
     }
 
@@ -462,11 +485,23 @@ struct LabView: View {
                     Text("Obtén una interpretación sin alterar los cálculos ni tus datos guardados.").font(.caption).foregroundStyle(CupaTheme.secondaryText)
                 }
                 Button("Analizar este perfil") {
-                    suggestionLoading = true
-                    let input = SuggestionContext(state: model.state, profile: model.profile)
-                    Task { suggestion = await GeminiSuggestionService(configuration: account.configuration).suggest(input, accessToken: account.tokens?.accessToken); suggestionLoading = false }
+                    if account.configuration.isSupabaseConfigured, account.tokens != nil, !geminiConsent {
+                        showGeminiConsent = true
+                    } else {
+                        requestSuggestion(allowRemote: geminiConsent)
+                    }
                 }.buttonStyle(.bordered).disabled(suggestionLoading)
             }
+        }
+    }
+
+    private func requestSuggestion(allowRemote: Bool) {
+        suggestionLoading = true
+        let input = SuggestionContext(state: model.state, profile: model.profile)
+        let token = allowRemote ? account.tokens?.accessToken : nil
+        Task {
+            suggestion = await GeminiSuggestionService(configuration: account.configuration).suggest(input, accessToken: token)
+            suggestionLoading = false
         }
     }
 
@@ -633,6 +668,8 @@ private struct CoffeeInventoryView: View {
         }
         .toolbar {
             Button { showAddBean = true } label: { Image(systemName: "plus") }
+                .accessibilityLabel("Agregar café")
+                .accessibilityIdentifier("inventory.addCoffee")
         }
         .sheet(isPresented: $showAddBean) {
             CoffeeBeanEditor(record: nil) { draft in

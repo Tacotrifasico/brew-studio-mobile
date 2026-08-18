@@ -6,4 +6,4 @@
 | Backend Gemini no desplegado | No se pueden validar sugerencias remotas | Proyecto Supabase y secreto Gemini en Edge Function | Contrato, fallback local y cliente autenticado |
 | Certificado/perfil Apple no disponible | Archive firmado/TestFlight no puede completarse aunque el Team ID está configurado | Certificado Apple Development/Distribution y perfil válidos para el equipo `6UD7WV66N5` | Build sin firma, validación de proyecto y checklist |
 | Información legal pendiente | Publicación final | URL de privacidad, soporte, política de eliminación y clasificación | Preparación técnica y campos documentados |
-| Firma local de Xcode no confiable | SwiftDataMacros y algunos servicios internos de Xcode fallan | Reparar/reinstalar Xcode oficial y aceptar sus componentes | La app compila con Core Data; builds genéricos siguen validados |
+| Servicios locales de Xcode dañados | CoreSimulator y `actool` no descubren runtimes; impide ejecutar UI y compilar el catálogo AppIcon en esta sesión | Reiniciar/reparar componentes de Xcode y runtimes oficiales | Release y Archive técnico se validan excluyendo sólo el catálogo; el AppIcon ya está preparado |

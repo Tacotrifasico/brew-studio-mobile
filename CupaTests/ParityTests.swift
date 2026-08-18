@@ -113,6 +113,21 @@ final class CalculatorParityTests: XCTestCase {
             XCTAssertEqual(calculator.ratio, ratio, "Ratio incorrecto para \(method)")
         }
     }
+
+    @MainActor func testFavoritePersistsAndCanBeRemoved() throws {
+        let suite = "CalculatorParityTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let calculator = CalculatorModel(defaults: defaults)
+        calculator.changeCoffee("18")
+        calculator.changeRatio("15")
+        calculator.toggleFavorite()
+        XCTAssertTrue(calculator.isCurrentFavorite)
+        XCTAssertEqual(CalculatorModel(defaults: defaults).savedPresets.first?.coffee, 18)
+        calculator.toggleFavorite()
+        XCTAssertFalse(calculator.isCurrentFavorite)
+        XCTAssertTrue(CalculatorModel(defaults: defaults).savedPresets.isEmpty)
+    }
 }
 
 final class LocalPersistenceTests: XCTestCase {

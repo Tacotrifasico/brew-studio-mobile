@@ -29,6 +29,7 @@ struct LabGoldenVerifier {
             scores: [78, 22, 32, 76, 84, 42]
         )
         verifyStateRestoration()
+        verifyCalculatorFavorites()
         verifyLocalPersistence()
         verifyRecipeTechniqueAggregates()
         verifyPreparationRecovery()
@@ -60,6 +61,17 @@ struct LabGoldenVerifier {
         precondition(restored.state.altitudeMeters == 2240)
         precondition(restored.state.temperatureUnit == .fahrenheit)
         precondition(restored.state.timeSeconds == 205)
+    }
+
+    @MainActor private static func verifyCalculatorFavorites() {
+        let suite = "CupaCalculatorVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let calculator = CalculatorModel(defaults: defaults)
+        calculator.changeCoffee("18"); calculator.changeRatio("15"); calculator.toggleFavorite()
+        precondition(calculator.isCurrentFavorite)
+        precondition(CalculatorModel(defaults: defaults).savedPresets.first?.coffee == 18)
+        calculator.toggleFavorite()
+        precondition(CalculatorModel(defaults: defaults).savedPresets.isEmpty)
     }
 
     private static func verifyLocalPersistence() {

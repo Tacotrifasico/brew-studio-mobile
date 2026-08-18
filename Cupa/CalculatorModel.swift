@@ -46,7 +46,7 @@ final class CalculatorModel: ObservableObject {
         "Chemex": 16, "Espresso": 2, "Moka": 10, "Cold brew": 8
     ]
 
-    private let defaults = [
+    private let builtInPresets = [
         BrewPreset(id: "default_1", method: "V60", coffee: 15, ratio: 16, isCustom: false),
         BrewPreset(id: "default_2", method: "AeroPress", coffee: 18, ratio: 13, isCustom: false),
         BrewPreset(id: "default_3", method: "Prensa francesa", coffee: 20, ratio: 15, isCustom: false),
@@ -56,7 +56,9 @@ final class CalculatorModel: ObservableObject {
         BrewPreset(id: "default_7", method: "Cold brew", coffee: 50, ratio: 8, isCustom: false)
     ]
 
-    var presets: [BrewPreset] { savedPresets + defaults }
+    private let userDefaults: UserDefaults
+
+    var presets: [BrewPreset] { savedPresets + builtInPresets }
 
     var category: RatioCategory {
         if ratio <= 3 { return .espresso }
@@ -71,8 +73,9 @@ final class CalculatorModel: ObservableObject {
         }
     }
 
-    init() {
-        if let data = UserDefaults.standard.data(forKey: "cupa.savedRatios"),
+    init(defaults: UserDefaults = .standard) {
+        userDefaults = defaults
+        if let data = defaults.data(forKey: "cupa.savedRatios"),
            let decoded = try? JSONDecoder().decode([BrewPreset].self, from: data) {
             savedPresets = decoded
         }
@@ -154,7 +157,7 @@ final class CalculatorModel: ObservableObject {
             microcopy = "Proporción guardada en favoritos."
         }
         if let data = try? JSONEncoder().encode(savedPresets) {
-            UserDefaults.standard.set(data, forKey: "cupa.savedRatios")
+            userDefaults.set(data, forKey: "cupa.savedRatios")
         }
     }
 

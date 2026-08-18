@@ -9,7 +9,7 @@ Estados permitidos: No iniciado, Parcial, Implementado sin validar, Validado, Bl
 | Calculadora | Cálculo ratio → agua | `onRatioChanged` | Validado | Local | Parcial | XCTest compilado + prueba de paridad | Ninguno | Paridad para límites y decimales | Validado |
 | Calculadora | Cálculo agua → café | `onWaterChanged` | Validado | Local | Parcial | XCTest compilado + prueba de paridad | Ninguno | Mismo redondeo a un decimal | Validado |
 | Calculadora | Métodos y ratios base | `baseRatios` | Validado | Local | Parcial | Siete métodos cubiertos por XCTest | Ninguno | Siete métodos equivalentes | Validado |
-| Calculadora | Presets y favoritos | `defaultPresets`, Room | Parcial | UserDefaults | Parcial | Pendiente | Ninguno | Persistencia y edición equivalentes | Parcial |
+| Calculadora | Presets y favoritos | `defaultPresets`, Room | Validado | UserDefaults | Implementado sin validar | Alta, reapertura y eliminación ejecutadas | Ninguno | Persistencia y edición equivalentes | Validado |
 | Calculadora | Transferencia a Preparación | `onActionPrepare` | Implementado sin validar | UserDefaults | Implementado sin validar | Verificador ejecutable + XCTest compilado | Ejecución UI pendiente por CoreSimulator | Todos los parámetros y pasos transferidos | Implementado sin validar |
 | Calculadora | Transferencia a Laboratorio | `onActionLab` | Implementado sin validar | UserDefaults | Parcial | Compilación | Flujo UI pendiente | Estado compartido exacto | Implementado sin validar |
 | Laboratorio | Motor sensorial continuo | `calculateLabProfile` | Validado | Local | Parcial | 4 golden tests ejecutados | Ninguno | Golden tests con fórmula exacta | Validado |

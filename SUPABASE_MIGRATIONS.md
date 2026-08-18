@@ -2,7 +2,7 @@
 
 Referencia original: `supabase/migrations/001_brew_studio_schema.sql` del proyecto Android.
 
-La migración idempotente `supabase/migrations/202608170001_ios_core_schema.sql` prepara perfiles, inventario, recetas, técnicas, sesiones de preparación, catas, observaciones y tazas. Incluye UUID estables, propiedad, fechas, versión, borrado lógico, claves foráneas, restricciones, índices y políticas RLS `owner_id = auth.uid()` para todas las entidades privadas.
+La migración idempotente `supabase/migrations/202608170001_ios_core_schema.sql` prepara perfiles, inventario, recetas, técnicas, sesiones de preparación, catas, observaciones, tazas y el registro de cuota de IA. Incluye UUID estables, propiedad, fechas, versión, borrado lógico, claves foráneas, restricciones, índices y políticas RLS `owner_id = auth.uid()` para todas las entidades privadas.
 
 Antes de producción se requiere:
 

@@ -310,6 +310,15 @@ final class AccountAndSyncTests: XCTestCase {
         XCTAssertNil(transport.requests.first?.value(forHTTPHeaderField: "Authorization"))
     }
 
+    func testAccountDeletionUsesAuthenticatedEdgeFunction() async throws {
+        let transport = MockTransport(responseData: Data("{\"deleted\":true}".utf8))
+        let service = SupabaseAccountService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
+        try await service.deleteAccount(accessToken: "user-jwt", confirmation: "ELIMINAR")
+        XCTAssertEqual(transport.requests.first?.url?.path, "/functions/v1/delete-account")
+        XCTAssertEqual(transport.requests.first?.value(forHTTPHeaderField: "Authorization"), "Bearer user-jwt")
+        XCTAssertFalse(String(data: transport.requests.first?.httpBody ?? Data(), encoding: .utf8)?.contains("service_role") == true)
+    }
+
     @MainActor func testConflictResolutionAndPersistentRetryOutbox() throws {
         let owner = UUID(); let older = Date(timeIntervalSince1970: 100); let newer = Date(timeIntervalSince1970: 200)
         XCTAssertEqual(LastWriteWinsResolver.resolve(local: .init(ownerId: owner, updatedAt: newer, version: 2, deletedAt: nil), remote: .init(ownerId: owner, updatedAt: older, version: 9, deletedAt: nil)), .local)
@@ -322,5 +331,20 @@ final class AccountAndSyncTests: XCTestCase {
         let now = Date(); try repository.markFailed(same, message: "offline", now: now)
         XCTAssertTrue(same.nextAttemptAt > now); XCTAssertTrue(try repository.ready(now: now).isEmpty)
         try repository.markSucceeded(same); XCTAssertTrue(try repository.ready(now: .distantFuture).isEmpty)
+    }
+
+    func testGeminiUsesAuthenticatedEdgeFunctionAndFallsBackLocally() async throws {
+        let state = LabState(waterMl: 270, ratio: 18, temperatureC: 84, grindClicks: 32, freshness: "viejo", timeSeconds: 80)
+        let input = SuggestionContext(state: state, profile: LabEngine.calculate(state))
+        let remote = BrewSuggestion(text: "Ajusta una sola variable.", source: .gemini, promptVersion: "brew-adjustment-v1")
+        let transport = MockTransport(responseData: try JSONEncoder().encode(remote))
+        let service = GeminiSuggestionService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
+        let result = await service.suggest(input, accessToken: "user-jwt")
+        XCTAssertEqual(result, remote)
+        XCTAssertEqual(transport.requests.first?.url?.path, "/functions/v1/gemini-suggestions")
+        XCTAssertEqual(transport.requests.first?.value(forHTTPHeaderField: "Authorization"), "Bearer user-jwt")
+
+        let fallback = await GeminiSuggestionService(configuration: .init(supabaseURL: nil, supabaseAnonKey: nil), transport: transport).suggest(input, accessToken: nil)
+        XCTAssertEqual(fallback.source, .local); XCTAssertTrue(fallback.text.contains("extracción estimada es baja"))
     }
 }

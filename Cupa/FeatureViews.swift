@@ -241,6 +241,7 @@ struct LabView: View {
         animation: .default
     ) private var experiments: FetchedResults<LabExperimentRecord>
     @ObservedObject var model: LabModel
+    @ObservedObject var account: AccountModel
     @Binding var selection: CupaTab
     @State private var category = LabControlCategory.extraction
     @State private var altitudeExpanded = false
@@ -248,6 +249,8 @@ struct LabView: View {
     @State private var customCity = ""
     @State private var customAltitude = ""
     @State private var saveConfirmation = false
+    @State private var suggestion: BrewSuggestion?
+    @State private var suggestionLoading = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -262,6 +265,7 @@ struct LabView: View {
                     )
                     hypothesisCard
                     sensoryCard
+                    suggestionCard
                     Picker("Variables", selection: $category) {
                         ForEach(LabControlCategory.allCases) { Text($0.rawValue).tag($0) }
                     }
@@ -437,6 +441,26 @@ struct LabView: View {
                         Text(experiment.createdAt, style: .date).font(.caption2)
                     }
                 }
+            }
+        }
+    }
+
+    private var suggestionCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack { Label("Sugerencia de ajuste", systemImage: "sparkles").font(.headline); Spacer(); if suggestionLoading { ProgressView() } }
+                if let suggestion {
+                    Text(suggestion.text).font(.subheadline)
+                    Text(suggestion.source == .gemini ? "Sugerencia generada por IA · confirma antes de cambiar tu receta" : "Sugerencia local · disponible sin conexión")
+                        .font(.caption2).foregroundStyle(CupaTheme.secondaryText)
+                } else {
+                    Text("Obtén una interpretación sin alterar los cálculos ni tus datos guardados.").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                }
+                Button("Analizar este perfil") {
+                    suggestionLoading = true
+                    let input = SuggestionContext(state: model.state, profile: model.profile)
+                    Task { suggestion = await GeminiSuggestionService(configuration: account.configuration).suggest(input, accessToken: account.tokens?.accessToken); suggestionLoading = false }
+                }.buttonStyle(.bordered).disabled(suggestionLoading)
             }
         }
     }

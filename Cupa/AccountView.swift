@@ -4,6 +4,7 @@ struct AccountView: View {
     @ObservedObject var model: AccountModel
     @Environment(\.dismiss) private var dismiss
     @State private var email = ""; @State private var password = ""; @State private var confirmation = ""
+    @State private var deleteConfirmation = ""
 
     var body: some View {
         NavigationStack {
@@ -14,7 +15,12 @@ struct AccountView: View {
                 case let .signedIn(tokens):
                     Section("Sesión") { LabeledContent("Correo", value: tokens.email); LabeledContent("Usuario", value: tokens.userId.uuidString) }
                     Button("Cerrar sesión", role: .destructive) { Task { await model.signOut() } }
-                    Section { Text("La eliminación de cuenta se habilitará mediante una función segura de servidor para borrar o anonimizar los datos asociados.").font(.caption).foregroundStyle(.secondary) }
+                    Section("Eliminar cuenta y datos") {
+                        Text("Esta acción elimina la cuenta y los datos asociados. Escribe ELIMINAR para confirmarla.").font(.caption).foregroundStyle(.secondary)
+                        TextField("ELIMINAR", text: $deleteConfirmation).textInputAutocapitalization(.characters)
+                        Button("Eliminar definitivamente", role: .destructive) { Task { await model.deleteAccount(confirmation: deleteConfirmation) } }
+                            .disabled(deleteConfirmation != "ELIMINAR")
+                    }
                 case .loading:
                     HStack { ProgressView(); Text("Conectando…") }
                 case .signedOut, .error:

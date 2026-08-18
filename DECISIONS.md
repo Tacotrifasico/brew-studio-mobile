@@ -47,3 +47,7 @@ Una `Tasting` puede guardarse sin preparación y enlazarse opcionalmente a un `B
 ## D-012 — Tokens en Keychain y outbox persistente
 
 La sesión Supabase se guarda en Keychain con acceso posterior al primer desbloqueo y nunca en `UserDefaults`. La anon key es configuración pública por ambiente; `service_role` está prohibida en el cliente. Las mutaciones offline se compactan por entidad en una outbox Core Data, reintentan con espera exponencial y resuelven conflictos primero por `updated_at` y después por versión. Una diferencia de propietario nunca se combina y se trata como violación de aislamiento.
+
+## D-013 — Gemini opcional y autenticado
+
+El cliente envía sólo entradas numéricas y de método a una Edge Function con JWT de usuario. La función valida, limita a cinco solicitudes por minuto, aplica timeout y usa `GEMINI_API_KEY` únicamente en servidor. Gemini interpreta resultados ya calculados; nunca produce el índice ni las puntuaciones. Cualquier ausencia de sesión, red, cuota, timeout o salida inválida activa una sugerencia local determinista y claramente etiquetada.

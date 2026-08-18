@@ -133,6 +133,11 @@ create table if not exists public.cup_sessions (
   created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1, deleted_at timestamptz
 );
 
+create table if not exists public.ai_request_log (
+  id uuid primary key default gen_random_uuid(), owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  prompt_version text not null, created_at timestamptz not null default now()
+);
+
 create index if not exists coffee_beans_owner_updated_idx on public.coffee_beans(owner_id, updated_at);
 create index if not exists grinders_owner_updated_idx on public.grinders(owner_id, updated_at);
 create index if not exists equipment_owner_updated_idx on public.equipment(owner_id, updated_at);
@@ -145,6 +150,7 @@ create index if not exists brew_sessions_owner_updated_idx on public.brew_sessio
 create index if not exists tastings_owner_updated_idx on public.tastings(owner_id, updated_at);
 create index if not exists tasting_observations_parent_idx on public.tasting_observations(tasting_id, elapsed_seconds);
 create index if not exists cup_sessions_owner_updated_idx on public.cup_sessions(owner_id, updated_at);
+create index if not exists ai_request_log_owner_created_idx on public.ai_request_log(owner_id, created_at desc);
 
 do $$
 declare table_name text;
@@ -153,6 +159,7 @@ begin
   loop
     execute format('alter table public.%I enable row level security', table_name);
   end loop;
+  alter table public.ai_request_log enable row level security;
 end $$;
 
 do $$
@@ -167,6 +174,10 @@ begin
   end loop;
   begin
     create policy profiles_owner_all on public.profiles for all to authenticated using (id = auth.uid()) with check (id = auth.uid());
+  exception when duplicate_object then null;
+  end;
+  begin
+    create policy ai_request_log_owner_all on public.ai_request_log for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
   exception when duplicate_object then null;
   end;
 end $$;

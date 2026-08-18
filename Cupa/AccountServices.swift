@@ -111,6 +111,22 @@ struct SupabaseAuthService {
     }
 }
 
+struct SupabaseAccountService {
+    let configuration: AppConfiguration; let transport: NetworkTransport
+    init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
+    func deleteAccount(accessToken: String, confirmation: String) async throws {
+        guard let base = configuration.supabaseURL, let key = configuration.supabaseAnonKey, !key.isEmpty else { throw AuthServiceError.notConfigured }
+        var request = URLRequest(url: base.appendingPathComponent("functions/v1/delete-account")); request.httpMethod = "POST"; request.timeoutInterval = 30
+        request.setValue(key, forHTTPHeaderField: "apikey"); request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type"); request.httpBody = try JSONEncoder().encode(["confirmation": confirmation])
+        let (data, response) = try await transport.data(for: request)
+        guard (200..<300).contains(response.statusCode) else {
+            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            throw AuthServiceError.server(response.statusCode, object?["error"] as? String ?? "No se pudo eliminar la cuenta.")
+        }
+    }
+}
+
 @MainActor
 final class AccountModel: ObservableObject {
     enum State: Equatable { case unavailable, signedOut, loading, signedIn(AuthTokens), error(String) }
@@ -140,6 +156,14 @@ final class AccountModel: ObservableObject {
         if let access { try? await service.signOut(accessToken: access) }
         do { try store.clear(); state = configuration.isSupabaseConfigured ? .signedOut : .unavailable }
         catch { state = .error(error.localizedDescription) }
+    }
+    func deleteAccount(confirmation: String) async {
+        guard let access = tokens?.accessToken else { state = .error("No hay una sesión activa."); return }
+        state = .loading
+        do {
+            try await SupabaseAccountService(configuration: configuration, transport: service.transport).deleteAccount(accessToken: access, confirmation: confirmation)
+            try store.clear(); state = .signedOut
+        } catch { state = .error(error.localizedDescription) }
     }
 
     private func perform(_ operation: () async throws -> AuthTokens) async {

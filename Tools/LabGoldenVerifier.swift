@@ -34,7 +34,8 @@ struct LabGoldenVerifier {
         verifyPreparationRecovery()
         verifyTastingCoolingAndPersistence()
         verifySyncConflictAndOutbox()
-        print("4 golden tests, agregados, preparación, cata y outbox aprobados")
+        verifyLocalSuggestionFallback()
+        print("4 golden tests, agregados, preparación, cata, outbox y fallback IA aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -171,5 +172,11 @@ struct LabGoldenVerifier {
         let now = Date(); try! repository.markFailed(same, message: "offline", now: now)
         precondition((try! repository.ready(now: now)).isEmpty && same.nextAttemptAt > now)
         try! repository.markSucceeded(same); precondition((try! repository.ready(now: .distantFuture)).isEmpty)
+    }
+
+    private static func verifyLocalSuggestionFallback() {
+        let state = LabState(waterMl: 270, ratio: 18, temperatureC: 84, grindClicks: 32, freshness: "viejo", timeSeconds: 80)
+        let suggestion = LocalSuggestionEngine.suggest(.init(state: state, profile: LabEngine.calculate(state)))
+        precondition(suggestion.source == .local && suggestion.text.contains("extracción estimada es baja"))
     }
 }

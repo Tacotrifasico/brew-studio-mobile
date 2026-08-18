@@ -12,6 +12,8 @@ Esta etapa incluye navegación principal, diseño visual base, calculadora bidir
 
 La pantalla de cuenta está preparada para Supabase Auth y almacena tokens en Keychain. La sincronización dispone de outbox persistente, reintentos y resolución de conflictos; la migración y RLS están en `supabase/migrations`. Mientras no se definan `SUPABASE_URL` y `SUPABASE_ANON_KEY`, la app indica que la cuenta aún no está conectada y todos los módulos locales siguen funcionando.
 
+Gemini se invoca únicamente desde una Edge Function autenticada y la app conserva un fallback local. Las instrucciones de configuración, despliegue y Archive están en `DEPLOYMENT.md`.
+
 El target `CupaTests` contiene pruebas XCTest. Si CoreSimulator no inicia, `Tools/LabGoldenVerifier.swift` valida cuatro casos dorados, restauración de estado y persistencia Core Data desde macOS; el comando está en `TEST_PLAN.md`.
 
 Supabase, sincronización multiusuario, Gemini mediante backend y los demás CRUD siguen el estado documentado en `PARITY_MATRIX.md` y `BLOCKERS.md`.

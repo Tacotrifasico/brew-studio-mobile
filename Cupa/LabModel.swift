@@ -12,6 +12,10 @@ struct CoffeeCity: Identifiable, Equatable {
     let altitudeMeters: Int
     let name: String
     var id: String { "\(name)-\(altitudeMeters)" }
+
+    func isSelected(altitudeMeters: Int, cityName: String) -> Bool {
+        self.altitudeMeters == altitudeMeters && (cityName == name || cityName.hasPrefix(label))
+    }
 }
 
 struct LabFlavorProfile: Equatable {
@@ -192,15 +196,16 @@ final class LabModel: ObservableObject {
     @Published var state: LabState { didSet { persist() } }
     private let defaults: UserDefaults
     private let storageKey = "cupa.labState.v1"
+    private let temperaturePreferenceKey = "settings.temperature"
 
     static let cities = [
         CoffeeCity(label: "Costa / Mar", altitudeMeters: 0, name: "Costa (0m)"),
         CoffeeCity(label: "Seattle / Tokio", altitudeMeters: 50, name: "Seattle/Tokio (50m)"),
-        CoffeeCity(label: "Roma / París", altitudeMeters: 100, name: "Roma/París (100m)"),
+        CoffeeCity(label: "Roma / Paris", altitudeMeters: 100, name: "Roma/París (100m)"),
         CoffeeCity(label: "São Paulo", altitudeMeters: 760, name: "São Paulo (760m)"),
-        CoffeeCity(label: "San José CR", altitudeMeters: 1170, name: "San José (1,170m)"),
         CoffeeCity(label: "Medellín", altitudeMeters: 1495, name: "Medellín (1,495m)"),
         CoffeeCity(label: "Guatemala", altitudeMeters: 1500, name: "Guatemala (1,500m)"),
+        CoffeeCity(label: "San José CR", altitudeMeters: 1170, name: "San José (1,170m)"),
         CoffeeCity(label: "CDMX / Oaxaca", altitudeMeters: 2240, name: "CDMX (2,240m)"),
         CoffeeCity(label: "Addis Abeba", altitudeMeters: 2355, name: "Addis Abeba (2,355m)"),
         CoffeeCity(label: "Bogotá", altitudeMeters: 2600, name: "Bogotá (2,600m)"),
@@ -214,14 +219,21 @@ final class LabModel: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: storageKey), let decoded = try? JSONDecoder().decode(LabState.self, from: data) {
-            state = decoded
+        var restored = defaults.data(forKey: storageKey).flatMap { try? JSONDecoder().decode(LabState.self, from: $0) } ?? LabState()
+        if let rawUnit = defaults.string(forKey: temperaturePreferenceKey), let unit = TemperatureUnit(rawValue: rawUnit) {
+            restored.temperatureUnit = unit
         } else {
-            state = LabState()
+            // Migra la preferencia que versiones anteriores guardaban sólo dentro del estado del Laboratorio.
+            defaults.set(restored.temperatureUnit.rawValue, forKey: temperaturePreferenceKey)
         }
+        state = restored
     }
 
     func update(_ change: (inout LabState) -> Void) { change(&state) }
+    func setTemperatureUnit(_ unit: TemperatureUnit) {
+        defaults.set(unit.rawValue, forKey: temperaturePreferenceKey)
+        update { $0.temperatureUnit = unit }
+    }
     func selectCity(_ city: CoffeeCity) { update { $0.altitudeMeters = city.altitudeMeters; $0.cityName = city.name } }
     func setManualAltitude(_ meters: Int, city: String? = nil) {
         let clamped = min(5000, max(0, meters))

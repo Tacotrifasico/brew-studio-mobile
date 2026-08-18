@@ -49,6 +49,34 @@ final class LabEngineParityTests: XCTestCase {
         let fahrenheit = LabEngine.fahrenheit(fromCelsius: 92)
         XCTAssertEqual(fahrenheit, 197.6, accuracy: 0.000_1)
         XCTAssertEqual(LabEngine.celsius(fromFahrenheit: fahrenheit), 92, accuracy: 0.000_1)
+        XCTAssertEqual(Int(roundf(LabEngine.fahrenheit(fromCelsius: LabEngine.boilingPointC(altitudeMeters: 2240)))), 198)
+    }
+
+    func testAltitudeCatalogAndBoundariesMatchAndroid() {
+        XCTAssertEqual(LabModel.cities.map(\.label), [
+            "Costa / Mar", "Seattle / Tokio", "Roma / Paris", "São Paulo", "Medellín", "Guatemala",
+            "San José CR", "CDMX / Oaxaca", "Addis Abeba", "Bogotá", "Cusco", "La Paz"
+        ])
+        XCTAssertEqual(LabModel.cities.map(\.altitudeMeters), [0, 50, 100, 760, 1495, 1500, 1170, 2240, 2355, 2600, 3399, 3640])
+        XCTAssertEqual(LabEngine.boilingPointC(altitudeMeters: -1), 100, accuracy: 0.000_1)
+        XCTAssertEqual(LabEngine.boilingPointC(altitudeMeters: 5_000), 83, accuracy: 0.000_1)
+        XCTAssertEqual(LabEngine.boilingPointC(altitudeMeters: 8_000), 83, accuracy: 0.000_1)
+
+        let cdmx = try! XCTUnwrap(LabModel.cities.first { $0.altitudeMeters == 2240 })
+        XCTAssertTrue(cdmx.isSelected(altitudeMeters: 2240, cityName: "CDMX (2,240m)"))
+        XCTAssertFalse(cdmx.isSelected(altitudeMeters: 2240, cityName: "Manual (2240m)"))
+    }
+
+    func testManualAltitudeClampsToReferenceRange() throws {
+        let suite = "LabEngineParityTests.clamp.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = LabModel(defaults: defaults)
+        model.setManualAltitude(-25)
+        XCTAssertEqual(model.state.altitudeMeters, 0)
+        model.setManualAltitude(5_025, city: "Quito")
+        XCTAssertEqual(model.state.altitudeMeters, 5_000)
+        XCTAssertEqual(model.state.cityName, "Quito (5000m)")
     }
 
     func testLabStatePersistsBetweenModels() throws {
@@ -57,12 +85,17 @@ final class LabEngineParityTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let first = LabModel(defaults: defaults)
         first.setManualAltitude(2240, city: "CDMX")
-        first.update { $0.temperatureUnit = .fahrenheit; $0.timeSeconds = 205 }
+        first.update { $0.timeSeconds = 205 }
+        first.setTemperatureUnit(.fahrenheit)
+        XCTAssertEqual(defaults.string(forKey: "settings.temperature"), TemperatureUnit.fahrenheit.rawValue)
         let restored = LabModel(defaults: defaults)
         XCTAssertEqual(restored.state.altitudeMeters, 2240)
         XCTAssertEqual(restored.state.cityName, "CDMX (2240m)")
         XCTAssertEqual(restored.state.temperatureUnit, .fahrenheit)
         XCTAssertEqual(restored.state.timeSeconds, 205)
+
+        defaults.set(TemperatureUnit.celsius.rawValue, forKey: "settings.temperature")
+        XCTAssertEqual(LabModel(defaults: defaults).state.temperatureUnit, .celsius)
     }
 }
 

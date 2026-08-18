@@ -55,8 +55,11 @@ struct AppShell: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
         }
-        .task { lab.update { $0.temperatureUnit = settings.temperatureUnit }; await account.restoreAndRefreshIfNeeded() }
-        .onChange(of: settings.temperatureUnit) { _, unit in lab.update { $0.temperatureUnit = unit } }
+        .task { lab.setTemperatureUnit(settings.temperatureUnit); await account.restoreAndRefreshIfNeeded() }
+        .onChange(of: settings.temperatureUnit) { _, unit in lab.setTemperatureUnit(unit) }
+        .onChange(of: lab.state.temperatureUnit) { _, unit in
+            if settings.temperatureUnit != unit { settings.temperatureUnit = unit }
+        }
         .onChange(of: account.tokens) { _, tokens in
             guard let tokens else { return }
             Task { await EntitySyncCoordinator(context: context, configuration: account.configuration).sync(ownerId: tokens.userId, accessToken: tokens.accessToken) }

@@ -143,3 +143,7 @@ Una cata completada no admite reinicio ni nuevas observaciones: para otra evalua
 ## D-036 — Validación estricta y recuperación no destructiva
 
 El café se valida antes de tocar Core Data: altitud, cantidades finitas, existencias no mayores a la cantidad inicial y fechas coherentes. Los borrados y reinicios con información relevante se realizan desde un detalle o diálogo que explica su alcance; se eliminan los atajos de deslizar que omitían esa confirmación. Si el SQLite local no puede abrirse, la app conserva el archivo original, inicia un almacén temporal en memoria y muestra una advertencia persistente en vez de terminar con `fatalError`; así permite recuperar la interfaz sin ocultar que esa sesión no persistirá cambios.
+
+## D-037 — Una sola preferencia térmica y selección geográfica exacta
+
+Celsius/Fahrenheit usa `settings.temperature` como única preferencia entre Configuración y Laboratorio. El estado anterior del Laboratorio se migra a esa clave cuando todavía no existe y después siempre respeta la elección global, evitando volver silenciosamente a Celsius tras reiniciar. La temperatura de cálculo y de persistencia permanece en Celsius; Fahrenheit sólo convierte y redondea la presentación, igual que Android. Una ciudad se considera seleccionada únicamente cuando coinciden altitud e identidad, para que una calibración manual a la misma elevación no aparente ser una ciudad predefinida.

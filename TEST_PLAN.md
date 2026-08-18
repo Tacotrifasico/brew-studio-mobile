@@ -31,6 +31,8 @@
 - Calculadora: restauración de método/café/ratio/agua y pasos rápidos V60, AeroPress y Espresso: aprobados.
 - Calculadora: cuatro métodos fijados iniciales, personalización persistente, método de equipo con ratio de respaldo 1:15 y conservación de su UUID en favorito, Laboratorio y Preparación: verificador ejecutado + XCTest y recorrido del gestor compilados.
 - Restauración de altitud, unidad y tiempo mediante `UserDefaults`: aprobada.
+- Laboratorio geográfico: las 12 ciudades y su orden/altitud coinciden con `LabAltitudeHeaderCard.kt`; selección ciudad frente a manual, límites negativos/superiores a 5,000 m y hervor de 83 °C a 5,000 m ejecutados.
+- Laboratorio térmico: conversión reversible, hervor CDMX mostrado como 198 °F, migración de la preferencia anterior y clave compartida con Configuración ejecutados; recorrido UI de ciudad personalizada y selector °C/°F compilado.
 - Frescura de café: cortes exactos en 7/21/35/60 días, interpolación hasta 100%, fecha futura, ausencia de fecha y alerta tras 14 días abierta: aprobados.
 - Alta, consulta y borrado lógico de café y molino; alta y actualización de equipo; alta de experimento en Core Data en memoria: aprobados.
 - Persistencia local real: café con UUID, fecha, origen y existencias guardado en SQLite, store desmontado y recuperado desde un segundo `NSPersistentContainer`: aprobado.

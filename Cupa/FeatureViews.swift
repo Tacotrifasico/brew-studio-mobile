@@ -487,12 +487,14 @@ struct LabView: View {
                             Text(model.state.cityName).font(.subheadline.bold()).foregroundStyle(CupaTheme.text)
                             Text("Hervor: \(boilingText) · \(model.state.altitudeMeters) msnm")
                                 .font(.caption).foregroundStyle(isTemperatureCapped ? .orange : CupaTheme.secondaryText)
+                                .accessibilityIdentifier("lab.altitude.summary")
                         }
                         Spacer()
                         Image(systemName: altitudeExpanded ? "chevron.up" : "chevron.down")
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("lab.altitude.toggle")
 
                 if isTemperatureCapped {
                     Label("La temperatura real queda limitada al punto de ebullición local.", systemImage: "exclamationmark.triangle.fill")
@@ -505,7 +507,8 @@ struct LabView: View {
                             ForEach(LabModel.cities) { city in
                                 Button(city.label) { model.selectCity(city) }
                                     .buttonStyle(.bordered)
-                                    .tint(model.state.altitudeMeters == city.altitudeMeters ? CupaTheme.forest : CupaTheme.secondaryText)
+                                    .tint(city.isSelected(altitudeMeters: model.state.altitudeMeters, cityName: model.state.cityName) ? CupaTheme.forest : CupaTheme.secondaryText)
+                                    .accessibilityIdentifier("lab.altitude.city.\(city.altitudeMeters)")
                             }
                         }
                     }
@@ -520,6 +523,7 @@ struct LabView: View {
                         Label("Agregar mi ciudad y altura", systemImage: "location.badge.plus")
                     }
                     .buttonStyle(.bordered)
+                    .accessibilityIdentifier("lab.altitude.custom")
                 }
             }
         }
@@ -594,9 +598,9 @@ struct LabView: View {
                     labSlider("Ratio", value: bindingFloat(\.ratio), range: 8...22, step: 0.5, display: "1:\(String(format: "%.1f", model.state.ratio))")
                     labSlider("Tiempo", value: bindingInt(\.timeSeconds), range: 60...360, step: 5, display: formattedTime)
                 case .extraction:
-                    Picker("Unidad", selection: binding(\.temperatureUnit)) {
+                    Picker("Unidad", selection: Binding(get: { model.state.temperatureUnit }, set: model.setTemperatureUnit)) {
                         Text("°C").tag(TemperatureUnit.celsius); Text("°F").tag(TemperatureUnit.fahrenheit)
-                    }.pickerStyle(.segmented)
+                    }.pickerStyle(.segmented).accessibilityIdentifier("lab.temperature.unit")
                     labSlider("Temperatura", value: bindingInt(\.temperatureC), range: 80...98, step: 1, display: temperatureText)
                     labSlider("Clicks de molienda", value: bindingInt(\.grindClicks), range: 6...36, step: 1, display: "\(model.state.grindClicks) clicks")
                 case .bean:
@@ -618,7 +622,7 @@ struct LabView: View {
                         Button { model.load(experiment: experiment) } label: {
                             VStack(alignment: .leading) {
                                 Text(experiment.method).font(.subheadline.bold())
-                                Text("1:\(experiment.ratio.formatted(.number.precision(.fractionLength(1)))) · \(experiment.temperatureC)°C · \(experiment.cityName)")
+                                Text("1:\(experiment.ratio.formatted(.number.precision(.fractionLength(1)))) · \(experimentTemperatureText(experiment)) · \(experiment.cityName)")
                                     .font(.caption).foregroundStyle(CupaTheme.secondaryText)
                             }
                         }.buttonStyle(.plain).accessibilityLabel("Cargar experimento de \(experiment.method)")
@@ -723,6 +727,11 @@ struct LabView: View {
         model.state.temperatureUnit == .celsius
             ? "\(model.state.temperatureC) °C"
             : "\(Int(roundf(LabEngine.fahrenheit(fromCelsius: Float(model.state.temperatureC))))) °F"
+    }
+    private func experimentTemperatureText(_ experiment: LabExperimentRecord) -> String {
+        model.state.temperatureUnit == .celsius
+            ? "\(experiment.temperatureC) °C"
+            : "\(Int(roundf(LabEngine.fahrenheit(fromCelsius: Float(experiment.temperatureC))))) °F"
     }
     private var formattedTime: String { String(format: "%d:%02d min", model.state.timeSeconds / 60, model.state.timeSeconds % 60) }
     private var primaryOutcome: String {

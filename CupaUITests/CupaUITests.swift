@@ -72,4 +72,26 @@ final class CupaUITests: XCTestCase {
         app.buttons["home.profile"].tap()
         XCTAssertTrue(app.navigationBars["Brew Studio Hub"].waitForExistence(timeout: 3))
     }
+
+    func testLabAltitudeAndTemperatureUnitFlow() {
+        app.tabBars.buttons["Laboratorio"].tap()
+        XCTAssertTrue(app.navigationBars["Laboratorio"].waitForExistence(timeout: 3))
+
+        app.buttons["lab.altitude.toggle"].tap()
+        XCTAssertTrue(app.buttons["lab.altitude.custom"].waitForExistence(timeout: 2))
+        app.buttons["lab.altitude.custom"].tap()
+        let city = app.textFields["Ciudad"]
+        XCTAssertTrue(city.waitForExistence(timeout: 2))
+        city.tap(); city.typeText("CDMX")
+        let altitude = app.textFields["Altitud (msnm)"]
+        altitude.tap(); altitude.typeText("2240")
+        app.buttons["Guardar"].tap()
+        XCTAssertTrue(app.staticTexts["lab.altitude.summary"].label.contains("2240"))
+
+        let units = app.segmentedControls["lab.temperature.unit"]
+        for _ in 0..<5 where !units.isHittable { app.swipeUp() }
+        XCTAssertTrue(units.waitForExistence(timeout: 2))
+        units.buttons["°F"].tap()
+        XCTAssertTrue(units.buttons["°F"].isSelected)
+    }
 }

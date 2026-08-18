@@ -29,6 +29,7 @@ struct LabGoldenVerifier {
             scores: [78, 22, 32, 76, 84, 42]
         )
         verifyStateRestoration()
+        verifyAltitudeCatalogAndTemperaturePreference()
         verifyCoffeeFreshnessParity()
         verifyCoffeeInputValidation()
         verifyCoffeeInventoryActions()
@@ -48,7 +49,7 @@ struct LabGoldenVerifier {
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
-        print("4 golden tests, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, sincronización, IA, perfil y social aprobados")
+        print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, sincronización, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -107,11 +108,27 @@ struct LabGoldenVerifier {
         defer { defaults.removePersistentDomain(forName: suite) }
         let first = LabModel(defaults: defaults)
         first.setManualAltitude(2240, city: "CDMX")
-        first.update { $0.temperatureUnit = .fahrenheit; $0.timeSeconds = 205 }
+        first.update { $0.timeSeconds = 205 }
+        first.setTemperatureUnit(.fahrenheit)
         let restored = LabModel(defaults: defaults)
         precondition(restored.state.altitudeMeters == 2240)
         precondition(restored.state.temperatureUnit == .fahrenheit)
         precondition(restored.state.timeSeconds == 205)
+        precondition(defaults.string(forKey: "settings.temperature") == TemperatureUnit.fahrenheit.rawValue)
+    }
+
+    private static func verifyAltitudeCatalogAndTemperaturePreference() {
+        precondition(LabModel.cities.map(\.altitudeMeters) == [0, 50, 100, 760, 1495, 1500, 1170, 2240, 2355, 2600, 3399, 3640])
+        precondition(LabModel.cities.map(\.label) == [
+            "Costa / Mar", "Seattle / Tokio", "Roma / Paris", "São Paulo", "Medellín", "Guatemala",
+            "San José CR", "CDMX / Oaxaca", "Addis Abeba", "Bogotá", "Cusco", "La Paz"
+        ])
+        precondition(abs(LabEngine.boilingPointC(altitudeMeters: -1) - 100) < 0.000_1)
+        precondition(abs(LabEngine.boilingPointC(altitudeMeters: 5_000) - 83) < 0.000_1)
+        precondition(Int(roundf(LabEngine.fahrenheit(fromCelsius: LabEngine.boilingPointC(altitudeMeters: 2240)))) == 198)
+        let cdmx = LabModel.cities.first { $0.altitudeMeters == 2240 }!
+        precondition(cdmx.isSelected(altitudeMeters: 2240, cityName: "CDMX (2,240m)"))
+        precondition(!cdmx.isSelected(altitudeMeters: 2240, cityName: "Manual (2240m)"))
     }
 
     private static func verifyCoffeeFreshnessParity() {

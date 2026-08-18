@@ -31,3 +31,7 @@ La temperatura se almacena y calcula siempre en Celsius, como Android. Fahrenhei
 ## D-008 — Verificador dorado ejecutable
 
 Además de XCTest, `Tools/LabGoldenVerifier.swift` permite ejecutar el motor puro en macOS cuando CoreSimulator no está disponible. Sus valores esperados provienen literalmente de `calculateLabProfile` en el commit Android auditado y no se recalculan desde la implementación iOS.
+
+## D-009 — Agregados separados para receta y técnica
+
+`Recipe` posee ingredientes e instrucciones; `Technique` posee pasos ejecutables y sólo referencia opcionalmente una receta. Los hijos conservan UUID propios y metadatos de sincronización. La edición reconcilia por UUID, el reordenamiento actualiza índices y los elementos retirados se borran lógicamente para que una sincronización futura pueda propagarlos.

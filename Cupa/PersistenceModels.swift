@@ -197,10 +197,11 @@ extension EquipmentRecord: Identifiable {}
 
 struct PersistenceController {
     static let shared = PersistenceController()
+    private static let sharedModel = makeModel()
     let container: NSPersistentContainer
 
     init(inMemory: Bool = false) {
-        container = NSPersistentContainer(name: "Cupa", managedObjectModel: Self.makeModel())
+        container = NSPersistentContainer(name: "Cupa", managedObjectModel: Self.sharedModel)
         let description = NSPersistentStoreDescription()
         if inMemory {
             description.type = NSInMemoryStoreType
@@ -288,7 +289,68 @@ struct PersistenceController {
         ]
         equipmentEntity.uniquenessConstraints = [["id"]]
 
-        model.entities = [coffeeEntity, experimentEntity, grinderEntity, equipmentEntity]
+        let recipeEntity = NSEntityDescription()
+        recipeEntity.name = "RecipeRecord"; recipeEntity.managedObjectClassName = NSStringFromClass(RecipeRecord.self)
+        recipeEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("name", .stringAttributeType, defaultValue: ""), attribute("recipeKind", .stringAttributeType, defaultValue: "BLACK_COFFEE"),
+            attribute("intention", .stringAttributeType, defaultValue: ""), attribute("suggestedMethodId", .UUIDAttributeType, optional: true),
+            attribute("suggestedMethodName", .stringAttributeType, defaultValue: ""), attribute("isFavorite", .booleanAttributeType, defaultValue: false),
+            attribute("tags", .stringAttributeType, defaultValue: ""), attribute("visibility", .stringAttributeType, defaultValue: "PRIVATE"),
+            attribute("originalEntityId", .UUIDAttributeType, optional: true), attribute("rootEntityId", .UUIDAttributeType, optional: true),
+            attribute("copyMode", .stringAttributeType, defaultValue: "ORIGINAL")
+        ]
+        recipeEntity.uniquenessConstraints = [["id"]]
+
+        let ingredientEntity = NSEntityDescription()
+        ingredientEntity.name = "RecipeIngredientRecord"; ingredientEntity.managedObjectClassName = NSStringFromClass(RecipeIngredientRecord.self)
+        ingredientEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("recipeId", .UUIDAttributeType), attribute("name", .stringAttributeType, defaultValue: ""),
+            attribute("amount", .doubleAttributeType, defaultValue: 0), attribute("unit", .stringAttributeType, defaultValue: "GRAMS"),
+            attribute("orderIndex", .integer64AttributeType, defaultValue: 0)
+        ]
+        ingredientEntity.uniquenessConstraints = [["id"]]
+
+        let recipeStepEntity = NSEntityDescription()
+        recipeStepEntity.name = "RecipeStepRecord"; recipeStepEntity.managedObjectClassName = NSStringFromClass(RecipeStepRecord.self)
+        recipeStepEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("recipeId", .UUIDAttributeType), attribute("instruction", .stringAttributeType, defaultValue: ""),
+            attribute("stepNumber", .integer64AttributeType, defaultValue: 1), attribute("durationSecondsValue", .integer64AttributeType, optional: true)
+        ]
+        recipeStepEntity.uniquenessConstraints = [["id"]]
+
+        let techniqueEntity = NSEntityDescription()
+        techniqueEntity.name = "TechniqueRecord"; techniqueEntity.managedObjectClassName = NSStringFromClass(TechniqueRecord.self)
+        techniqueEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("name", .stringAttributeType, defaultValue: ""), attribute("methodId", .UUIDAttributeType, optional: true),
+            attribute("methodName", .stringAttributeType, defaultValue: "V60"), attribute("recipeId", .UUIDAttributeType, optional: true),
+            attribute("beanId", .UUIDAttributeType, optional: true), attribute("grinderId", .UUIDAttributeType, optional: true),
+            attribute("doseGrams", .doubleAttributeType, defaultValue: 15), attribute("waterMl", .integer64AttributeType, defaultValue: 240),
+            attribute("ratio", .doubleAttributeType, defaultValue: 16), attribute("temperatureC", .integer64AttributeType, defaultValue: 93),
+            attribute("executionMode", .stringAttributeType, defaultValue: "GUIDED"), attribute("grindValue", .doubleAttributeType, defaultValue: 18),
+            attribute("grindDescription", .stringAttributeType, defaultValue: "18 Clicks"), attribute("grindUnit", .stringAttributeType, defaultValue: "CLICKS"),
+            attribute("notes", .stringAttributeType, defaultValue: ""), attribute("techniqueDescription", .stringAttributeType, defaultValue: ""),
+            attribute("totalTimeSeconds", .integer64AttributeType, defaultValue: 180), attribute("visibility", .stringAttributeType, defaultValue: "PRIVATE"),
+            attribute("originalEntityId", .UUIDAttributeType, optional: true), attribute("rootEntityId", .UUIDAttributeType, optional: true),
+            attribute("copyMode", .stringAttributeType, defaultValue: "ORIGINAL")
+        ]
+        techniqueEntity.uniquenessConstraints = [["id"]]
+
+        let techniqueStepEntity = NSEntityDescription()
+        techniqueStepEntity.name = "TechniqueStepRecord"; techniqueStepEntity.managedObjectClassName = NSStringFromClass(TechniqueStepRecord.self)
+        techniqueStepEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("techniqueId", .UUIDAttributeType), attribute("stepNumber", .integer64AttributeType, defaultValue: 1),
+            attribute("title", .stringAttributeType, defaultValue: ""), attribute("durationSeconds", .integer64AttributeType, defaultValue: 30),
+            attribute("waterAddedMl", .integer64AttributeType, defaultValue: 0), attribute("waterAccumulatedMl", .integer64AttributeType, defaultValue: 0),
+            attribute("intensity", .stringAttributeType, defaultValue: "MEDIUM"), attribute("gesture", .stringAttributeType, defaultValue: "CIRCULAR_POUR"),
+            attribute("stepNote", .stringAttributeType, defaultValue: ""), attribute("coverageValue", .doubleAttributeType, optional: true),
+            attribute("flowValue", .doubleAttributeType, optional: true), attribute("secondaryAction", .stringAttributeType, optional: true)
+        ]
+        techniqueStepEntity.uniquenessConstraints = [["id"]]
+
+        model.entities = [
+            coffeeEntity, experimentEntity, grinderEntity, equipmentEntity,
+            recipeEntity, ingredientEntity, recipeStepEntity, techniqueEntity, techniqueStepEntity
+        ]
         return model
     }
 

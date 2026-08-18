@@ -22,8 +22,8 @@ Estados permitidos: No iniciado, Parcial, Implementado sin validar, Validado, Bl
 | Cafés | Editar y borrado lógico | Android Room | Implementado sin validar | Core Data | Parcial | Compilación iPhone/simulador | Pruebas de historial pendientes | Historial no se corrompe | Implementado sin validar |
 | Molinos | CRUD | `Instrument`, `GrinderProfile` | Implementado sin validar | Core Data | Implementado sin validar | CRUD ejecutado + test target compilado | Flujo UI pendiente por CoreSimulator | CRUD persistente y sincronizable | Implementado sin validar |
 | Equipos | CRUD | Android `Instrument` | Implementado sin validar | Core Data | Implementado sin validar | CRUD ejecutado + test target compilado | Flujo UI pendiente por CoreSimulator | CRUD persistente y sincronizable | Implementado sin validar |
-| Recetas | CRUD, ingredientes y pasos | Android Room | No iniciado | Ninguno | No iniciado | Pendiente | Ninguno | Flujo offline completo | No iniciado |
-| Técnicas | CRUD y orden de pasos | Android Room | No iniciado | Ninguno | No iniciado | Pendiente | Ninguno | Entidad independiente y ejecutable | No iniciado |
+| Recetas | CRUD, duplicar, buscar, filtrar, ingredientes y pasos | Android Room | Implementado sin validar | Core Data | Implementado sin validar | Agregado ejecutado + test target compilado | Flujo UI pendiente por CoreSimulator | Flujo offline completo | Implementado sin validar |
+| Técnicas | CRUD, receta base y orden de pasos | Android Room | Implementado sin validar | Core Data | Implementado sin validar | Orden/agua acumulada ejecutados | Ejecución de preparación pendiente | Entidad independiente y ejecutable | Implementado sin validar |
 | Cata | Perfil y notas | `CataScreen.kt` | Parcial | Memoria | Parcial | Pendiente | Ninguno | Guardar/editar sesión real | Parcial |
 | Cata | Evolución de enfriamiento | Android ViewModel | No iniciado | Ninguno | No iniciado | Pendiente | Ninguno | Temporizador, etapas y recuperación | No iniciado |
 | Cuenta | Registro/login/sesión | Supabase Android | No iniciado | Ninguno | No iniciado | Pendiente | URL/anon key | Sesión recuperable y aislada | Bloqueado |

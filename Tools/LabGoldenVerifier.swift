@@ -3,7 +3,7 @@ import CoreData
 
 @main
 struct LabGoldenVerifier {
-    static func main() {
+    @MainActor static func main() {
         verify(
             name: "nivel-del-mar",
             input: LabState(),
@@ -30,7 +30,8 @@ struct LabGoldenVerifier {
         )
         verifyStateRestoration()
         verifyLocalPersistence()
-        print("4 golden tests, restauración de estado y persistencia local aprobados")
+        verifyRecipeTechniqueAggregates()
+        print("4 golden tests, restauración y agregados persistentes aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -79,5 +80,36 @@ struct LabGoldenVerifier {
         precondition(try! context.fetch(active).isEmpty)
         precondition(grinder.syncStatus == .pendingDelete)
         precondition(equipment.syncStatus == .pendingUpdate)
+    }
+
+    @MainActor private static func verifyRecipeTechniqueAggregates() {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let repository = RecipeTechniqueRepository(context: context)
+        var recipeDraft = RecipeDraftModel(
+            name: "V60 frutal", recipeKind: "BLACK_COFFEE", intention: "Acidez brillante",
+            ingredients: [.init(name: "Café", amount: 15, unit: "GRAMS"), .init(name: "Agua", amount: 240, unit: "MILLILITERS")],
+            steps: [.init(instruction: "Bloom", durationSeconds: 45), .init(instruction: "Vertido", durationSeconds: 120)]
+        )
+        let recipe = try! repository.saveRecipe(recipeDraft)
+        precondition(try! repository.ingredients(recipeId: recipe.id).count == 2)
+        recipeDraft.ingredients.removeFirst(); recipeDraft.steps.swapAt(0, 1)
+        _ = try! repository.saveRecipe(recipeDraft)
+        precondition(try! repository.ingredients(recipeId: recipe.id).map(\.name) == ["Agua"])
+        precondition(try! repository.recipeSteps(recipeId: recipe.id).map(\.instruction) == ["Vertido", "Bloom"])
+        let copy = try! repository.duplicateRecipe(recipe)
+        precondition(copy.originalEntityId == recipe.id)
+        precondition(try! repository.ingredients(recipeId: copy.id).count == 1)
+
+        let techniqueDraft = TechniqueDraftModel(
+            name: "V60 guiada", methodName: "V60", doseGrams: 15, waterMl: 240, ratio: 16, temperatureC: 93,
+            steps: [.init(title: "Bloom", durationSeconds: 45, waterAddedMl: 50), .init(title: "Vertido 1", durationSeconds: 40, waterAddedMl: 100), .init(title: "Vertido 2", durationSeconds: 35, waterAddedMl: 90)]
+        )
+        let technique = try! repository.saveTechnique(techniqueDraft)
+        let techniqueSteps = try! repository.techniqueSteps(techniqueId: technique.id)
+        precondition(techniqueSteps.map(\.waterAccumulatedMl) == [50, 150, 240])
+        precondition(technique.totalTimeSeconds == 120)
+        try! repository.deleteTechnique(technique)
+        precondition(try! repository.techniqueSteps(techniqueId: technique.id).isEmpty)
     }
 }

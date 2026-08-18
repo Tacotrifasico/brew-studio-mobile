@@ -15,6 +15,9 @@
 		A10000000000000000000007 /* PersistenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* PersistenceModels.swift */; };
 		A10000000000000000000008 /* LabModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* LabModel.swift */; };
 		A10000000000000000000009 /* InventoryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* InventoryViews.swift */; };
+		A1000000000000000000000A /* RecipeTechniqueModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* RecipeTechniqueModels.swift */; };
+		A1000000000000000000000B /* RecipeTechniqueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* RecipeTechniqueRepository.swift */; };
+		A1000000000000000000000C /* RecipeTechniqueViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* RecipeTechniqueViews.swift */; };
 		B10000000000000000000001 /* ParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ParityTests.swift */; };
 		B10000000000000000000002 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* XCTest.framework */; };
 /* End PBXBuildFile section */
@@ -39,6 +42,9 @@
 		A20000000000000000000007 /* PersistenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceModels.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* LabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* InventoryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryViews.swift; sourceTree = "<group>"; };
+		A2000000000000000000000A /* RecipeTechniqueModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeTechniqueModels.swift; sourceTree = "<group>"; };
+		A2000000000000000000000B /* RecipeTechniqueRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeTechniqueRepository.swift; sourceTree = "<group>"; };
+		A2000000000000000000000C /* RecipeTechniqueViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeTechniqueViews.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* ParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParityTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* CupaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CupaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000003 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
@@ -84,6 +90,9 @@
 				A20000000000000000000007 /* PersistenceModels.swift */,
 				A20000000000000000000008 /* LabModel.swift */,
 				A20000000000000000000009 /* InventoryViews.swift */,
+				A2000000000000000000000A /* RecipeTechniqueModels.swift */,
+				A2000000000000000000000B /* RecipeTechniqueRepository.swift */,
+				A2000000000000000000000C /* RecipeTechniqueViews.swift */,
 			);
 			path = Cupa;
 			sourceTree = "<group>";
@@ -219,6 +228,9 @@
 				A10000000000000000000007 /* PersistenceModels.swift in Sources */,
 				A10000000000000000000008 /* LabModel.swift in Sources */,
 				A10000000000000000000009 /* InventoryViews.swift in Sources */,
+				A1000000000000000000000A /* RecipeTechniqueModels.swift in Sources */,
+				A1000000000000000000000B /* RecipeTechniqueRepository.swift in Sources */,
+				A1000000000000000000000C /* RecipeTechniqueViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

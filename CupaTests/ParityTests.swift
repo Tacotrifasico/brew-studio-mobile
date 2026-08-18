@@ -122,3 +122,66 @@ final class LocalPersistenceTests: XCTestCase {
         XCTAssertEqual(equipment.syncStatus, .pendingUpdate)
     }
 }
+
+final class RecipeTechniqueRepositoryTests: XCTestCase {
+    @MainActor func testRecipeAggregateCreateEditDuplicateAndDelete() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let repository = RecipeTechniqueRepository(context: context)
+        var draft = RecipeDraftModel(
+            name: "V60 frutal", recipeKind: "BLACK_COFFEE", intention: "Acidez brillante", tags: "v60,frutal",
+            ingredients: [
+                .init(name: "Café", amount: 15, unit: "GRAMS"),
+                .init(name: "Agua", amount: 240, unit: "MILLILITERS")
+            ],
+            steps: [
+                .init(instruction: "Bloom", durationSeconds: 45),
+                .init(instruction: "Vertido principal", durationSeconds: 120)
+            ]
+        )
+        let recipe = try repository.saveRecipe(draft)
+        XCTAssertEqual(try repository.ingredients(recipeId: recipe.id).map(\.name), ["Café", "Agua"])
+        XCTAssertEqual(try repository.recipeSteps(recipeId: recipe.id).map(\.stepNumber), [1, 2])
+
+        draft.ingredients.removeFirst()
+        draft.steps.swapAt(0, 1)
+        _ = try repository.saveRecipe(draft)
+        XCTAssertEqual(try repository.ingredients(recipeId: recipe.id).map(\.name), ["Agua"])
+        XCTAssertEqual(try repository.recipeSteps(recipeId: recipe.id).map(\.instruction), ["Vertido principal", "Bloom"])
+
+        let copy = try repository.duplicateRecipe(recipe)
+        XCTAssertNotEqual(copy.id, recipe.id)
+        XCTAssertEqual(copy.originalEntityId, recipe.id)
+        XCTAssertEqual(try repository.ingredients(recipeId: copy.id).map(\.name), ["Agua"])
+        XCTAssertNotEqual(try repository.ingredients(recipeId: copy.id).first?.id, try repository.ingredients(recipeId: recipe.id).first?.id)
+
+        try repository.deleteRecipe(recipe)
+        XCTAssertNotNil(recipe.deletedAt)
+        XCTAssertTrue(try repository.ingredients(recipeId: recipe.id).isEmpty)
+        XCTAssertTrue(try repository.recipeSteps(recipeId: recipe.id).isEmpty)
+    }
+
+    @MainActor func testTechniqueOrderingAccumulationAndSoftDelete() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let repository = RecipeTechniqueRepository(context: context)
+        let draft = TechniqueDraftModel(
+            name: "V60 guiada", methodName: "V60", doseGrams: 15, waterMl: 240, ratio: 16,
+            temperatureC: 93, executionMode: "GUIDED", grindValue: 24, grindDescription: "Media fina",
+            steps: [
+                .init(title: "Bloom", durationSeconds: 45, waterAddedMl: 50, intensity: "HIGH", gesture: "BLOOM"),
+                .init(title: "Primer vertido", durationSeconds: 40, waterAddedMl: 100, intensity: "MEDIUM", gesture: "CIRCULAR_POUR"),
+                .init(title: "Segundo vertido", durationSeconds: 35, waterAddedMl: 90, intensity: "LOW", gesture: "CENTER_POUR")
+            ]
+        )
+        let technique = try repository.saveTechnique(draft)
+        let steps = try repository.techniqueSteps(techniqueId: technique.id)
+        XCTAssertEqual(steps.map(\.waterAccumulatedMl), [50, 150, 240])
+        XCTAssertEqual(steps.map(\.stepNumber), [1, 2, 3])
+        XCTAssertEqual(technique.totalTimeSeconds, 120)
+
+        try repository.deleteTechnique(technique)
+        XCTAssertEqual(technique.syncStatus, .pendingDelete)
+        XCTAssertTrue(try repository.techniqueSteps(techniqueId: technique.id).isEmpty)
+    }
+}

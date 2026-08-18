@@ -595,6 +595,8 @@ private enum StorageCategory: String, CaseIterable, Identifiable {
     case coffee = "Cafés"
     case grinders = "Molinos"
     case equipment = "Equipos"
+    case recipes = "Recetas"
+    case techniques = "Técnicas"
     var id: Self { self }
 }
 
@@ -612,6 +614,8 @@ struct StorageView: View {
             case .coffee: CoffeeInventoryView()
             case .grinders: GrinderInventoryView()
             case .equipment: EquipmentInventoryView()
+            case .recipes: RecipeInventoryView()
+            case .techniques: TechniqueInventoryView()
             }
         }
         .background(CupaTheme.background)

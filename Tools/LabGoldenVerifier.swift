@@ -3,7 +3,7 @@ import CoreData
 
 @main
 struct LabGoldenVerifier {
-    @MainActor static func main() {
+    @MainActor static func main() async {
         verify(
             name: "nivel-del-mar",
             input: LabState(),
@@ -50,7 +50,8 @@ struct LabGoldenVerifier {
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
-        print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, ambientes, sincronización, IA, perfil y social aprobados")
+        await verifySessionRecovery()
+        print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, ambientes, sesión offline, sincronización, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -574,5 +575,41 @@ struct LabGoldenVerifier {
         let descriptor = CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" }!
         try! coordinator.merge(row, descriptor: descriptor, expectedOwner: owner)
         precondition(bean.name == "Remoto" && bean.syncStatus == .synced && bean.version == 8)
+    }
+
+    @MainActor private static func verifySessionRecovery() async {
+        let configuration = AppConfiguration(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon")
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let expired = AuthTokens(accessToken: "old", refreshToken: "refresh", expiresAt: now.addingTimeInterval(-1), userId: UUID(), email: "brew@example.com")
+
+        let offlineStore = VerifierTokenStore(expired)
+        let offline = AccountModel(configuration: configuration, transport: VerifierTransport(error: URLError(.notConnectedToInternet)), store: offlineStore)
+        let offlineTokens = await offline.validTokens(now: now)
+        precondition(offlineTokens == nil)
+        precondition(offline.tokens == expired && offlineStore.value == expired)
+        precondition(offline.sessionNotice?.contains("Sin conexión") == true)
+
+        let rejectedStore = VerifierTokenStore(expired)
+        let rejected = AccountModel(configuration: configuration, transport: VerifierTransport(statusCode: 401), store: rejectedStore)
+        let rejectedTokens = await rejected.validTokens(now: now)
+        precondition(rejectedTokens == nil)
+        precondition(rejected.state == .signedOut && rejectedStore.value == nil)
+    }
+}
+
+private final class VerifierTokenStore: TokenStore {
+    var value: AuthTokens?
+    init(_ value: AuthTokens?) { self.value = value }
+    func load() throws -> AuthTokens? { value }
+    func save(_ tokens: AuthTokens) throws { value = tokens }
+    func clear() throws { value = nil }
+}
+
+private final class VerifierTransport: NetworkTransport {
+    let statusCode: Int; let error: Error?
+    init(statusCode: Int = 200, error: Error? = nil) { self.statusCode = statusCode; self.error = error }
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        if let error { throw error }
+        return (Data("{\"message\":\"Invalid refresh token\"}".utf8), HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!)
     }
 }

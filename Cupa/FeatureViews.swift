@@ -663,8 +663,8 @@ struct LabView: View {
     private func requestSuggestion(allowRemote: Bool) {
         suggestionLoading = true
         let input = SuggestionContext(state: model.state, profile: model.profile)
-        let token = allowRemote ? account.tokens?.accessToken : nil
         Task {
+            let token = allowRemote ? await account.validTokens()?.accessToken : nil
             suggestion = await GeminiSuggestionService(configuration: account.configuration).suggest(input, accessToken: token)
             suggestionLoading = false
         }

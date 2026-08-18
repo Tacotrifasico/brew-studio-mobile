@@ -31,6 +31,7 @@ enum CoreSyncSchema {
 final class EntitySyncCoordinator: ObservableObject {
     enum State: Equatable { case idle, syncing, offline, completed(Date), failed(String) }
     @Published private(set) var state: State = .idle
+    @Published private(set) var authenticationRejected = false
     private let context: NSManagedObjectContext; private let configuration: AppConfiguration; private let transport: NetworkTransport
     private let defaults: UserDefaults; private let checkpointKey = "sync.lastSuccessfulAt.v1"
     init(context: NSManagedObjectContext, configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), defaults: UserDefaults = .standard) {
@@ -38,13 +39,16 @@ final class EntitySyncCoordinator: ObservableObject {
     }
 
     func sync(ownerId: UUID, accessToken: String) async {
-        guard configuration.isSupabaseConfigured else { state = .offline; return }; state = .syncing
+        guard configuration.isSupabaseConfigured else { state = .offline; return }; state = .syncing; authenticationRejected = false
         do {
             try enqueuePending(ownerId: ownerId)
             try await push(accessToken: accessToken)
             try await pull(ownerId: ownerId, accessToken: accessToken)
             defaults.set(Date(), forKey: checkpointKey); state = .completed(.now)
-        } catch { state = .failed(error.localizedDescription) }
+        } catch {
+            authenticationRejected = RemoteFailureClassifier.isUnauthorized(error)
+            state = RemoteFailureClassifier.isOffline(error) ? .offline : .failed(error.localizedDescription)
+        }
     }
 
     func enqueuePending(ownerId: UUID) throws {

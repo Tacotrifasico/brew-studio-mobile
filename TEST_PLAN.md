@@ -44,10 +44,10 @@
 - Cata: cortes térmicos exactos a 0/239/240/599/600/959/960 segundos, pausa, recuperación a 601 segundos, reinicio, alta/baja de observaciones, cierre inmutable, vínculo opcional con `BrewSession`, detalle/historial íntegro, edición con el mismo UUID, reconciliación sin duplicar `CupSession`, alta posterior con UUID nuevo y borrado lógico conjunto: verificador ejecutado + XCTest y UI compilados.
 - Molinos y equipos: alta, lectura íntegra, edición conservando UUID, validación de rango/capacidad, reapertura desde un contenedor SQLite nuevo, estados de sincronización, borrado lógico y conservación de referencias/snapshots en preparaciones históricas: verificador ejecutado + XCTest y recorridos UI compilados.
 - Tazas: referencias, dosis, agua, ratio, temperatura, molienda, duración, cinco nombres congelados, vida térmica, valoración, NPS, comentario y fecha verificados contra la preparación/cata de origen; detalle completo y eliminación conjunta confirmada compilados: aprobados.
-- Cuenta: estado seguro sin configuración y contrato de login GoTrue (ruta, anon header y mapeo de tokens): XCTest compilado.
+- Cuenta: estado seguro sin configuración, contrato GoTrue, sesión vencida sin red conservada y refresh rechazado limpiado: casos críticos ejecutados en el verificador + XCTest compilado.
 - Eliminación de cuenta: ruta autenticada, confirmación explícita y ausencia de credenciales administrativas en el request iOS: XCTest compilado.
 - Sincronización: elección por fecha/versión, rechazo de propietario distinto, compactación de outbox, reintento exponencial y finalización: verificador ejecutado.
-- Sincronización integral: asignación de propietario a datos offline, JSON/JSONB, push de pendientes, pull incremental de todos los descriptores, merge remoto y checkpoint: XCTest compilado + mapeo ejecutado.
+- Sincronización integral: asignación de propietario a datos offline, JSON/JSONB, push, pull incremental, merge, checkpoint, outbox preservada sin red y reintento automático al reconectar: XCTest compilado + mapeo ejecutado.
 - Gemini: llamada autenticada a Edge Function, validación de respuesta y fallback local determinista cuando no hay configuración: verificador ejecutado + XCTest compilado.
 - Perfil: creación, edición con UUID estable, normalización de alias, aislamiento entre dos propietarios y DTO sin correo: verificador ejecutado.
 - Configuración: restauración de tema oscuro y Fahrenheit aprobada; eliminado el control métrico sin efecto que no existe en Android.

@@ -85,8 +85,8 @@ struct HubView: View {
                     if !share.message.isEmpty { Text(share.message).font(.subheadline) }
                     HStack {
                         Button("Importar") { importShare(share) }
-                        Button { socialAction { try await $0.like(shareId: share.id, accessToken: account.tokens!.accessToken) } } label: { Label("Me gusta", systemImage: "heart") }
-                        Menu { Button("Reportar contenido", role: .destructive) { socialAction { try await $0.report(shareId: share.id, reason: "USER_REPORTED", accessToken: account.tokens!.accessToken) } }; Button("Bloquear usuario", role: .destructive) { block(share) } } label: { Image(systemName: "ellipsis") }
+                        Button { socialAction { try await $0.like(shareId: share.id, accessToken: $1) } } label: { Label("Me gusta", systemImage: "heart") }
+                        Menu { Button("Reportar contenido", role: .destructive) { socialAction { try await $0.report(shareId: share.id, reason: "USER_REPORTED", accessToken: $1) } }; Button("Bloquear usuario", role: .destructive) { block(share) } } label: { Image(systemName: "ellipsis") }
                             .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Más acciones para \(share.name)")
                     }.font(.caption)
                 }.padding(.vertical, 5)
@@ -105,45 +105,58 @@ struct HubView: View {
             let record = try repository.save(ownerId: tokens.userId, displayName: displayName, alias: alias, biography: biography, avatarColor: avatarColor, favoriteMethods: favoriteMethods, isPrivate: isPrivate)
             let payload = try repository.remoteJSON(record)
             Task {
-                do { try await SupabaseDataService(configuration: account.configuration).upsert(table: "profiles", json: payload, accessToken: tokens.accessToken); record.syncStatusRaw = SyncStatus.synced.rawValue; try? context.save(); message = "Perfil guardado y sincronizado." }
+                do {
+                    try await account.authenticated { token in
+                        try await SupabaseDataService(configuration: account.configuration).upsert(table: "profiles", json: payload, accessToken: token)
+                    }
+                    record.syncStatusRaw = SyncStatus.synced.rawValue; try? context.save(); message = "Perfil guardado y sincronizado."
+                }
                 catch { message = "Perfil guardado offline; se sincronizará cuando el backend esté disponible." }
             }
         } catch { context.rollback(); message = error.localizedDescription }
     }
     private func loadFeed() async {
-        guard let token = account.tokens?.accessToken else { return }; feedLoading = true
-        do { feed = try await SocialService(configuration: account.configuration).feed(accessToken: token) }
+        guard account.tokens != nil else { return }; feedLoading = true
+        do { feed = try await account.authenticated { token in try await SocialService(configuration: account.configuration).feed(accessToken: token) } }
         catch { if account.configuration.isSupabaseConfigured { message = error.localizedDescription } }
         feedLoading = false
     }
     private func publish(recipe: RecipeRecord) {
-        guard let tokens = account.tokens else { return }
+        guard account.tokens != nil else { return }
         do {
             let draft = try RecipeTechniqueRepository(context: context).recipeDraft(for: recipe)
             let snapshot = SharedRecipeSnapshot(name: draft.name, recipeKind: draft.recipeKind, intention: draft.intention, suggestedMethodName: draft.suggestedMethodName, tags: draft.tags, ingredients: draft.ingredients.map { .init(name: $0.name, amount: $0.amount, unit: $0.unit) }, steps: draft.steps.map { .init(instruction: $0.instruction, durationSeconds: $0.durationSeconds) })
             let payload = SharePayloadSnapshot(kind: "recipe", recipe: snapshot, technique: nil)
-            socialAction { try await $0.publish(entityType: "recipe", entityId: recipe.id, fromName: displayName, fromHandle: alias, name: recipe.name, subtitle: recipe.intention, message: "", payload: payload, accessToken: tokens.accessToken) }
+            socialAction { try await $0.publish(entityType: "recipe", entityId: recipe.id, fromName: displayName, fromHandle: alias, name: recipe.name, subtitle: recipe.intention, message: "", payload: payload, accessToken: $1) }
         } catch { message = error.localizedDescription }
     }
     private func publish(technique: TechniqueRecord) {
-        guard let tokens = account.tokens else { return }
+        guard account.tokens != nil else { return }
         do {
             let draft = try RecipeTechniqueRepository(context: context).techniqueDraft(for: technique)
             let snapshot = SharedTechniqueSnapshot(name: draft.name, methodName: draft.methodName, doseGrams: draft.doseGrams, waterMl: draft.waterMl, ratio: draft.ratio, temperatureC: draft.temperatureC, executionMode: draft.executionMode, grindValue: draft.grindValue, grindDescription: draft.grindDescription, grindUnit: draft.grindUnit, notes: draft.notes, techniqueDescription: draft.techniqueDescription, steps: draft.steps.map { .init(title: $0.title, durationSeconds: $0.durationSeconds, waterAddedMl: $0.waterAddedMl, intensity: $0.intensity, gesture: $0.gesture, note: $0.note) })
             let payload = SharePayloadSnapshot(kind: "technique", recipe: nil, technique: snapshot)
-            socialAction { try await $0.publish(entityType: "technique", entityId: technique.id, fromName: displayName, fromHandle: alias, name: technique.name, subtitle: technique.methodName, message: "", payload: payload, accessToken: tokens.accessToken) }
+            socialAction { try await $0.publish(entityType: "technique", entityId: technique.id, fromName: displayName, fromHandle: alias, name: technique.name, subtitle: technique.methodName, message: "", payload: payload, accessToken: $1) }
         } catch { message = error.localizedDescription }
     }
     private func importShare(_ share: SocialShare) { do { try SocialService(configuration: account.configuration).importShare(share, context: context); message = "Fórmula importada con atribución." } catch { message = error.localizedDescription } }
-    private func block(_ share: SocialShare) { socialAction { try await $0.block(userId: share.ownerId, accessToken: account.tokens!.accessToken) }; feed.removeAll { $0.ownerId == share.ownerId } }
-    private func socialAction(_ operation: @escaping (SocialService) async throws -> Void) {
-        Task { do { try await operation(SocialService(configuration: account.configuration)); message = "Acción completada."; await loadFeed() } catch { message = error.localizedDescription } }
+    private func block(_ share: SocialShare) { socialAction { try await $0.block(userId: share.ownerId, accessToken: $1) }; feed.removeAll { $0.ownerId == share.ownerId } }
+    private func socialAction(_ operation: @escaping (SocialService, String) async throws -> Void) {
+        Task {
+            do {
+                try await account.authenticated { token in try await operation(SocialService(configuration: account.configuration), token) }
+                message = "Acción completada."; await loadFeed()
+            } catch { message = error.localizedDescription }
+        }
     }
     private func synchronize() {
-        guard let tokens = account.tokens else { return }
         Task {
+            guard let tokens = await account.validTokens() else { return }
             let coordinator = EntitySyncCoordinator(context: context, configuration: account.configuration)
             await coordinator.sync(ownerId: tokens.userId, accessToken: tokens.accessToken)
+            if coordinator.authenticationRejected, let refreshed = await account.validTokens(forceRefresh: true) {
+                await coordinator.sync(ownerId: refreshed.userId, accessToken: refreshed.accessToken)
+            }
             switch coordinator.state {
             case .completed: message = "Datos sincronizados."
             case .offline: message = "Sin backend: los cambios siguen guardados offline."

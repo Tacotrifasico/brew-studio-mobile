@@ -1,4 +1,21 @@
+import Network
 import SwiftUI
+
+@MainActor
+final class ConnectivityMonitor: ObservableObject {
+    @Published private(set) var isConnected = true
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "com.tacotrifasico.cupa.connectivity")
+
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in self?.isConnected = path.status == .satisfied }
+        }
+        monitor.start(queue: queue)
+    }
+
+    deinit { monitor.cancel() }
+}
 
 enum CupaTab: String, CaseIterable, Hashable, Identifiable {
     case home, brew, tasting, lab, storage
@@ -26,6 +43,9 @@ struct AppShell: View {
     @StateObject private var tasting = TastingModel()
     @StateObject private var account = AccountModel()
     @StateObject private var settings = SettingsModel()
+    @StateObject private var connectivity = ConnectivityMonitor()
+    @State private var syncInProgress = false
+    @State private var syncNotice: String?
 
     init(storageWarning: String? = nil) { self.storageWarning = storageWarning }
 
@@ -53,28 +73,62 @@ struct AppShell: View {
         }
         .tint(CupaTheme.forest)
         .safeAreaInset(edge: .top, spacing: 0) {
-            if let storageWarning {
-                Label(storageWarning, systemImage: "externaldrive.badge.exclamationmark")
-                    .font(.caption.bold())
-                    .foregroundStyle(CupaTheme.onAccent)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .frame(maxWidth: .infinity)
-                    .background(CupaTheme.terracotta)
-                    .accessibilityIdentifier("storage.recoveryWarning")
+            VStack(spacing: 0) {
+                if let storageWarning {
+                    statusBanner(storageWarning, icon: "externaldrive.badge.exclamationmark", color: CupaTheme.terracotta)
+                        .accessibilityIdentifier("storage.recoveryWarning")
+                }
+                if let notice = account.sessionNotice ?? syncNotice {
+                    statusBanner(notice, icon: connectivity.isConnected ? "arrow.triangle.2.circlepath" : "wifi.slash", color: CupaTheme.espresso)
+                        .accessibilityIdentifier("sync.statusNotice")
+                }
             }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
+            if phase == .active { Task { await refreshAndSync() } }
         }
-        .task { lab.setTemperatureUnit(settings.temperatureUnit); await account.restoreAndRefreshIfNeeded() }
+        .task { lab.setTemperatureUnit(settings.temperatureUnit); await refreshAndSync() }
         .onChange(of: settings.temperatureUnit) { _, unit in lab.setTemperatureUnit(unit) }
         .onChange(of: lab.state.temperatureUnit) { _, unit in
             if settings.temperatureUnit != unit { settings.temperatureUnit = unit }
         }
-        .onChange(of: account.tokens) { _, tokens in
-            guard let tokens else { return }
-            Task { await EntitySyncCoordinator(context: context, configuration: account.configuration).sync(ownerId: tokens.userId, accessToken: tokens.accessToken) }
+        .onChange(of: connectivity.isConnected) { wasConnected, isConnected in
+            guard !wasConnected, isConnected else { return }
+            Task { await refreshAndSync() }
         }
         .preferredColorScheme(settings.preferredColorScheme)
+    }
+
+    private func statusBanner(_ text: String, icon: String, color: Color) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.bold())
+            .foregroundStyle(CupaTheme.onAccent)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color)
+    }
+
+    private func refreshAndSync() async {
+        guard connectivity.isConnected, !syncInProgress else {
+            if !connectivity.isConnected { syncNotice = "Sin conexión. Los cambios quedan guardados en este dispositivo." }
+            return
+        }
+        syncInProgress = true
+        defer { syncInProgress = false }
+        guard let tokens = await account.validTokens() else { return }
+        let coordinator = EntitySyncCoordinator(context: context, configuration: account.configuration)
+        await coordinator.sync(ownerId: tokens.userId, accessToken: tokens.accessToken)
+        if coordinator.authenticationRejected, let refreshed = await account.validTokens(forceRefresh: true) {
+            await coordinator.sync(ownerId: refreshed.userId, accessToken: refreshed.accessToken)
+        }
+        switch coordinator.state {
+        case .completed: syncNotice = nil
+        case .offline: syncNotice = "Sin conexión. Los cambios se sincronizarán automáticamente al volver internet."
+        case let .failed(message): syncNotice = "Sincronización pendiente: \(message)"
+        default: break
+        }
     }
 }

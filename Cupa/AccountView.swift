@@ -9,6 +9,10 @@ struct AccountView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let notice = model.sessionNotice {
+                    Label(notice, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 switch model.state {
                 case .unavailable:
                     ContentUnavailableView("Cuenta no disponible", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("El servicio de cuenta todavía no está disponible en esta versión. Tus datos locales permanecen en el dispositivo."))

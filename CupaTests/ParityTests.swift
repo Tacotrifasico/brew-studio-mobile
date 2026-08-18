@@ -670,10 +670,11 @@ private final class MemoryTokenStore: TokenStore {
 }
 
 private final class MockTransport: NetworkTransport {
-    var requests: [URLRequest] = []; var responseData: Data; var statusCode: Int
-    init(responseData: Data = Data(), statusCode: Int = 200) { self.responseData = responseData; self.statusCode = statusCode }
+    var requests: [URLRequest] = []; var responseData: Data; var statusCode: Int; var error: Error?
+    init(responseData: Data = Data(), statusCode: Int = 200, error: Error? = nil) { self.responseData = responseData; self.statusCode = statusCode; self.error = error }
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         requests.append(request)
+        if let error { throw error }
         return (responseData, HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!)
     }
 }
@@ -724,6 +725,61 @@ final class AccountAndSyncTests: XCTestCase {
         XCTAssertEqual(transport.requests.first?.url?.path, "/functions/v1/delete-account")
         XCTAssertEqual(transport.requests.first?.value(forHTTPHeaderField: "Authorization"), "Bearer user-jwt")
         XCTAssertFalse(String(data: transport.requests.first?.httpBody ?? Data(), encoding: .utf8)?.contains("service_role") == true)
+    }
+
+    @MainActor func testOfflineRefreshKeepsStoredSessionAndLocalIdentity() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let expired = AuthTokens(accessToken: "old", refreshToken: "refresh", expiresAt: now.addingTimeInterval(-1), userId: UUID(), email: "brew@example.com")
+        let store = MemoryTokenStore(); store.value = expired
+        let model = AccountModel(
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: MockTransport(error: URLError(.notConnectedToInternet)), store: store
+        )
+
+        let usableTokens = await model.validTokens(now: now)
+        XCTAssertNil(usableTokens)
+        XCTAssertEqual(model.tokens, expired)
+        XCTAssertEqual(store.value, expired)
+        XCTAssertTrue(model.sessionNotice?.contains("Sin conexión") == true)
+    }
+
+    @MainActor func testRejectedRefreshClearsTerminalSession() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let expired = AuthTokens(accessToken: "old", refreshToken: "revoked", expiresAt: now.addingTimeInterval(-1), userId: UUID(), email: "brew@example.com")
+        let store = MemoryTokenStore(); store.value = expired
+        let model = AccountModel(
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: MockTransport(responseData: Data("{\"message\":\"Invalid refresh token\"}".utf8), statusCode: 401), store: store
+        )
+
+        let usableTokens = await model.validTokens(now: now)
+        XCTAssertNil(usableTokens)
+        XCTAssertEqual(model.state, .signedOut)
+        XCTAssertNil(store.value)
+        XCTAssertTrue(model.sessionNotice?.contains("sesión venció") == true)
+    }
+
+    @MainActor func testAuthenticatedOperationRefreshesOnceAfterUnauthorized() async throws {
+        let userId = UUID()
+        let stored = AuthTokens(accessToken: "old", refreshToken: "refresh", expiresAt: .now.addingTimeInterval(3_600), userId: userId, email: "brew@example.com")
+        let refreshedBody = try JSONSerialization.data(withJSONObject: [
+            "access_token": "new", "refresh_token": "refresh-2", "expires_in": 3_600,
+            "user": ["id": userId.uuidString, "email": "brew@example.com"]
+        ])
+        let store = MemoryTokenStore(); store.value = stored
+        let model = AccountModel(
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: MockTransport(responseData: refreshedBody), store: store
+        )
+        var attempts = 0
+        let usedToken = try await model.authenticated { token in
+            attempts += 1
+            if attempts == 1 { throw AuthServiceError.server(401, "expired") }
+            return token
+        }
+        XCTAssertEqual(attempts, 2)
+        XCTAssertEqual(usedToken, "new")
+        XCTAssertEqual(store.value?.accessToken, "new")
     }
 
     @MainActor func testConflictResolutionAndPersistentRetryOutbox() throws {
@@ -848,6 +904,20 @@ final class EntitySyncTests: XCTestCase {
         XCTAssertTrue(transport.requests.contains { $0.httpMethod == "POST" && $0.url?.path == "/rest/v1/coffee_beans" })
         let pulledTables = Set(transport.requests.filter { $0.httpMethod == "GET" }.compactMap { $0.url?.lastPathComponent })
         XCTAssertEqual(pulledTables, Set(CoreSyncSchema.descriptors.map(\.table)))
+    }
+
+    @MainActor func testOfflineSyncIsRecoverableAndKeepsOutbox() async throws {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        _ = CoffeeBeanRecord(context: context, name: "Pendiente offline", brand: "Tostador"); try context.save()
+        let coordinator = EntitySyncCoordinator(
+            context: context,
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: MockTransport(error: URLError(.networkConnectionLost)),
+            defaults: UserDefaults(suiteName: "OfflineSync.\(UUID().uuidString)")!
+        )
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+        XCTAssertEqual(coordinator.state, .offline)
+        XCTAssertFalse(try context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")).isEmpty)
     }
 }
 

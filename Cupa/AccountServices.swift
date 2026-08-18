@@ -28,7 +28,9 @@ struct AppConfiguration: Equatable {
 
 struct AuthTokens: Codable, Equatable {
     let accessToken: String; let refreshToken: String; let expiresAt: Date; let userId: UUID; let email: String
-    var needsRefresh: Bool { expiresAt.timeIntervalSinceNow < 60 }
+    var needsRefresh: Bool { needsRefresh(at: .now) }
+    func needsRefresh(at date: Date) -> Bool { expiresAt.timeIntervalSince(date) < 60 }
+    func hasValidAccessToken(at date: Date = .now) -> Bool { expiresAt > date }
 }
 
 protocol TokenStore {
@@ -83,6 +85,24 @@ enum AuthServiceError: LocalizedError, Equatable {
         case .invalidResponse: "El servidor devolvió una respuesta inválida."
         case let .server(_, message): message
         }
+    }
+}
+
+enum RemoteFailureClassifier {
+    static func isUnauthorized(_ error: Error) -> Bool {
+        guard case let AuthServiceError.server(status, _) = error else { return false }
+        return status == 401
+    }
+
+    static func isTerminalSessionFailure(_ error: Error) -> Bool {
+        guard case let AuthServiceError.server(status, _) = error else { return false }
+        return status == 400 || status == 401
+    }
+
+    static func isOffline(_ error: Error) -> Bool {
+        let code = (error as? URLError)?.code
+        return [.notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost,
+                .dnsLookupFailed, .timedOut, .internationalRoamingOff, .dataNotAllowed].contains(code)
     }
 }
 
@@ -143,6 +163,8 @@ struct SupabaseAccountService {
 final class AccountModel: ObservableObject {
     enum State: Equatable { case unavailable, signedOut, loading, signedIn(AuthTokens), error(String) }
     @Published private(set) var state: State = .signedOut
+    @Published private(set) var sessionNotice: String?
+    @Published private(set) var isRefreshing = false
     let configuration: AppConfiguration; private let service: SupabaseAuthService; private let store: TokenStore
 
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), store: TokenStore = KeychainTokenStore()) {
@@ -159,28 +181,62 @@ final class AccountModel: ObservableObject {
         do { try await service.sendPasswordRecovery(email: email); state = .signedOut }
         catch { state = .error(error.localizedDescription) }
     }
-    func restoreAndRefreshIfNeeded() async {
-        guard let current = tokens, current.needsRefresh else { return }
-        await perform { try await self.service.refresh(current.refreshToken) }
+    @discardableResult
+    func validTokens(forceRefresh: Bool = false, now: Date = .now) async -> AuthTokens? {
+        guard let current = tokens else { return nil }
+        guard forceRefresh || current.needsRefresh(at: now) else { return current }
+        guard !isRefreshing else { return current.hasValidAccessToken(at: now) ? current : nil }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        do {
+            let refreshed = try await service.refresh(current.refreshToken)
+            try store.save(refreshed)
+            state = .signedIn(refreshed)
+            sessionNotice = nil
+            return refreshed
+        } catch {
+            if RemoteFailureClassifier.isTerminalSessionFailure(error) {
+                try? store.clear()
+                state = .signedOut
+                sessionNotice = "Tu sesión venció. Inicia sesión otra vez para sincronizar."
+            } else {
+                state = .signedIn(current)
+                sessionNotice = RemoteFailureClassifier.isOffline(error)
+                    ? "Sin conexión. Puedes seguir trabajando; sincronizaremos al volver internet."
+                    : "No pudimos renovar la sesión. Tus datos locales siguen seguros."
+            }
+            return current.hasValidAccessToken(at: now) ? current : nil
+        }
+    }
+    func restoreAndRefreshIfNeeded() async { _ = await validTokens() }
+    func authenticated<Value>(_ operation: (String) async throws -> Value) async throws -> Value {
+        guard let current = await validTokens() else { throw URLError(.userAuthenticationRequired) }
+        do { return try await operation(current.accessToken) }
+        catch {
+            guard RemoteFailureClassifier.isUnauthorized(error),
+                  let refreshed = await validTokens(forceRefresh: true) else { throw error }
+            return try await operation(refreshed.accessToken)
+        }
     }
     func signOut() async {
-        let access = tokens?.accessToken; state = .loading
+        let access = tokens?.accessToken; state = .loading; sessionNotice = nil
         if let access { try? await service.signOut(accessToken: access) }
         do { try store.clear(); state = configuration.isSupabaseConfigured ? .signedOut : .unavailable }
         catch { state = .error(error.localizedDescription) }
     }
     func deleteAccount(confirmation: String) async {
-        guard let access = tokens?.accessToken else { state = .error("No hay una sesión activa."); return }
-        state = .loading
+        guard tokens != nil else { sessionNotice = "Necesitas una sesión activa y conexión para eliminar la cuenta."; return }
         do {
-            try await SupabaseAccountService(configuration: configuration, transport: service.transport).deleteAccount(accessToken: access, confirmation: confirmation)
-            try store.clear(); state = .signedOut
-        } catch { state = .error(error.localizedDescription) }
+            try await authenticated { access in
+                try await SupabaseAccountService(configuration: self.configuration, transport: self.service.transport).deleteAccount(accessToken: access, confirmation: confirmation)
+            }
+            try store.clear(); state = .signedOut; sessionNotice = nil
+        } catch { sessionNotice = error.localizedDescription }
     }
 
     private func perform(_ operation: () async throws -> AuthTokens) async {
-        state = .loading
-        do { let value = try await operation(); try store.save(value); state = .signedIn(value) }
+        state = .loading; sessionNotice = nil
+        do { let value = try await operation(); try store.save(value); state = .signedIn(value); sessionNotice = nil }
         catch { state = .error(error.localizedDescription) }
     }
 }

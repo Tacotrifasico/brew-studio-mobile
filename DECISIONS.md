@@ -155,3 +155,7 @@ Las cinco secciones conservan el orden Android y comparten un único modelo de s
 ## D-039 — Ambientes compilables y configuración dentro del bundle
 
 Un archivo `.xcconfig` sin configuración de Xcode asociada no constituye un ambiente real. El proyecto define Development, Staging y Production; Staging dispone de esquema compartido, nombre visible y bundle ID propios para convivir con producción. Se usa un `Info.plist` explícito porque la generación automática no estaba incorporando las claves personalizadas: el binario ahora recibe `APP_ENVIRONMENT`, Supabase y las URLs legales. Las URLs remotas de Supabase exigen HTTPS y los valores vacíos se normalizan a ausencia; HTTP sólo se permite para desarrollo local en localhost.
+
+## D-040 — La conectividad transitoria no invalida la sesión
+
+La identidad recuperada del Keychain permanece disponible cuando falla internet, aunque un access token vencido no se reutiliza para llamadas remotas. Un rechazo definitivo del refresh (`400/401`) limpia las credenciales y solicita un nuevo acceso; un `401` inesperado en una operación autenticada fuerza una sola renovación y reintento. `NWPathMonitor` dispara recuperación y sincronización al volver la conexión, además del intento al abrir o reactivar la app. La outbox conserva operaciones fallidas con su backoff y la interfaz informa que los datos locales siguen seguros.

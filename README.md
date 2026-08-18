@@ -22,7 +22,7 @@ La comunidad permite publicar e importar recetas/técnicas con atribución, marc
 
 El proyecto incluye el AppIcon de la referencia Android y semántica VoiceOver para controles de icono, áreas táctiles mínimas e identificadores de automatización para los flujos principales.
 
-Al iniciar sesión, la sincronización reclama los datos creados offline, sube la outbox y descarga cambios incrementales de todos los agregados para restaurarlos en otro dispositivo. La validación contra el proyecto Supabase real requiere las dos variables públicas descritas en `BLOCKERS.md`.
+Al iniciar sesión, la sincronización reclama los datos creados offline, sube la outbox y descarga cambios incrementales de todos los agregados para restaurarlos en otro dispositivo. La sesión sobrevive a cortes de internet sin reutilizar tokens vencidos y la app reintenta automáticamente al recuperar red o volver al primer plano. La validación contra el proyecto Supabase real requiere las dos variables públicas descritas en `BLOCKERS.md`.
 
 El target `CupaTests` contiene pruebas XCTest. Si CoreSimulator no inicia, `Tools/LabGoldenVerifier.swift` valida cuatro casos dorados, restauración de estado y persistencia Core Data desde macOS; el comando está en `TEST_PLAN.md`.
 

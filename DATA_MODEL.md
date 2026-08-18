@@ -24,9 +24,9 @@ Relaciones por UUID estables. Una sesión histórica conserva identificadores y 
 
 `LabExperiment` conserva referencias opcionales por UUID a método/equipo, receta, técnica, grano y molino; también método, dosis, agua, ratio, temperatura Celsius, clicks, frescura, duración, altitud, ciudad, notas, índice de extracción y resumen calculado. Incluye fechas, versión, estado de sincronización y borrado lógico.
 
-`Grinder` conserva identidad, marca, modelo, tipo manual/eléctrico, unidad de escala, límites, calibración y notas. No se fusiona con `Equipment`.
+`Grinder` conserva identidad, marca, modelo, tipo manual/eléctrico, unidad de escala, límites, calibración y notas. No se fusiona con `Equipment`. El ajuste concreto vive en `Technique.grindValue/grindDescription/grindUnit` y se copia a `BrewSession`, de modo que el número interno siempre viaja con su descripción histórica.
 
-`CoffeeBean` conserva fechas de tueste y apertura; `CoffeeFreshnessEngine` deriva en tiempo real días, etapa, progreso, recomendación y advertencia de apertura con las reglas de Android. El resultado no se sincroniza porque depende de la fecha actual y se volvería obsoleto.
+`CoffeeBean` conserva fechas de tueste y apertura; `CoffeeFreshnessEngine` deriva en tiempo real días, etapa, progreso, recomendación y advertencia de apertura con las reglas de Android. Cerrado/abierto/terminado también se deriva de fecha de apertura y existencias, evitando estados contradictorios. El resultado no se sincroniza porque depende de datos ya sincronizados y, en el caso de frescura, de la fecha actual.
 
 El historial de uso de `CoffeeBean` se deriva por su UUID estable: `BrewSession.beanId` aporta las preparaciones y `CupSession.beanId` las tazas/catas. No existe una relación duplicada ni un contador persistido. El borrado lógico del café no borra esas sesiones; sus snapshots mantienen nombres y parámetros históricos.
 

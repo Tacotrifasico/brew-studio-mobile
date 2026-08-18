@@ -35,6 +35,10 @@ struct PreparationExecutionView: View {
                             Text(model.state.techniqueName).font(.headline)
                             Text("\(model.state.methodName) · \(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(model.state.waterMl) ml")
                                 .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            if let bean = beans.first(where: { $0.id == model.state.beanId }) {
+                                Label(bean.name, systemImage: "leaf")
+                                    .font(.caption.bold()).foregroundStyle(CupaTheme.forest)
+                            }
                         }
                         Spacer()
                         Text("1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))").font(.subheadline.bold()).foregroundStyle(CupaTheme.forest)

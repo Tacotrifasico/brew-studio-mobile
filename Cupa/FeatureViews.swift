@@ -647,6 +647,9 @@ private enum StorageCategory: String, CaseIterable, Identifiable {
 }
 
 struct StorageView: View {
+    @Binding var selection: CupaTab
+    @ObservedObject var lab: LabModel
+    @ObservedObject var preparation: PreparationModel
     @State private var category = StorageCategory.coffee
 
     var body: some View {
@@ -664,7 +667,7 @@ struct StorageView: View {
             }
             .padding(.vertical, 10)
             switch category {
-            case .coffee: CoffeeInventoryView()
+            case .coffee: CoffeeInventoryView(selection: $selection, lab: lab, preparation: preparation)
             case .grinders: GrinderInventoryView()
             case .equipment: EquipmentInventoryView()
             case .recipes: RecipeInventoryView()
@@ -744,6 +747,9 @@ private struct CoffeeInventoryView: View {
         predicate: NSPredicate(format: "deletedAt == nil"),
         animation: .default
     ) private var beans: FetchedResults<CoffeeBeanRecord>
+    @Binding var selection: CupaTab
+    @ObservedObject var lab: LabModel
+    @ObservedObject var preparation: PreparationModel
     @State private var showAddBean = false
     @State private var selectedBean: CoffeeBeanRecord?
     @State private var errorMessage: String?
@@ -752,51 +758,24 @@ private struct CoffeeInventoryView: View {
         ZStack {
             CupaTheme.background.ignoresSafeArea()
             List {
-                Section {
-                    if beans.isEmpty {
+                Section("Cafés activos") {
+                    if activeBeans.isEmpty {
                         ContentUnavailableView(
-                            "Sin cafés guardados",
+                            "Sin cafés activos",
                             systemImage: "leaf",
                             description: Text("Agrega tu primer café para usarlo en preparaciones, recetas y catas.")
                         )
                         .listRowBackground(Color.clear)
                     } else {
-                        ForEach(beans) { bean in
-                            let freshness = CoffeeFreshnessEngine.evaluate(roastDate: bean.roastDate, openedDate: bean.openedDate)
-                            Button { selectedBean = bean } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack {
-                                        Text(bean.name).font(.headline)
-                                        Spacer()
-                                        CoffeeFreshnessBadge(state: freshness.state)
-                                        if bean.syncStatus != .synced {
-                                            Image(systemName: "arrow.triangle.2.circlepath")
-                                                .font(.caption)
-                                                .foregroundStyle(CupaTheme.gold)
-                                        }
-                                    }
-                                    Text("\(bean.brand.isEmpty ? "Sin tostador" : bean.brand) · Tueste \(bean.roastLevel.lowercased())")
-                                        .font(.subheadline)
-                                        .foregroundStyle(CupaTheme.secondaryText)
-                                    if bean.remainingQuantityGrams > 0 {
-                                        Text("\(bean.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles")
-                                            .font(.caption)
-                                            .foregroundStyle(CupaTheme.forest)
-                                    }
-                                    CoffeeFreshnessBar(result: freshness)
-                                    if let warning = freshness.openWarning {
-                                        Label(warning, systemImage: "exclamationmark.triangle.fill")
-                                            .font(.caption2).foregroundStyle(CupaTheme.terracotta)
-                                    }
-                                }
-                                .padding(.vertical, 6)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .onDelete(perform: softDelete)
+                        ForEach(activeBeans) { bean in coffeeRow(bean) }
+                            .onDelete { softDelete(at: $0, from: activeBeans) }
                     }
-                } header: {
-                    Text("Cafés")
+                }
+                if !finishedBeans.isEmpty {
+                    Section("Lotes históricos / terminados") {
+                        ForEach(finishedBeans) { bean in coffeeRow(bean) }
+                            .onDelete { softDelete(at: $0, from: finishedBeans) }
+                    }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -813,15 +792,49 @@ private struct CoffeeInventoryView: View {
             }
         }
         .sheet(item: $selectedBean) { bean in
-            CoffeeBeanDetail(record: bean)
+            CoffeeBeanDetail(
+                record: bean,
+                onPrepare: { preparation.selectBean(bean); selection = .brew },
+                onLab: { lab.load(bean: bean); selection = .lab }
+            )
         }
         .alert("No se pudo guardar el café", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("Aceptar") {}
         } message: { Text(errorMessage ?? "") }
     }
 
-    private func softDelete(at offsets: IndexSet) {
-        for index in offsets { beans[index].markDeleted() }
+    private var activeBeans: [CoffeeBeanRecord] { beans.filter { $0.inventoryStatus != .finished } }
+    private var finishedBeans: [CoffeeBeanRecord] { beans.filter { $0.inventoryStatus == .finished } }
+
+    private func coffeeRow(_ bean: CoffeeBeanRecord) -> some View {
+        let freshness = CoffeeFreshnessEngine.evaluate(roastDate: bean.roastDate, openedDate: bean.openedDate)
+        return Button { selectedBean = bean } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(bean.name).font(.headline)
+                    Spacer()
+                    Text(bean.inventoryStatus.label.uppercased()).font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
+                    CoffeeFreshnessBadge(state: freshness.state)
+                    if bean.syncStatus != .synced {
+                        Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(CupaTheme.gold)
+                    }
+                }
+                Text("\(bean.brand.isEmpty ? "Sin tostador" : bean.brand) · Tueste \(bean.roastLevel.lowercased())")
+                    .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                Text("\(bean.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles")
+                    .font(.caption).foregroundStyle(bean.inventoryStatus == .finished ? CupaTheme.secondaryText : CupaTheme.forest)
+                CoffeeFreshnessBar(result: freshness)
+                if let warning = freshness.openWarning {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill").font(.caption2).foregroundStyle(CupaTheme.terracotta)
+                }
+            }
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func softDelete(at offsets: IndexSet, from records: [CoffeeBeanRecord]) {
+        for index in offsets { records[index].markDeleted() }
         if let error = save() { errorMessage = error }
     }
 
@@ -834,13 +847,18 @@ private struct CoffeeInventoryView: View {
 private struct CoffeeBeanDetail: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var modelContext
-    private let record: CoffeeBeanRecord
+    @ObservedObject private var record: CoffeeBeanRecord
+    private let onPrepare: () -> Void
+    private let onLab: () -> Void
     @FetchRequest private var brews: FetchedResults<BrewSessionRecord>
     @FetchRequest private var cups: FetchedResults<CupSessionRecord>
     @State private var showEditor = false
+    @State private var actionError: String?
 
-    init(record: CoffeeBeanRecord) {
-        self.record = record
+    init(record: CoffeeBeanRecord, onPrepare: @escaping () -> Void, onLab: @escaping () -> Void) {
+        _record = ObservedObject(wrappedValue: record)
+        self.onPrepare = onPrepare
+        self.onLab = onLab
         _brews = FetchRequest(
             sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)],
             predicate: NSPredicate(format: "beanId == %@ AND deletedAt == nil", record.id as CVarArg),
@@ -877,6 +895,23 @@ private struct CoffeeBeanDetail: View {
                 Section("Uso") {
                     LabeledContent("Preparaciones", value: "\(brews.count)")
                     LabeledContent("Tazas catadas", value: "\(cups.count)")
+                }
+
+                Section("Acciones") {
+                    HStack {
+                        Button { onPrepare(); dismiss() } label: { Label("Preparar", systemImage: "mug") }
+                            .buttonStyle(.borderedProminent).tint(CupaTheme.forest)
+                        Spacer()
+                        Button { onLab(); dismiss() } label: { Label("Llevar a Lab", systemImage: "flask") }
+                            .buttonStyle(.bordered).tint(CupaTheme.terracotta)
+                    }
+                    if record.inventoryStatus == .closed {
+                        Button("Abrir bolsa hoy", systemImage: "shippingbox.and.arrow.backward") { markOpened() }
+                    }
+                    if record.inventoryStatus != .finished {
+                        Button("Marcar como terminado", systemImage: "checkmark.circle") { markFinished() }
+                            .foregroundStyle(CupaTheme.terracotta)
+                    }
                 }
 
                 Section("Preparaciones recientes") {
@@ -938,6 +973,9 @@ private struct CoffeeBeanDetail: View {
                     return save()
                 }
             }
+            .alert("No se pudo actualizar el café", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+                Button("Aceptar") {}
+            } message: { Text(actionError ?? "") }
         }
     }
 
@@ -953,6 +991,16 @@ private struct CoffeeBeanDetail: View {
     private func save() -> String? {
         do { try modelContext.save(); return nil }
         catch { modelContext.rollback(); return error.localizedDescription }
+    }
+
+    private func markOpened() {
+        record.openedDate = .now; record.markUpdated()
+        if let error = save() { actionError = error }
+    }
+
+    private func markFinished() {
+        record.remainingQuantityGrams = 0; record.markUpdated()
+        if let error = save() { actionError = error }
     }
 }
 
@@ -1073,8 +1121,8 @@ private struct CoffeeBeanEditor: View {
         _roastDate = State(initialValue: record?.roastDate ?? .now)
         _hasOpenedDate = State(initialValue: record?.openedDate != nil)
         _openedDate = State(initialValue: record?.openedDate ?? .now)
-        _initialQuantity = State(initialValue: record.map { String(format: "%.1f", $0.initialQuantityGrams) } ?? "")
-        _remainingQuantity = State(initialValue: record.map { String(format: "%.1f", $0.remainingQuantityGrams) } ?? "")
+        _initialQuantity = State(initialValue: record.map { String(format: "%.1f", $0.initialQuantityGrams) } ?? "250.0")
+        _remainingQuantity = State(initialValue: record.map { String(format: "%.1f", $0.remainingQuantityGrams) } ?? "250.0")
         _notes = State(initialValue: record?.notes ?? "")
     }
 

@@ -13,7 +13,7 @@ enum CoffeeFreshnessState: String, CaseIterable {
         case .noDate: "Sin fecha"
         case .veryFresh: "Muy fresco"
         case .inWindow: "En ventana"
-        case .ideal: "Puntal ideal"
+        case .ideal: "Punto ideal"
         case .declining: "Bajando"
         case .old: "Viejo"
         }
@@ -27,6 +27,18 @@ enum CoffeeFreshnessState: String, CaseIterable {
         case .ideal: 0xC28B46
         case .declining: 0xB76545
         case .old: 0x8C5A2B
+        }
+    }
+}
+
+enum CoffeeInventoryStatus: String, Equatable {
+    case closed, open, finished
+
+    var label: String {
+        switch self {
+        case .closed: "Cerrado"
+        case .open: "Abierto"
+        case .finished: "Terminado"
         }
     }
 }
@@ -134,6 +146,11 @@ final class CoffeeBeanRecord: NSManagedObject {
     var syncStatus: SyncStatus {
         get { SyncStatus(rawValue: syncStatusRaw) ?? .error }
         set { syncStatusRaw = newValue.rawValue }
+    }
+
+    var inventoryStatus: CoffeeInventoryStatus {
+        if remainingQuantityGrams <= 0 { return .finished }
+        return openedDate == nil ? .closed : .open
     }
 
     convenience init(

@@ -374,6 +374,32 @@ final class TastingModelTests: XCTestCase {
 }
 
 final class CoffeeUsageHistoryTests: XCTestCase {
+    @MainActor func testInventoryStatusAndTransfersMatchAndroidActions() throws {
+        let suite = "CoffeeInventoryActions.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let roastDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let bean = CoffeeBeanRecord(
+            context: context, name: "Guji", brand: "Casa", process: "Lavado",
+            roastDate: roastDate, initialQuantityGrams: 250, remainingQuantityGrams: 250, notes: "Jazmín"
+        )
+        XCTAssertEqual(bean.inventoryStatus, .closed)
+
+        let lab = LabModel(defaults: defaults); lab.load(bean: bean, now: roastDate.addingTimeInterval(5 * 86_400))
+        XCTAssertEqual(lab.state.beanId, bean.id)
+        XCTAssertEqual(lab.state.freshness, "muy fresco")
+        XCTAssertEqual(lab.state.notes, "Grano: Guji. Proceso: Lavado. Jazmín")
+
+        let preparation = PreparationModel(defaults: defaults); preparation.selectBean(bean)
+        XCTAssertEqual(preparation.state.beanId, bean.id)
+        XCTAssertEqual(PreparationModel(defaults: defaults).state.beanId, bean.id)
+
+        bean.openedDate = roastDate.addingTimeInterval(5 * 86_400)
+        XCTAssertEqual(bean.inventoryStatus, .open)
+        bean.remainingQuantityGrams = 0
+        XCTAssertEqual(bean.inventoryStatus, .finished)
+    }
+
     @MainActor func testHistoryIsDerivedFromBeanIdentifierAndSurvivesBeanDeletion() throws {
         let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
         let bean = CoffeeBeanRecord(context: context, name: "Etiopía Guji", brand: "Casa", remainingQuantityGrams: 180)

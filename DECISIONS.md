@@ -103,3 +103,11 @@ El controlador admite inyectar una URL de almacén sólo para aislar pruebas sin
 ## D-026 — Historial de uso del café derivado por UUID
 
 El detalle de cada café consulta `BrewSession` y `CupSession` activas por su `beanId`; no persiste una lista duplicada ni contadores que puedan desincronizarse. La pantalla muestra preparaciones, dosis, agua, proporción, fechas, tazas, valoración, etapa térmica y comentario. El borrado lógico del café lo retira del inventario, pero conserva las sesiones y sus snapshots para que el historial siga siendo legible y sincronizable.
+
+## D-027 — Estado del lote derivado y acciones equivalentes
+
+Android representa cerrado, abierto y terminado; en iOS se derivan de los datos ya sincronizados: sin fecha de apertura, con fecha de apertura y existencias en cero, respectivamente. “Abrir bolsa hoy” guarda la fecha actual y “Marcar como terminado” lleva las existencias a cero, evitando un segundo campo de estado que pueda contradecirlos. Preparar conserva el UUID en el estado recuperable de preparación; Laboratorio conserva UUID, frescura calculada, proceso y notas. La referencia Android auditada no contiene fotografía en `Bean`, su formulario ni su detalle, por lo que no se agrega un selector aparente sin función de origen.
+
+## D-028 — Perfil del molino y ajuste de la técnica separados
+
+El formulario Android vigente del molino expone marca, modelo, rango operativo y calibración; no ofrece edición de ajustes por método aunque el DTO contemple esa colección futura. iOS conserva esos datos como nombre/marca/modelo, unidad, mínimo, máximo y calibración. El valor interno y su descripción legible pertenecen a cada técnica y se congelan en la sesión ejecutada, porque “22 clicks” puede variar entre métodos y molinos y no es una propiedad única del equipo.

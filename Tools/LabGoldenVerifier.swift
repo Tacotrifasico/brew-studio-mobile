@@ -30,6 +30,7 @@ struct LabGoldenVerifier {
         )
         verifyStateRestoration()
         verifyCoffeeFreshnessParity()
+        verifyCoffeeInventoryActions()
         verifySQLiteReopening()
         verifyCalculatorFavorites()
         verifyCalculatorQuickPreparation()
@@ -44,7 +45,7 @@ struct LabGoldenVerifier {
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
-        print("4 golden tests, frescura, reapertura SQLite, agregados, preparación, cata, sincronización, IA, perfil y social aprobados")
+        print("4 golden tests, frescura, inventario, reapertura SQLite, agregados, preparación, cata, sincronización, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -52,6 +53,25 @@ struct LabGoldenVerifier {
         let actual = [output.aroma, output.acidity, output.sweetness, output.body, output.bitterness, output.finish]
         precondition(abs(output.extractionIndex - extraction) <= 0.000_01, "\(name): índice \(output.extractionIndex)")
         precondition(actual == scores, "\(name): esperado \(scores), recibido \(actual)")
+    }
+
+    @MainActor private static func verifyCoffeeInventoryActions() {
+        let suite = "CupaCoffeeActionsVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let roastDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let bean = CoffeeBeanRecord(
+            context: context, name: "Guji", brand: "Casa", process: "Lavado",
+            roastDate: roastDate, initialQuantityGrams: 250, remainingQuantityGrams: 250, notes: "Jazmín"
+        )
+        precondition(bean.inventoryStatus == .closed)
+        let lab = LabModel(defaults: defaults); lab.load(bean: bean, now: roastDate.addingTimeInterval(5 * 86_400))
+        precondition(lab.state.beanId == bean.id && lab.state.freshness == "muy fresco")
+        precondition(lab.state.notes == "Grano: Guji. Proceso: Lavado. Jazmín")
+        let preparation = PreparationModel(defaults: defaults); preparation.selectBean(bean)
+        precondition(preparation.state.beanId == bean.id && PreparationModel(defaults: defaults).state.beanId == bean.id)
+        bean.openedDate = roastDate.addingTimeInterval(5 * 86_400); precondition(bean.inventoryStatus == .open)
+        bean.remainingQuantityGrams = 0; precondition(bean.inventoryStatus == .finished)
     }
 
     private static func verifyStateRestoration() {

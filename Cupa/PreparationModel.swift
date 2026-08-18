@@ -72,6 +72,12 @@ final class PreparationModel: ObservableObject {
         )
     }
 
+    func selectBean(_ bean: CoffeeBeanRecord) {
+        if state.savedAt != nil { reset() }
+        state.beanId = bean.id
+        state.updatedAt = .now
+    }
+
     func start() {
         guard !state.steps.isEmpty else { return }
         if state.startedAt == nil { state.startedAt = .now }

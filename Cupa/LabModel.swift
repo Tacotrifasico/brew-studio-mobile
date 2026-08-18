@@ -241,6 +241,25 @@ final class LabModel: ObservableObject {
         }
     }
 
+    func load(bean: CoffeeBeanRecord, now: Date = .now, calendar: Calendar = .current) {
+        let freshness = CoffeeFreshnessEngine.evaluate(roastDate: bean.roastDate, openedDate: bean.openedDate, now: now, calendar: calendar)
+        let freshnessLabel: String = switch freshness.state {
+        case .veryFresh: "muy fresco"
+        case .inWindow: "en ventana"
+        case .ideal: "punto ideal"
+        case .declining: "bajando"
+        case .old: "viejo"
+        case .noDate: "en ventana"
+        }
+        let details = ["Grano: \(bean.name)", bean.process.isEmpty ? nil : "Proceso: \(bean.process)", bean.notes.isEmpty ? nil : bean.notes]
+            .compactMap { $0 }.joined(separator: ". ")
+        update {
+            $0.beanId = bean.id
+            $0.freshness = freshnessLabel
+            $0.notes = details
+        }
+    }
+
     func load(recipe: RecipeRecord, ingredients: [RecipeIngredientRecord]) {
         let coffee = (ingredients.first { Self.isCoffee($0) } ?? ingredients.first { Self.isGramUnit($0) })?.amount
         let water = (ingredients.first { Self.isWater($0) } ?? ingredients.first { Self.isMilliliterUnit($0) })?.amount

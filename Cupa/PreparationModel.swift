@@ -8,7 +8,7 @@ struct PreparationStepSnapshot: Identifiable, Codable, Equatable {
 enum PreparationStatus: String, Codable { case ready, running, paused, completed }
 
 struct PreparationState: Codable, Equatable {
-    var sessionId = UUID(); var techniqueId: UUID?; var techniqueName = "Preparación libre"; var methodName = "V60"
+    var sessionId = UUID(); var techniqueId: UUID?; var techniqueName = "Preparación libre"; var methodId: UUID?; var methodName = "V60"
     var recipeId: UUID?; var beanId: UUID?; var grinderId: UUID?
     var doseGrams = 15.0; var waterMl = 240; var ratio = 16.0; var temperatureC = 92; var grindDescription = ""
     var executionMode = "MANUAL"; var steps: [PreparationStepSnapshot] = []
@@ -41,7 +41,8 @@ final class PreparationModel: ObservableObject {
     func load(technique: TechniqueRecord, steps: [TechniqueStepRecord]) {
         timer?.invalidate(); timer = nil
         state = PreparationState(
-            sessionId: UUID(), techniqueId: technique.id, techniqueName: technique.name, methodName: technique.methodName,
+            sessionId: UUID(), techniqueId: technique.id, techniqueName: technique.name,
+            methodId: technique.methodId, methodName: technique.methodName,
             recipeId: technique.recipeId, beanId: technique.beanId, grinderId: technique.grinderId,
             doseGrams: technique.doseGrams, waterMl: Int(technique.waterMl), ratio: technique.ratio,
             temperatureC: Int(technique.temperatureC), grindDescription: technique.grindDescription,
@@ -57,6 +58,17 @@ final class PreparationModel: ObservableObject {
             doseGrams: calculator.coffee, waterMl: calculator.water, ratio: calculator.ratio,
             temperatureC: 92, executionMode: "MANUAL",
             steps: [.init(id: UUID(), number: 1, title: "Preparación libre", durationSeconds: 180, waterAddedMl: calculator.water, waterAccumulatedMl: calculator.water, gesture: "MANUAL", intensity: "MEDIUM", note: "Sigue tu vertido y usa el cronómetro.")]
+        )
+    }
+
+    func load(lab: LabState) {
+        timer?.invalidate(); timer = nil
+        state = PreparationState(
+            techniqueId: lab.techniqueId, techniqueName: lab.techniqueName ?? "Hipótesis de Laboratorio",
+            methodId: lab.methodId, methodName: lab.method, recipeId: lab.recipeId, beanId: lab.beanId, grinderId: lab.grinderId,
+            doseGrams: Double(lab.coffeeGrams), waterMl: lab.waterMl, ratio: Double(lab.ratio), temperatureC: lab.temperatureC,
+            grindDescription: "\(lab.grindClicks) clicks", executionMode: "MANUAL",
+            steps: [.init(id: UUID(), number: 1, title: "Preparar hipótesis", durationSeconds: lab.timeSeconds, waterAddedMl: lab.waterMl, waterAccumulatedMl: lab.waterMl, gesture: "MANUAL", intensity: "MEDIUM", note: lab.notes)]
         )
     }
 

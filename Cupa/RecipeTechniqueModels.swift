@@ -136,16 +136,16 @@ extension TechniqueStepRecord: Identifiable {}
 @objc(BrewSessionRecord)
 final class BrewSessionRecord: NSManagedObject, SyncTrackedRecord {
     @NSManaged var id: UUID; @NSManaged var ownerId: UUID?
-    @NSManaged var techniqueId: UUID?; @NSManaged var recipeId: UUID?; @NSManaged var beanId: UUID?; @NSManaged var grinderId: UUID?
-    @NSManaged var techniqueNameSnapshot: String; @NSManaged var methodNameSnapshot: String; @NSManaged var beanNameSnapshot: String; @NSManaged var grinderNameSnapshot: String
+    @NSManaged var techniqueId: UUID?; @NSManaged var recipeId: UUID?; @NSManaged var methodId: UUID?; @NSManaged var beanId: UUID?; @NSManaged var grinderId: UUID?
+    @NSManaged var techniqueNameSnapshot: String; @NSManaged var recipeNameSnapshot: String; @NSManaged var methodNameSnapshot: String; @NSManaged var beanNameSnapshot: String; @NSManaged var grinderNameSnapshot: String
     @NSManaged var doseGrams: Double; @NSManaged var waterMl: Int64; @NSManaged var ratio: Double; @NSManaged var temperatureC: Int64
     @NSManaged var grindDescription: String; @NSManaged var elapsedSeconds: Int64; @NSManaged var completedAt: Date; @NSManaged var stepsSnapshotJSON: String
     @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
     @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
-    convenience init(context: NSManagedObjectContext, state: PreparationState, beanName: String, grinderName: String) {
+    convenience init(context: NSManagedObjectContext, state: PreparationState, recipeName: String = "", beanName: String, grinderName: String) {
         self.init(context: context); id = state.sessionId; ownerId = nil
-        techniqueId = state.techniqueId; recipeId = state.recipeId; beanId = state.beanId; grinderId = state.grinderId
-        techniqueNameSnapshot = state.techniqueName; methodNameSnapshot = state.methodName; beanNameSnapshot = beanName; grinderNameSnapshot = grinderName
+        techniqueId = state.techniqueId; recipeId = state.recipeId; methodId = state.methodId; beanId = state.beanId; grinderId = state.grinderId
+        techniqueNameSnapshot = state.techniqueName; recipeNameSnapshot = recipeName; methodNameSnapshot = state.methodName; beanNameSnapshot = beanName; grinderNameSnapshot = grinderName
         doseGrams = state.doseGrams; waterMl = Int64(state.waterMl); ratio = state.ratio; temperatureC = Int64(state.temperatureC)
         grindDescription = state.grindDescription; elapsedSeconds = Int64(state.elapsedSeconds); completedAt = .now
         stepsSnapshotJSON = String(data: (try? JSONEncoder().encode(state.steps)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"

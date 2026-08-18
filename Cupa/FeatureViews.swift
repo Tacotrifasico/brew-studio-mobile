@@ -260,7 +260,13 @@ struct LabView: View {
         predicate: NSPredicate(format: "deletedAt == nil"),
         animation: .default
     ) private var experiments: FetchedResults<LabExperimentRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var techniques: FetchedResults<TechniqueRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var beans: FetchedResults<CoffeeBeanRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var grinders: FetchedResults<GrinderRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil AND equipmentType == 'BREWER_METHOD'")) private var methods: FetchedResults<EquipmentRecord>
     @ObservedObject var model: LabModel
+    @ObservedObject var preparation: PreparationModel
     @ObservedObject var account: AccountModel
     @Binding var selection: CupaTab
     @State private var category = LabControlCategory.extraction
@@ -279,6 +285,7 @@ struct LabView: View {
             CupaTheme.background.ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 16) {
+                    baseDataCard
                     altitudeCard
                     SectionHeader(
                         eyebrow: model.state.method.uppercased(),
@@ -321,6 +328,42 @@ struct LabView: View {
             Text("Cupa enviará a Google Gemini los parámetros de esta preparación y su perfil sensorial para generar una sugerencia. No se envían tu correo, nombre ni identificador. Puedes retirar este permiso en Configuración.")
         }
     }
+
+    private var baseDataCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Base e inventario").font(.headline)
+                Picker("Receta base", selection: Binding(get: { model.state.recipeId }, set: loadRecipe)) {
+                    Text("Sin receta").tag(Optional<UUID>.none)
+                    ForEach(recipes) { Text($0.name).tag(Optional($0.id)) }
+                }
+                Picker("Técnica base", selection: Binding(get: { model.state.techniqueId }, set: loadTechnique)) {
+                    Text("Modo libre").tag(Optional<UUID>.none)
+                    ForEach(techniques) { Text($0.name).tag(Optional($0.id)) }
+                }
+                Picker("Método / equipo", selection: Binding(get: { model.state.methodId }, set: loadMethod)) {
+                    Text("Método genérico (\(model.state.method))").tag(Optional<UUID>.none)
+                    ForEach(methods) { Text($0.name).tag(Optional($0.id)) }
+                }
+                HStack {
+                    Picker("Grano", selection: binding(\.beanId)) { Text("Sin asignar").tag(Optional<UUID>.none); ForEach(beans) { Text($0.name).tag(Optional($0.id)) } }
+                    Picker("Molino", selection: binding(\.grinderId)) { Text("Sin asignar").tag(Optional<UUID>.none); ForEach(grinders) { Text($0.name).tag(Optional($0.id)) } }
+                }
+            }
+        }
+    }
+
+    private func loadRecipe(_ id: UUID?) {
+        guard let id, let recipe = recipes.first(where: { $0.id == id }) else { model.update { $0.recipeId = nil }; return }
+        let ingredients = (try? RecipeTechniqueRepository(context: modelContext).ingredients(recipeId: id)) ?? []
+        model.load(recipe: recipe, ingredients: ingredients)
+    }
+    private func loadTechnique(_ id: UUID?) {
+        guard let id, let technique = techniques.first(where: { $0.id == id }) else { model.update { $0.techniqueId = nil }; return }
+        let recipeName = recipes.first(where: { $0.id == technique.recipeId })?.name
+        model.load(technique: technique, recipeName: recipeName)
+    }
+    private func loadMethod(_ id: UUID?) { model.selectMethod(methods.first(where: { $0.id == id })) }
 
     private var altitudeCard: some View {
         CupaCard {
@@ -511,6 +554,7 @@ struct LabView: View {
                 .buttonStyle(.bordered)
             Button {
                 saveExperiment()
+                preparation.load(lab: model.state)
                 selection = .brew
             } label: { Label("Preparar esta idea", systemImage: "play.fill") }
                 .buttonStyle(.borderedProminent).tint(CupaTheme.forest)

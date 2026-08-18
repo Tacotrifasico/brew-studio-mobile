@@ -6,6 +6,7 @@ struct PreparationExecutionView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var techniques: FetchedResults<TechniqueRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var beans: FetchedResults<CoffeeBeanRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var grinders: FetchedResults<GrinderRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var recipes: FetchedResults<RecipeRecord>
     @ObservedObject var model: PreparationModel
     @State private var selectedTechniqueId: UUID?; @State private var errorMessage: String?; @State private var savedConfirmation = false
 
@@ -92,9 +93,10 @@ struct PreparationExecutionView: View {
         catch { errorMessage = error.localizedDescription }
     }
     private func finish() {
+        let recipeName = recipes.first(where: { $0.id == model.state.recipeId })?.name ?? ""
         let beanName = beans.first(where: { $0.id == model.state.beanId })?.name ?? ""
         let grinderName = grinders.first(where: { $0.id == model.state.grinderId })?.name ?? ""
-        _ = BrewSessionRecord(context: context, state: model.state, beanName: beanName, grinderName: grinderName)
+        _ = BrewSessionRecord(context: context, state: model.state, recipeName: recipeName, beanName: beanName, grinderName: grinderName)
         do { try context.save(); model.complete(); savedConfirmation = true } catch { context.rollback(); errorMessage = error.localizedDescription }
     }
     private func timeString(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }

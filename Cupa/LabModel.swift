@@ -27,6 +27,13 @@ struct LabFlavorProfile: Equatable {
 }
 
 struct LabState: Codable, Equatable {
+    var methodId: UUID?
+    var recipeId: UUID?
+    var techniqueId: UUID?
+    var beanId: UUID?
+    var grinderId: UUID?
+    var recipeName: String?
+    var techniqueName: String?
     var method = "V60"
     var coffeeGrams: Float = 15
     var waterMl = 240
@@ -222,15 +229,67 @@ final class LabModel: ObservableObject {
     }
     @MainActor func load(calculator: CalculatorModel) {
         update {
+            $0.methodId = nil
+            $0.recipeId = nil
+            $0.techniqueId = nil
+            $0.recipeName = nil
+            $0.techniqueName = nil
             $0.method = calculator.method
             $0.coffeeGrams = Float(calculator.coffee)
             $0.waterMl = calculator.water
             $0.ratio = Float(calculator.ratio)
         }
     }
+
+    func load(recipe: RecipeRecord, ingredients: [RecipeIngredientRecord]) {
+        let coffee = (ingredients.first { Self.isCoffee($0) } ?? ingredients.first { Self.isGramUnit($0) })?.amount
+        let water = (ingredients.first { Self.isWater($0) } ?? ingredients.first { Self.isMilliliterUnit($0) })?.amount
+        update {
+            $0.recipeId = recipe.id; $0.techniqueId = nil
+            $0.recipeName = recipe.name; $0.techniqueName = nil
+            $0.methodId = recipe.suggestedMethodId
+            if !recipe.suggestedMethodName.isEmpty { $0.method = recipe.suggestedMethodName }
+            if let coffee, coffee > 0 { $0.coffeeGrams = Float(coffee) }
+            if let water, water > 0 { $0.waterMl = Int(water.rounded()) }
+            if let coffee, let water, coffee > 0 { $0.ratio = Float(water / coffee) }
+        }
+    }
+
+    func load(technique: TechniqueRecord, recipeName: String? = nil) {
+        update {
+            $0.techniqueId = technique.id; $0.recipeId = technique.recipeId
+            $0.techniqueName = technique.name; $0.recipeName = recipeName
+            $0.methodId = technique.methodId; $0.beanId = technique.beanId; $0.grinderId = technique.grinderId
+            $0.method = technique.methodName; $0.coffeeGrams = Float(technique.doseGrams)
+            $0.waterMl = Int(technique.waterMl); $0.ratio = Float(technique.ratio)
+            $0.temperatureC = Int(technique.temperatureC)
+            if technique.grindUnit == "CLICKS" { $0.grindClicks = min(50, max(4, Int(technique.grindValue.rounded()))) }
+            if technique.totalTimeSeconds > 0 { $0.timeSeconds = Int(technique.totalTimeSeconds) }
+        }
+    }
+
+    func selectMethod(_ method: EquipmentRecord?) {
+        update { $0.methodId = method?.id; if let method { $0.method = method.name } }
+    }
     func reset() { state = LabState(temperatureUnit: state.temperatureUnit) }
 
     private func persist() {
         if let data = try? JSONEncoder().encode(state) { defaults.set(data, forKey: storageKey) }
+    }
+
+    private static func isCoffee(_ ingredient: RecipeIngredientRecord) -> Bool {
+        let value = "\(ingredient.name) \(ingredient.unit)".folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+        return value.contains("cafe") || value.contains("coffee")
+    }
+    private static func isWater(_ ingredient: RecipeIngredientRecord) -> Bool {
+        let value = "\(ingredient.name) \(ingredient.unit)".folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+        return value.contains("agua") || value.contains("water")
+    }
+    private static func isGramUnit(_ ingredient: RecipeIngredientRecord) -> Bool {
+        ingredient.unit.uppercased().contains("GRAM")
+    }
+    private static func isMilliliterUnit(_ ingredient: RecipeIngredientRecord) -> Bool {
+        let unit = ingredient.unit.uppercased()
+        return unit == "ML" || unit.contains("MILLILIT") || unit.contains("MILILIT")
     }
 }

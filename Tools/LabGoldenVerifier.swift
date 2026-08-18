@@ -30,6 +30,7 @@ struct LabGoldenVerifier {
         )
         verifyStateRestoration()
         verifyCalculatorFavorites()
+        verifyTransfersAndHistoricalSnapshots()
         verifyLocalPersistence()
         verifyRecipeTechniqueAggregates()
         verifyPreparationRecovery()
@@ -72,6 +73,44 @@ struct LabGoldenVerifier {
         precondition(CalculatorModel(defaults: defaults).savedPresets.first?.coffee == 18)
         calculator.toggleFavorite()
         precondition(CalculatorModel(defaults: defaults).savedPresets.isEmpty)
+    }
+
+    @MainActor private static func verifyTransfersAndHistoricalSnapshots() {
+        let suite = "CupaTransferVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let method = EquipmentRecord(context: context, name: "V60 02", equipmentType: "BREWER_METHOD", brand: "Hario", model: "02", capacityMl: 600, configuration: "Plástico", notes: "", isFavorite: true, isActive: true)
+        let bean = CoffeeBeanRecord(context: context, name: "Etiopía Guji", brand: "Casa", remainingQuantityGrams: 250)
+        let grinder = GrinderRecord(context: context, name: "C40", brand: "Comandante", model: "MK4", grinderType: "MANUAL", scaleUnit: "CLICKS", minimumSetting: 0, maximumSetting: 40, calibrationNotes: "", notes: "")
+        let recipe = RecipeRecord(context: context, name: "V60 floral", recipeKind: "BLACK_COFFEE", intention: "Claridad", suggestedMethodId: method.id, suggestedMethodName: method.name, isFavorite: true, tags: "floral")
+        let coffee = RecipeIngredientRecord(context: context, recipeId: recipe.id, name: "Café", amount: 18, unit: "GRAMS", orderIndex: 0)
+        let water = RecipeIngredientRecord(context: context, recipeId: recipe.id, name: "Agua", amount: 270, unit: "MILLILITERS", orderIndex: 1)
+        let technique = TechniqueRecord(context: context, name: "Tres vertidos", methodId: method.id, methodName: method.name, recipeId: recipe.id, beanId: bean.id, grinderId: grinder.id, doseGrams: 18, waterMl: 270, ratio: 15, temperatureC: 94, executionMode: "GUIDED", grindValue: 22, grindDescription: "22 clicks", grindUnit: "CLICKS", notes: "Bloom largo", techniqueDescription: "Tres pulsos", totalTimeSeconds: 210)
+        try! context.save()
+
+        let calculator = CalculatorModel(defaults: defaults); calculator.selectMethod("AeroPress"); calculator.changeCoffee("17"); calculator.changeRatio("13")
+        let lab = LabModel(defaults: defaults); lab.load(calculator: calculator)
+        precondition(lab.state.method == "AeroPress" && lab.state.coffeeGrams == 17 && lab.state.waterMl == 221 && lab.state.ratio == 13)
+        lab.load(recipe: recipe, ingredients: [coffee, water])
+        precondition(lab.state.recipeId == recipe.id && lab.state.methodId == method.id && lab.state.coffeeGrams == 18 && lab.state.waterMl == 270 && lab.state.ratio == 15)
+        lab.load(technique: technique, recipeName: recipe.name)
+        precondition(lab.state.techniqueId == technique.id && lab.state.beanId == bean.id && lab.state.grinderId == grinder.id)
+        precondition(lab.state.temperatureC == 94 && lab.state.grindClicks == 22 && lab.state.timeSeconds == 210)
+        let reopenedLab = LabModel(defaults: defaults)
+        precondition(reopenedLab.state.techniqueId == technique.id && reopenedLab.state.recipeName == recipe.name)
+
+        let preparation = PreparationModel(defaults: defaults); preparation.load(lab: reopenedLab.state)
+        precondition(preparation.state.techniqueId == technique.id && preparation.state.methodId == method.id)
+        precondition(preparation.state.doseGrams == 18 && preparation.state.waterMl == 270 && preparation.state.temperatureC == 94)
+        let experiment = LabExperimentRecord(context: context, state: reopenedLab.state, profile: reopenedLab.profile)
+        let brew = BrewSessionRecord(context: context, state: preparation.state, recipeName: recipe.name, beanName: bean.name, grinderName: grinder.name)
+        try! context.save()
+        precondition(experiment.methodId == method.id && experiment.recipeId == recipe.id && experiment.techniqueId == technique.id)
+        precondition(brew.methodId == method.id && brew.recipeNameSnapshot == "V60 floral" && brew.beanNameSnapshot == "Etiopía Guji")
+
+        recipe.markDeleted(); technique.markDeleted(); bean.markDeleted(); grinder.markDeleted(); method.markDeleted(); try! context.save()
+        precondition(brew.recipeId == recipe.id && brew.methodId == method.id && brew.beanId == bean.id && brew.grinderId == grinder.id)
+        precondition(brew.techniqueNameSnapshot == "Tres vertidos" && brew.methodNameSnapshot == "V60 02" && brew.grinderNameSnapshot == "C40")
     }
 
     private static func verifyLocalPersistence() {

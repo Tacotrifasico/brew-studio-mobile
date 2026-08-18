@@ -6,6 +6,8 @@ La migración idempotente `supabase/migrations/202608170001_ios_core_schema.sql`
 
 La migración `supabase/migrations/202608170002_social_content_moderation.sql` agrega límites de longitud y un filtro preventivo de texto en `brew_shares`. El trigger revisa identidad pública, título, mensaje y todo el snapshot JSON en cada alta o modificación, de modo que una llamada directa a REST no pueda saltarse la misma política aplicada por el cliente iOS.
 
+La migración `supabase/migrations/202608170003_lab_and_brew_references.sql` añade las referencias de método, receta, técnica, café y molino a los experimentos, y método más snapshot de receta a las sesiones. Es idempotente, incorpora claves foráneas `ON DELETE SET NULL` e índices; los snapshots permanecen aunque una referencia sea eliminada físicamente.
+
 Antes de producción se requiere:
 
 1. Comparar esta migración con el esquema ya desplegado antes de aplicarla; no modificar una migración que ya haya sido ejecutada.

@@ -71,3 +71,7 @@ Cada tipo Core Data tiene un descriptor explícito de tabla, columnas y conversi
 ## D-018 — Ícono derivado de la referencia Android
 
 El AppIcon usa el recurso gráfico vigente de Android convertido a PNG RGB de 1024 × 1024, sin inventar una identidad visual nueva. Se conserva en un catálogo estándar de Xcode para que App Store genere sus variantes.
+
+## D-019 — Referencias estables del Laboratorio y snapshots de receta
+
+Laboratorio conserva UUID opcionales de receta, técnica, método/equipo, café y molino, además de sus parámetros editables. Al transferir a Preparación se preservan esos UUID y el nombre de la técnica; al finalizar, `BrewSession` guarda también `methodId` y `recipeNameSnapshot`. Las referencias sirven para sincronización y navegación, mientras los snapshots conservan el significado histórico tras una edición o borrado lógico. Los atributos nuevos son opcionales o tienen valores por defecto y Core Data mantiene migración ligera automática.

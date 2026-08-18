@@ -73,6 +73,11 @@ extension CoffeeBeanRecord: Identifiable {}
 final class LabExperimentRecord: NSManagedObject {
     @NSManaged var id: UUID
     @NSManaged var ownerId: UUID?
+    @NSManaged var methodId: UUID?
+    @NSManaged var recipeId: UUID?
+    @NSManaged var techniqueId: UUID?
+    @NSManaged var beanId: UUID?
+    @NSManaged var grinderId: UUID?
     @NSManaged var method: String
     @NSManaged var coffeeGrams: Double
     @NSManaged var waterMl: Int64
@@ -94,7 +99,8 @@ final class LabExperimentRecord: NSManagedObject {
 
     convenience init(context: NSManagedObjectContext, state: LabState, profile: LabFlavorProfile) {
         self.init(context: context)
-        id = UUID(); ownerId = nil; method = state.method
+        id = UUID(); ownerId = nil; methodId = state.methodId; recipeId = state.recipeId
+        techniqueId = state.techniqueId; beanId = state.beanId; grinderId = state.grinderId; method = state.method
         coffeeGrams = Double(state.coffeeGrams); waterMl = Int64(state.waterMl); ratio = Double(state.ratio)
         temperatureC = Int64(state.temperatureC); grindClicks = Int64(state.grindClicks)
         freshness = state.freshness; timeSeconds = Int64(state.timeSeconds)
@@ -252,6 +258,9 @@ struct PersistenceController {
         experimentEntity.managedObjectClassName = NSStringFromClass(LabExperimentRecord.self)
         experimentEntity.properties = [
             attribute("id", .UUIDAttributeType), attribute("ownerId", .UUIDAttributeType, optional: true),
+            attribute("methodId", .UUIDAttributeType, optional: true), attribute("recipeId", .UUIDAttributeType, optional: true),
+            attribute("techniqueId", .UUIDAttributeType, optional: true), attribute("beanId", .UUIDAttributeType, optional: true),
+            attribute("grinderId", .UUIDAttributeType, optional: true),
             attribute("method", .stringAttributeType, defaultValue: "V60"), attribute("coffeeGrams", .doubleAttributeType, defaultValue: 15),
             attribute("waterMl", .integer64AttributeType, defaultValue: 240), attribute("ratio", .doubleAttributeType, defaultValue: 16),
             attribute("temperatureC", .integer64AttributeType, defaultValue: 92), attribute("grindClicks", .integer64AttributeType, defaultValue: 24),
@@ -351,8 +360,10 @@ struct PersistenceController {
         brewSessionEntity.name = "BrewSessionRecord"; brewSessionEntity.managedObjectClassName = NSStringFromClass(BrewSessionRecord.self)
         brewSessionEntity.properties = syncProperties(attribute: attribute) + [
             attribute("techniqueId", .UUIDAttributeType, optional: true), attribute("recipeId", .UUIDAttributeType, optional: true),
+            attribute("methodId", .UUIDAttributeType, optional: true),
             attribute("beanId", .UUIDAttributeType, optional: true), attribute("grinderId", .UUIDAttributeType, optional: true),
-            attribute("techniqueNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("methodNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("techniqueNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("recipeNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("methodNameSnapshot", .stringAttributeType, defaultValue: ""),
             attribute("beanNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("grinderNameSnapshot", .stringAttributeType, defaultValue: ""),
             attribute("doseGrams", .doubleAttributeType, defaultValue: 15), attribute("waterMl", .integer64AttributeType, defaultValue: 240),
             attribute("ratio", .doubleAttributeType, defaultValue: 16), attribute("temperatureC", .integer64AttributeType, defaultValue: 92),

@@ -5,17 +5,17 @@ Estados permitidos: No iniciado, Parcial, Implementado sin validar, Validado, Bl
 | Módulo | Función | Referencia | Estado iOS | Datos | Visual | Pruebas | Bloqueo | Criterio de aceptación | Estado final |
 |---|---|---|---|---|---|---|---|---|---|
 | Navegación | Cinco secciones principales | `MainActivity.kt` | Implementado sin validar | N/A | Parcial | Compilación | Ninguno | Navegar sin perder estado | Implementado sin validar |
-| Calculadora | Cálculo café → agua | `BaristaCalcViewModel.onCoffeeChanged` | Implementado sin validar | Local | Parcial | Pendiente | Ninguno | Mismos resultados y truncamiento | Implementado sin validar |
-| Calculadora | Cálculo ratio → agua | `onRatioChanged` | Implementado sin validar | Local | Parcial | Pendiente | Ninguno | Paridad para límites y decimales | Implementado sin validar |
-| Calculadora | Cálculo agua → café | `onWaterChanged` | Implementado sin validar | Local | Parcial | Pendiente | Ninguno | Mismo redondeo a un decimal | Implementado sin validar |
-| Calculadora | Métodos y ratios base | `baseRatios` | Implementado sin validar | Local | Parcial | Pendiente | Ninguno | Siete métodos equivalentes | Implementado sin validar |
+| Calculadora | Cálculo café → agua | `BaristaCalcViewModel.onCoffeeChanged` | Validado | Local | Parcial | XCTest compilado + prueba de paridad | Ninguno | Mismos resultados y truncamiento | Validado |
+| Calculadora | Cálculo ratio → agua | `onRatioChanged` | Validado | Local | Parcial | XCTest compilado + prueba de paridad | Ninguno | Paridad para límites y decimales | Validado |
+| Calculadora | Cálculo agua → café | `onWaterChanged` | Validado | Local | Parcial | XCTest compilado + prueba de paridad | Ninguno | Mismo redondeo a un decimal | Validado |
+| Calculadora | Métodos y ratios base | `baseRatios` | Validado | Local | Parcial | Siete métodos cubiertos por XCTest | Ninguno | Siete métodos equivalentes | Validado |
 | Calculadora | Presets y favoritos | `defaultPresets`, Room | Parcial | UserDefaults | Parcial | Pendiente | Ninguno | Persistencia y edición equivalentes | Parcial |
 | Calculadora | Transferencia a Preparación | `onActionPrepare` | Parcial | Memoria | Parcial | Pendiente | Ninguno | Todos los parámetros y pasos transferidos | Parcial |
-| Calculadora | Transferencia a Laboratorio | `onActionLab` | Parcial | Memoria | Parcial | Pendiente | Ninguno | Estado compartido exacto | Parcial |
-| Laboratorio | Motor sensorial continuo | `calculateLabProfile` | Parcial | Local | Parcial | Pendiente | Ninguno | Golden tests con fórmula exacta | Parcial |
-| Laboratorio | Altitud y hervor | `LabAltitudeHeaderCard.kt` | No iniciado | Ninguno | No iniciado | Pendiente | Ninguno | Ciudades, altitud y límite térmico equivalentes | No iniciado |
-| Laboratorio | Celsius/Fahrenheit | `LabScreen.kt` | No iniciado | Ninguno | No iniciado | Pendiente | Ninguno | Conversión y preferencias persistentes | No iniciado |
-| Laboratorio | Persistir experimento | Room `LabExperiment` | No iniciado | Ninguno | No iniciado | Pendiente | Ninguno | Reabrir experimento tras reinicio | No iniciado |
+| Calculadora | Transferencia a Laboratorio | `onActionLab` | Implementado sin validar | UserDefaults | Parcial | Compilación | Flujo UI pendiente | Estado compartido exacto | Implementado sin validar |
+| Laboratorio | Motor sensorial continuo | `calculateLabProfile` | Validado | Local | Parcial | 4 golden tests ejecutados | Ninguno | Golden tests con fórmula exacta | Validado |
+| Laboratorio | Altitud y hervor | `LabAltitudeHeaderCard.kt` | Implementado sin validar | UserDefaults | Implementado sin validar | Golden CDMX + límites | Ejecución UI pendiente por CoreSimulator | Ciudades, altitud y límite térmico equivalentes | Implementado sin validar |
+| Laboratorio | Celsius/Fahrenheit | `LabScreen.kt` | Implementado sin validar | UserDefaults | Implementado sin validar | Conversión y restauración ejecutadas | Ejecución UI pendiente por CoreSimulator | Conversión y preferencias persistentes | Implementado sin validar |
+| Laboratorio | Persistir experimento | Room `LabExperiment` | Implementado sin validar | Core Data | Implementado sin validar | CRUD en memoria ejecutado | Reapertura UI pendiente | Reabrir experimento tras reinicio | Implementado sin validar |
 | Preparación | Técnica y pasos | `BrewScreen.kt` | Parcial | Memoria | Parcial | Pendiente | Ninguno | Secuencia real completa | Parcial |
 | Preparación | Cronómetro | ViewModel Android | Parcial | Memoria | Parcial | Pendiente | Ninguno | Pausa, reanuda, reinicia y recupera estado | Parcial |
 | Cafés | Crear y listar | `StorageScreen.kt`, Room | Implementado sin validar | Core Data | Parcial | Compilación iPhone/simulador | Validar relanzamiento en simulador | Datos reales sobreviven reinicio | Implementado sin validar |

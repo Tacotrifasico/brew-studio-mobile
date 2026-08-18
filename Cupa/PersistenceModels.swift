@@ -69,15 +69,71 @@ final class CoffeeBeanRecord: NSManagedObject {
 
 extension CoffeeBeanRecord: Identifiable {}
 
+@objc(LabExperimentRecord)
+final class LabExperimentRecord: NSManagedObject {
+    @NSManaged var id: UUID
+    @NSManaged var ownerId: UUID?
+    @NSManaged var method: String
+    @NSManaged var coffeeGrams: Double
+    @NSManaged var waterMl: Int64
+    @NSManaged var ratio: Double
+    @NSManaged var temperatureC: Int64
+    @NSManaged var grindClicks: Int64
+    @NSManaged var freshness: String
+    @NSManaged var timeSeconds: Int64
+    @NSManaged var altitudeMeters: Int64
+    @NSManaged var cityName: String
+    @NSManaged var notes: String
+    @NSManaged var extractionIndex: Double
+    @NSManaged var summary: String
+    @NSManaged var createdAt: Date
+    @NSManaged var updatedAt: Date
+    @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String
+    @NSManaged var deletedAt: Date?
+
+    convenience init(context: NSManagedObjectContext, state: LabState, profile: LabFlavorProfile) {
+        self.init(context: context)
+        id = UUID(); ownerId = nil; method = state.method
+        coffeeGrams = Double(state.coffeeGrams); waterMl = Int64(state.waterMl); ratio = Double(state.ratio)
+        temperatureC = Int64(state.temperatureC); grindClicks = Int64(state.grindClicks)
+        freshness = state.freshness; timeSeconds = Int64(state.timeSeconds)
+        altitudeMeters = Int64(state.altitudeMeters); cityName = state.cityName; notes = state.notes
+        extractionIndex = Double(profile.extractionIndex); summary = profile.summary
+        createdAt = .now; updatedAt = .now; version = 1
+        syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+
+    var syncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .error }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+
+    func markDeleted() {
+        deletedAt = .now; updatedAt = .now; version += 1; syncStatus = .pendingDelete
+    }
+}
+
+extension LabExperimentRecord: Identifiable {}
+
 struct PersistenceController {
     static let shared = PersistenceController()
     let container: NSPersistentContainer
 
     init(inMemory: Bool = false) {
         container = NSPersistentContainer(name: "Cupa", managedObjectModel: Self.makeModel())
-        if inMemory { container.persistentStoreDescriptions.first?.url = URL(fileURLWithPath: "/dev/null") }
-        container.persistentStoreDescriptions.first?.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-        container.persistentStoreDescriptions.first?.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        let description = NSPersistentStoreDescription()
+        if inMemory {
+            description.type = NSInMemoryStoreType
+        } else {
+            description.type = NSSQLiteStoreType
+            description.url = NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("Cupa.sqlite")
+        }
+        description.shouldMigrateStoreAutomatically = true
+        description.shouldInferMappingModelAutomatically = true
+        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        container.persistentStoreDescriptions = [description]
         container.loadPersistentStores { _, error in
             if let error { fatalError("No se pudo abrir el almacenamiento local: \(error.localizedDescription)") }
         }
@@ -87,16 +143,16 @@ struct PersistenceController {
 
     private static func makeModel() -> NSManagedObjectModel {
         let model = NSManagedObjectModel()
-        let entity = NSEntityDescription()
-        entity.name = "CoffeeBeanRecord"
-        entity.managedObjectClassName = NSStringFromClass(CoffeeBeanRecord.self)
+        let coffeeEntity = NSEntityDescription()
+        coffeeEntity.name = "CoffeeBeanRecord"
+        coffeeEntity.managedObjectClassName = NSStringFromClass(CoffeeBeanRecord.self)
 
         func attribute(_ name: String, _ type: NSAttributeType, optional: Bool = false, defaultValue: Any? = nil) -> NSAttributeDescription {
             let item = NSAttributeDescription()
             item.name = name; item.attributeType = type; item.isOptional = optional; item.defaultValue = defaultValue
             return item
         }
-        entity.properties = [
+        coffeeEntity.properties = [
             attribute("id", .UUIDAttributeType), attribute("ownerId", .UUIDAttributeType, optional: true),
             attribute("name", .stringAttributeType, defaultValue: ""), attribute("brand", .stringAttributeType, defaultValue: ""),
             attribute("origin", .stringAttributeType, defaultValue: ""), attribute("producer", .stringAttributeType, defaultValue: ""),
@@ -109,8 +165,26 @@ struct PersistenceController {
             attribute("syncStatusRaw", .stringAttributeType, defaultValue: SyncStatus.pendingCreate.rawValue),
             attribute("deletedAt", .dateAttributeType, optional: true)
         ]
-        entity.uniquenessConstraints = [["id"]]
-        model.entities = [entity]
+        coffeeEntity.uniquenessConstraints = [["id"]]
+
+        let experimentEntity = NSEntityDescription()
+        experimentEntity.name = "LabExperimentRecord"
+        experimentEntity.managedObjectClassName = NSStringFromClass(LabExperimentRecord.self)
+        experimentEntity.properties = [
+            attribute("id", .UUIDAttributeType), attribute("ownerId", .UUIDAttributeType, optional: true),
+            attribute("method", .stringAttributeType, defaultValue: "V60"), attribute("coffeeGrams", .doubleAttributeType, defaultValue: 15),
+            attribute("waterMl", .integer64AttributeType, defaultValue: 240), attribute("ratio", .doubleAttributeType, defaultValue: 16),
+            attribute("temperatureC", .integer64AttributeType, defaultValue: 92), attribute("grindClicks", .integer64AttributeType, defaultValue: 24),
+            attribute("freshness", .stringAttributeType, defaultValue: "en ventana"), attribute("timeSeconds", .integer64AttributeType, defaultValue: 180),
+            attribute("altitudeMeters", .integer64AttributeType, defaultValue: 0), attribute("cityName", .stringAttributeType, defaultValue: "Nivel del mar (0m)"),
+            attribute("notes", .stringAttributeType, defaultValue: ""), attribute("extractionIndex", .doubleAttributeType, defaultValue: 1),
+            attribute("summary", .stringAttributeType, defaultValue: ""), attribute("createdAt", .dateAttributeType),
+            attribute("updatedAt", .dateAttributeType), attribute("version", .integer64AttributeType, defaultValue: 1),
+            attribute("syncStatusRaw", .stringAttributeType, defaultValue: SyncStatus.pendingCreate.rawValue),
+            attribute("deletedAt", .dateAttributeType, optional: true)
+        ]
+        experimentEntity.uniquenessConstraints = [["id"]]
+        model.entities = [coffeeEntity, experimentEntity]
         return model
     }
 }

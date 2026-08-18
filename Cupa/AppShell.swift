@@ -7,6 +7,7 @@ enum CupaTab: Hashable {
 struct AppShell: View {
     @State private var selection: CupaTab = .home
     @StateObject private var calculator = CalculatorModel()
+    @StateObject private var lab = LabModel()
 
     var body: some View {
         TabView(selection: $selection) {
@@ -14,7 +15,7 @@ struct AppShell: View {
                 .tag(CupaTab.home)
                 .tabItem { Label("Taller", systemImage: "house") }
 
-            NavigationStack { BrewView(selection: $selection, calculator: calculator) }
+            NavigationStack { BrewView(selection: $selection, calculator: calculator, lab: lab) }
                 .tag(CupaTab.brew)
                 .tabItem { Label("Preparar", systemImage: "mug") }
 
@@ -22,7 +23,7 @@ struct AppShell: View {
                 .tag(CupaTab.tasting)
                 .tabItem { Label("Cata", systemImage: "heart") }
 
-            NavigationStack { LabView() }
+            NavigationStack { LabView(model: lab, selection: $selection) }
                 .tag(CupaTab.lab)
                 .tabItem { Label("Laboratorio", systemImage: "flask") }
 

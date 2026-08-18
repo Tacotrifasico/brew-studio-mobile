@@ -76,6 +76,7 @@ struct HomeView: View {
 struct BrewView: View {
     @Binding var selection: CupaTab
     @ObservedObject var calculator: CalculatorModel
+    @ObservedObject var lab: LabModel
     @State private var isTimerRunning = false
     @State private var elapsed = 0
     @State private var timer: Timer?
@@ -171,7 +172,10 @@ struct BrewView: View {
                             .foregroundStyle(CupaTheme.secondaryText)
 
                             HStack {
-                                Button { selection = .lab } label: { Label("Laboratorio", systemImage: "flask") }
+                                Button {
+                                    lab.load(calculator: calculator)
+                                    selection = .lab
+                                } label: { Label("Laboratorio", systemImage: "flask") }
                                     .buttonStyle(.bordered)
                                 Button("Preparar con estos datos") { resetTimer() }
                                     .buttonStyle(.borderedProminent)
@@ -299,51 +303,291 @@ struct TastingView: View {
     }
 }
 
+private enum LabControlCategory: String, CaseIterable, Identifiable {
+    case ratio = "Ratio"
+    case extraction = "Calor"
+    case bean = "Grano"
+    var id: Self { self }
+}
+
 struct LabView: View {
-    @State private var temperature = 92.0
-    @State private var grind = 50.0
-    @State private var agitation = 35.0
+    @Environment(\.managedObjectContext) private var modelContext
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \LabExperimentRecord.createdAt, ascending: false)],
+        predicate: NSPredicate(format: "deletedAt == nil"),
+        animation: .default
+    ) private var experiments: FetchedResults<LabExperimentRecord>
+    @ObservedObject var model: LabModel
+    @Binding var selection: CupaTab
+    @State private var category = LabControlCategory.extraction
+    @State private var altitudeExpanded = false
+    @State private var showCustomCity = false
+    @State private var customCity = ""
+    @State private var customAltitude = ""
+    @State private var saveConfirmation = false
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottom) {
             CupaTheme.background.ignoresSafeArea()
             ScrollView {
-                VStack(spacing: 20) {
-                    SectionHeader(eyebrow: "Laboratorio", title: "Explora variables", subtitle: "Cambia una variable a la vez y compara el resultado.")
-                    CupaCard {
-                        VStack(spacing: 20) {
-                            labSlider("Temperatura", value: $temperature, range: 80...100, suffix: "°C")
-                            labSlider("Molienda", value: $grind, range: 0...100, suffix: "%")
-                            labSlider("Agitación", value: $agitation, range: 0...100, suffix: "%")
-                        }
+                VStack(spacing: 16) {
+                    altitudeCard
+                    SectionHeader(
+                        eyebrow: model.state.method.uppercased(),
+                        title: "Laboratorio",
+                        subtitle: "Simulación y calibración sensorial determinista."
+                    )
+                    hypothesisCard
+                    sensoryCard
+                    Picker("Variables", selection: $category) {
+                        ForEach(LabControlCategory.allCases) { Text($0.rawValue).tag($0) }
                     }
-                    CupaCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Label("Hipótesis", systemImage: "lightbulb")
-                                .font(.headline).foregroundStyle(CupaTheme.gold)
-                            Text(hypothesis)
-                                .foregroundStyle(CupaTheme.secondaryText)
-                        }
-                    }
+                    .pickerStyle(.segmented)
+                    controlsCard
+                    if !experiments.isEmpty { savedExperimentsCard }
                 }
                 .padding()
+                .padding(.bottom, 72)
             }
+            actionBar
         }
         .navigationTitle("Laboratorio")
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var hypothesis: String {
-        temperature > 94
-            ? "Una temperatura alta puede aumentar la extracción. Vigila amargor y astringencia."
-            : "Esta temperatura favorece una extracción suave. Prueba una molienda más fina si falta dulzor."
-    }
-
-    private func labSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, suffix: String) -> some View {
-        VStack(spacing: 8) {
-            HStack { Text(title); Spacer(); Text("\(Int(value.wrappedValue))\(suffix)").bold() }
-            Slider(value: value, in: range).tint(CupaTheme.forest)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { model.reset() } label: { Image(systemName: "arrow.counterclockwise") }
+                    .accessibilityLabel("Restablecer Laboratorio")
+            }
         }
+        .sheet(isPresented: $showCustomCity) { customCitySheet }
+        .alert("Experimento guardado", isPresented: $saveConfirmation) {
+            Button("Aceptar", role: .cancel) {}
+        } message: {
+            Text("La hipótesis quedó disponible offline en este dispositivo.")
+        }
+    }
+
+    private var altitudeCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Button { withAnimation { altitudeExpanded.toggle() } } label: {
+                    HStack {
+                        Image(systemName: "mountain.2.fill").foregroundStyle(CupaTheme.forest)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.state.cityName).font(.subheadline.bold()).foregroundStyle(CupaTheme.text)
+                            Text("Hervor: \(boilingText) · \(model.state.altitudeMeters) msnm")
+                                .font(.caption).foregroundStyle(isTemperatureCapped ? .orange : CupaTheme.secondaryText)
+                        }
+                        Spacer()
+                        Image(systemName: altitudeExpanded ? "chevron.up" : "chevron.down")
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if isTemperatureCapped {
+                    Label("La temperatura real queda limitada al punto de ebullición local.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+
+                if altitudeExpanded {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack {
+                            ForEach(LabModel.cities) { city in
+                                Button(city.label) { model.selectCity(city) }
+                                    .buttonStyle(.bordered)
+                                    .tint(model.state.altitudeMeters == city.altitudeMeters ? CupaTheme.forest : CupaTheme.secondaryText)
+                            }
+                        }
+                    }
+                    VStack(spacing: 4) {
+                        HStack { Text("Ajuste manual").font(.caption.bold()); Spacer(); Text("\(model.state.altitudeMeters) m").font(.caption) }
+                        Slider(value: Binding(
+                            get: { Double(model.state.altitudeMeters) },
+                            set: { model.setManualAltitude(Int($0.rounded() / 25) * 25) }
+                        ), in: 0...4000, step: 25).tint(CupaTheme.gold)
+                    }
+                    Button { customCity = ""; customAltitude = String(model.state.altitudeMeters); showCustomCity = true } label: {
+                        Label("Agregar mi ciudad y altura", systemImage: "location.badge.plus")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+    }
+
+    private var hypothesisCard: some View {
+        let profile = model.profile
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("PERFIL ESTIMADO").font(.caption2.bold()).tracking(1)
+                    Text(primaryOutcome).font(.title3.bold())
+                }
+                Spacer()
+                Text(String(format: "%.2fx", profile.extractionIndex)).font(.title2.bold())
+            }
+            Text(profile.summary).font(.subheadline)
+            HStack { ForEach(profile.labels, id: \.self) { Text($0).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 4).background(.white.opacity(0.18)).clipShape(Capsule()) } }
+        }
+        .foregroundStyle(.white)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracotta], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var sensoryCard: some View {
+        let values = [
+            ("Aroma", model.profile.aroma, CupaTheme.gold), ("Acidez", model.profile.acidity, .yellow),
+            ("Dulzor", model.profile.sweetness, .pink), ("Cuerpo", model.profile.body, CupaTheme.terracotta),
+            ("Amargor", model.profile.bitterness, .brown), ("Final", model.profile.finish, .cyan)
+        ]
+        return CupaCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Ecualizador sensorial").font(.headline)
+                HStack(alignment: .bottom, spacing: 8) {
+                    ForEach(values, id: \.0) { label, value, color in
+                        VStack(spacing: 5) {
+                            Text("\(value)%").font(.caption2.bold()).foregroundStyle(color)
+                            GeometryReader { proxy in
+                                ZStack(alignment: .bottom) {
+                                    Capsule().fill(CupaTheme.backgroundAlt)
+                                    Capsule().fill(color.gradient).frame(height: proxy.size.height * CGFloat(value) / 100)
+                                }
+                            }.frame(height: 112)
+                            Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                        }.frame(maxWidth: .infinity)
+                    }
+                }
+                Divider()
+                Text(model.diagnostic.extraction).font(.subheadline.bold()).foregroundStyle(CupaTheme.forest)
+                Text(model.diagnostic.recommendation).font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                ForEach(model.diagnostic.risks, id: \.self) { Label($0, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange) }
+            }
+        }
+    }
+
+    @ViewBuilder private var controlsCard: some View {
+        CupaCard {
+            VStack(spacing: 16) {
+                Picker("Método", selection: binding(\.method)) {
+                    ForEach(["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"], id: \.self) { Text($0) }
+                }
+                switch category {
+                case .ratio:
+                    HStack {
+                        Stepper("Café \(model.state.coffeeGrams.formatted()) g", value: bindingFloat(\.coffeeGrams), in: 1...100, step: 1)
+                        Divider()
+                        Stepper("Agua \(model.state.waterMl) ml", value: binding(\.waterMl), in: 10...2000, step: 10)
+                    }
+                    labSlider("Ratio", value: bindingFloat(\.ratio), range: 8...22, step: 0.5, display: "1:\(String(format: "%.1f", model.state.ratio))")
+                    labSlider("Tiempo", value: bindingInt(\.timeSeconds), range: 60...360, step: 5, display: formattedTime)
+                case .extraction:
+                    Picker("Unidad", selection: binding(\.temperatureUnit)) {
+                        Text("°C").tag(TemperatureUnit.celsius); Text("°F").tag(TemperatureUnit.fahrenheit)
+                    }.pickerStyle(.segmented)
+                    labSlider("Temperatura", value: bindingInt(\.temperatureC), range: 80...98, step: 1, display: temperatureText)
+                    labSlider("Clicks de molienda", value: bindingInt(\.grindClicks), range: 6...36, step: 1, display: "\(model.state.grindClicks) clicks")
+                case .bean:
+                    Picker("Frescura", selection: binding(\.freshness)) {
+                        ForEach(["muy fresco", "en ventana", "punto ideal", "bajando", "viejo"], id: \.self) { Text($0.capitalized) }
+                    }
+                    TextField("Notas del experimento", text: binding(\.notes), axis: .vertical).lineLimit(3...7)
+                }
+            }
+        }
+    }
+
+    private var savedExperimentsCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Experimentos recientes").font(.headline)
+                ForEach(Array(experiments.prefix(3))) { experiment in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(experiment.method).font(.subheadline.bold())
+                            Text("1:\(experiment.ratio.formatted(.number.precision(.fractionLength(1)))) · \(experiment.temperatureC)°C · \(experiment.cityName)")
+                                .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                        }
+                        Spacer()
+                        Text(experiment.createdAt, style: .date).font(.caption2)
+                    }
+                }
+            }
+        }
+    }
+
+    private var actionBar: some View {
+        HStack {
+            Button { saveExperiment() } label: { Label("Guardar", systemImage: "square.and.arrow.down") }
+                .buttonStyle(.bordered)
+            Button {
+                saveExperiment()
+                selection = .brew
+            } label: { Label("Preparar esta idea", systemImage: "play.fill") }
+                .buttonStyle(.borderedProminent).tint(CupaTheme.forest)
+        }
+        .padding().frame(maxWidth: .infinity).background(.ultraThinMaterial)
+    }
+
+    private var customCitySheet: some View {
+        NavigationStack {
+            Form {
+                TextField("Ciudad", text: $customCity)
+                TextField("Altitud (msnm)", text: $customAltitude).keyboardType(.numberPad)
+            }
+            .navigationTitle("Tu ciudad y altura")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { showCustomCity = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Guardar") { model.setManualAltitude(Int(customAltitude) ?? 0, city: customCity); showCustomCity = false }
+                }
+            }
+        }
+    }
+
+    private func saveExperiment() {
+        _ = LabExperimentRecord(context: modelContext, state: model.state, profile: model.profile)
+        do { try modelContext.save(); saveConfirmation = true }
+        catch { modelContext.rollback() }
+    }
+
+    private var isTemperatureCapped: Bool { Float(model.state.temperatureC) > model.boilingPointC }
+    private var boilingText: String {
+        model.state.temperatureUnit == .celsius
+            ? String(format: "%.1f °C", model.boilingPointC)
+            : "\(Int(roundf(LabEngine.fahrenheit(fromCelsius: model.boilingPointC)))) °F"
+    }
+    private var temperatureText: String {
+        model.state.temperatureUnit == .celsius
+            ? "\(model.state.temperatureC) °C"
+            : "\(Int(roundf(LabEngine.fahrenheit(fromCelsius: Float(model.state.temperatureC))))) °F"
+    }
+    private var formattedTime: String { String(format: "%d:%02d min", model.state.timeSeconds / 60, model.state.timeSeconds % 60) }
+    private var primaryOutcome: String {
+        let p = model.profile
+        if p.bitterness > 65 { return "Intensa y con cuerpo" }
+        if p.body < 38 { return "Estilo té, alta claridad" }
+        if p.sweetness > 68 && p.bitterness < 42 { return "Taza dorada y balanceada" }
+        if p.acidity > 68 { return "Acidez brillante y frutal" }
+        return "Taza equilibrada clásica"
+    }
+
+    private func labSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, display: String) -> some View {
+        VStack(spacing: 6) {
+            HStack { Text(title).font(.subheadline.bold()); Spacer(); Text(display).font(.subheadline.bold()).foregroundStyle(CupaTheme.terracotta) }
+            Slider(value: value, in: range, step: step).tint(CupaTheme.forest)
+        }
+    }
+    private func binding<Value>(_ keyPath: WritableKeyPath<LabState, Value>) -> Binding<Value> {
+        Binding(get: { model.state[keyPath: keyPath] }, set: { value in model.update { $0[keyPath: keyPath] = value } })
+    }
+    private func bindingFloat(_ keyPath: WritableKeyPath<LabState, Float>) -> Binding<Double> {
+        Binding(get: { Double(model.state[keyPath: keyPath]) }, set: { value in model.update { $0[keyPath: keyPath] = Float(value) } })
+    }
+    private func bindingInt(_ keyPath: WritableKeyPath<LabState, Int>) -> Binding<Double> {
+        Binding(get: { Double(model.state[keyPath: keyPath]) }, set: { value in model.update { $0[keyPath: keyPath] = Int(value.rounded()) } })
     }
 }
 

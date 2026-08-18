@@ -13,7 +13,20 @@
 		A10000000000000000000004 /* FeatureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* FeatureViews.swift */; };
 		A10000000000000000000006 /* CalculatorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* CalculatorModel.swift */; };
 		A10000000000000000000007 /* PersistenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* PersistenceModels.swift */; };
+		A10000000000000000000008 /* LabModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* LabModel.swift */; };
+		B10000000000000000000001 /* ParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ParityTests.swift */; };
+		B10000000000000000000002 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* XCTest.framework */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B30000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A80000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A50000000000000000000001;
+			remoteInfo = Cupa;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A20000000000000000000001 /* CupaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CupaApp.swift; sourceTree = "<group>"; };
@@ -23,6 +36,10 @@
 		A20000000000000000000005 /* Cupa.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cupa.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000006 /* CalculatorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculatorModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* PersistenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* LabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabModel.swift; sourceTree = "<group>"; };
+		B20000000000000000000001 /* ParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParityTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000002 /* CupaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CupaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000003 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -33,6 +50,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B40000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000002 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -40,7 +65,9 @@
 			isa = PBXGroup;
 			children = (
 				A40000000000000000000002 /* Cupa */,
+				B50000000000000000000001 /* CupaTests */,
 				A40000000000000000000003 /* Products */,
+				B50000000000000000000002 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -53,6 +80,7 @@
 				A20000000000000000000004 /* FeatureViews.swift */,
 				A20000000000000000000006 /* CalculatorModel.swift */,
 				A20000000000000000000007 /* PersistenceModels.swift */,
+				A20000000000000000000008 /* LabModel.swift */,
 			);
 			path = Cupa;
 			sourceTree = "<group>";
@@ -61,8 +89,25 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000005 /* Cupa.app */,
+				B20000000000000000000002 /* CupaTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B50000000000000000000001 /* CupaTests */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000001 /* ParityTests.swift */,
+			);
+			path = CupaTests;
+			sourceTree = "<group>";
+		};
+		B50000000000000000000002 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000003 /* XCTest.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -85,6 +130,24 @@
 			productReference = A20000000000000000000005 /* Cupa.app */;
 			productType = "com.apple.product-type.application";
 		};
+		B60000000000000000000001 /* CupaTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B90000000000000000000001 /* Build configuration list for PBXNativeTarget "CupaTests" */;
+			buildPhases = (
+				B70000000000000000000001 /* Sources */,
+				B40000000000000000000001 /* Frameworks */,
+				B70000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B80000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = CupaTests;
+			productName = CupaTests;
+			productReference = B20000000000000000000002 /* CupaTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -97,6 +160,10 @@
 				TargetAttributes = {
 					A50000000000000000000001 = {
 						CreatedOnToolsVersion = 26.6;
+					};
+					B60000000000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = A50000000000000000000001;
 					};
 				};
 			};
@@ -114,12 +181,20 @@
 			projectRoot = "";
 			targets = (
 				A50000000000000000000001 /* Cupa */,
+				B60000000000000000000001 /* CupaTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A70000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B70000000000000000000002 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -139,10 +214,27 @@
 				A10000000000000000000004 /* FeatureViews.swift in Sources */,
 				A10000000000000000000006 /* CalculatorModel.swift in Sources */,
 				A10000000000000000000007 /* PersistenceModels.swift in Sources */,
+				A10000000000000000000008 /* LabModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B70000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000001 /* ParityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B80000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A50000000000000000000001 /* Cupa */;
+			targetProxy = B30000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AA0000000000000000000001 /* Debug */ = {
@@ -232,6 +324,42 @@
 			};
 			name = Release;
 		};
+		BA0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 6UD7WV66N5;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tacotrifasico.cupa.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cupa.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cupa";
+			};
+			name = Debug;
+		};
+		BA0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 6UD7WV66N5;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tacotrifasico.cupa.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cupa.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cupa";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -249,6 +377,15 @@
 			buildConfigurations = (
 				AA0000000000000000000003 /* Debug */,
 				AA0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B90000000000000000000001 /* Build configuration list for PBXNativeTarget "CupaTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BA0000000000000000000001 /* Debug */,
+				BA0000000000000000000002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

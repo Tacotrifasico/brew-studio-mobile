@@ -23,3 +23,11 @@ Gemini se invocará desde una Supabase Edge Function autenticada. Ninguna API ke
 ## D-006 — Fórmulas exactas
 
 Calculadora y Laboratorio reproducen operaciones, límites, truncamiento y redondeo de Android. No se reemplazan por aproximaciones de Swift.
+
+## D-007 — Estado interno del Laboratorio en Celsius
+
+La temperatura se almacena y calcula siempre en Celsius, como Android. Fahrenheit es sólo una presentación reversible. Altitud, ciudad, unidad y variables activas se guardan en `UserDefaults`; los experimentos confirmados son entidades Core Data sincronizables.
+
+## D-008 — Verificador dorado ejecutable
+
+Además de XCTest, `Tools/LabGoldenVerifier.swift` permite ejecutar el motor puro en macOS cuando CoreSimulator no está disponible. Sus valores esperados provienen literalmente de `calculateLabProfile` en el commit Android auditado y no se recalculan desde la implementación iOS.

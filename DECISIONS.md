@@ -119,3 +119,7 @@ El importador replica el contrato heurístico de Android en el dispositivo: reco
 ## D-030 — Detalle de receta antes de mutar
 
 Tocar una receta abre una vista de lectura con intención, método, etiquetas, ingredientes y pasos ordenados, como en Android. Editar espera a que el detalle termine de cerrarse antes de presentar el formulario, evitando dos hojas simultáneas. El borrado exige confirmación y explica que los snapshots históricos no se eliminan; favorita, duplicación y edición reutilizan el mismo repositorio del listado.
+
+## D-031 — Métodos del inventario reutilizados por la calculadora
+
+Los equipos activos de tipo `BREWER_METHOD` forman el catálogo personalizado de métodos, como en Android. `isFavorite` significa “fijado en la calculadora” para ese tipo y se edita tanto desde Almacén como desde el gestor de métodos; los cuatro métodos base fijados inicialmente viven en `UserDefaults`. No se crea una entidad duplicada. Los métodos base conservan sus siete ratios exactos y un equipo personalizado usa 1:15, el mismo fallback del `onMethodSelected` Android. Su UUID se conserva en el estado, favoritos y transferencias a Laboratorio y Preparación.

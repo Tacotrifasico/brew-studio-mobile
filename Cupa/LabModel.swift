@@ -229,7 +229,7 @@ final class LabModel: ObservableObject {
     }
     @MainActor func load(calculator: CalculatorModel) {
         update {
-            $0.methodId = nil
+            $0.methodId = calculator.selectedMethodId
             $0.recipeId = nil
             $0.techniqueId = nil
             $0.recipeName = nil

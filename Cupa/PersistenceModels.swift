@@ -298,6 +298,10 @@ final class EquipmentRecord: NSManagedObject {
         get { capacityMlValue?.intValue }
         set { capacityMlValue = newValue.map(NSNumber.init(value:)) }
     }
+    var isBrewingMethod: Bool {
+        let normalized = equipmentType.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        return normalized == "brewer_method" || normalized == "brew_method" || normalized.contains("metodo")
+    }
     convenience init(context: NSManagedObjectContext, name: String, equipmentType: String, brand: String, model: String, capacityMl: Int?, configuration: String, notes: String, isFavorite: Bool, isActive: Bool) {
         self.init(context: context)
         id = UUID(); ownerId = nil; self.name = name; self.equipmentType = equipmentType

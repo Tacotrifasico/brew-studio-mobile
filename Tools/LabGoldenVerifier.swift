@@ -145,8 +145,16 @@ struct LabGoldenVerifier {
         let restored = CalculatorModel(defaults: defaults)
         precondition(restored.savedPresets.first?.coffee == 18)
         precondition(restored.method == "V60" && restored.coffee == 18 && restored.ratio == 15 && restored.water == 270)
+        precondition(restored.pinnedMethodNames == Set(["V60", "AeroPress", "Espresso", "Prensa francesa"]))
         calculator.toggleFavorite()
         precondition(CalculatorModel(defaults: defaults).savedPresets.isEmpty)
+        calculator.setMethodPinned("V60", pinned: false)
+        let methodId = UUID(); calculator.selectMethod("Origami", methodId: methodId)
+        let customRestored = CalculatorModel(defaults: defaults)
+        precondition(!customRestored.isMethodPinned("V60") && customRestored.selectedMethodId == methodId)
+        let lab = LabModel(defaults: defaults); lab.load(calculator: customRestored)
+        let preparation = PreparationModel(defaults: defaults); preparation.load(calculator: customRestored)
+        precondition(lab.state.methodId == methodId && preparation.state.methodId == methodId)
     }
 
     @MainActor private static func verifyCalculatorQuickPreparation() {
@@ -244,6 +252,7 @@ struct LabGoldenVerifier {
         precondition(experiments.first?.altitudeMeters == 1500)
         precondition(grinders.first?.maximumSetting == 40)
         precondition(equipmentItems.first?.capacityMl == 600)
+        precondition(equipment.isBrewingMethod && equipment.isFavorite)
         bean.markDeleted()
         grinder.markDeleted()
         equipment.markUpdated()

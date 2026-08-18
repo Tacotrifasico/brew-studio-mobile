@@ -136,6 +136,30 @@ final class CalculatorParityTests: XCTestCase {
         XCTAssertFalse(calculator.isCurrentFavorite)
         XCTAssertTrue(CalculatorModel(defaults: defaults).savedPresets.isEmpty)
     }
+
+    @MainActor func testPinnedMethodsAndCustomEquipmentReferencePersistAndTransfer() throws {
+        let suite = "CalculatorMethodPreferencesTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let calculator = CalculatorModel(defaults: defaults)
+        XCTAssertEqual(calculator.pinnedMethodNames, Set(["V60", "AeroPress", "Espresso", "Prensa francesa"]))
+        calculator.setMethodPinned("V60", pinned: false)
+        let equipmentId = UUID()
+        calculator.selectMethod("Origami", methodId: equipmentId)
+        XCTAssertEqual(calculator.ratio, 15)
+        calculator.toggleFavorite()
+
+        let restored = CalculatorModel(defaults: defaults)
+        XCTAssertFalse(restored.isMethodPinned("V60"))
+        XCTAssertEqual(restored.method, "Origami")
+        XCTAssertEqual(restored.selectedMethodId, equipmentId)
+        XCTAssertEqual(restored.savedPresets.first?.methodId, equipmentId)
+
+        let lab = LabModel(defaults: defaults); lab.load(calculator: restored)
+        let preparation = PreparationModel(defaults: defaults); preparation.load(calculator: restored)
+        XCTAssertEqual(lab.state.methodId, equipmentId)
+        XCTAssertEqual(preparation.state.methodId, equipmentId)
+    }
 }
 
 final class LocalPersistenceTests: XCTestCase {
@@ -194,6 +218,8 @@ final class LocalPersistenceTests: XCTestCase {
         XCTAssertEqual(experiments.first?.altitudeMeters, 1500)
         XCTAssertEqual(grinders.first?.maximumSetting, 40)
         XCTAssertEqual(equipmentItems.first?.capacityMl, 600)
+        XCTAssertTrue(equipment.isBrewingMethod)
+        XCTAssertTrue(equipment.isFavorite)
 
         bean.markDeleted()
         grinder.markDeleted()

@@ -85,6 +85,14 @@ struct EquipmentInventoryView: View {
                             if !item.configuration.isEmpty { Text(item.configuration).font(.caption).foregroundStyle(CupaTheme.forest) }
                         }.padding(.vertical, 5).opacity(item.isActive ? 1 : 0.55)
                     }.buttonStyle(.plain)
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        if item.isBrewingMethod {
+                            Button { toggleCalculatorPin(item) } label: {
+                                Label(item.isFavorite ? "Quitar de calculadora" : "Mostrar en calculadora", systemImage: item.isFavorite ? "pin.slash" : "pin")
+                            }
+                            .tint(CupaTheme.gold)
+                        }
+                    }
                 }.onDelete(perform: softDelete)
             }
         }
@@ -102,6 +110,7 @@ struct EquipmentInventoryView: View {
     }
 
     private func softDelete(_ offsets: IndexSet) { offsets.forEach { equipment[$0].markDeleted() }; save() }
+    private func toggleCalculatorPin(_ item: EquipmentRecord) { item.isFavorite.toggle(); item.markUpdated(); save() }
     @discardableResult private func save() -> Bool {
         do { try context.save(); return true }
         catch { context.rollback(); errorMessage = error.localizedDescription; return false }
@@ -185,7 +194,7 @@ private struct EquipmentEditor: View {
         _name = State(initialValue: record?.name ?? ""); _type = State(initialValue: record?.equipmentType ?? "BREWER_METHOD")
         _brand = State(initialValue: record?.brand ?? ""); _model = State(initialValue: record?.model ?? "")
         _capacity = State(initialValue: record?.capacityMl.map(String.init) ?? ""); _configuration = State(initialValue: record?.configuration ?? "")
-        _notes = State(initialValue: record?.notes ?? ""); _favorite = State(initialValue: record?.isFavorite ?? false); _active = State(initialValue: record?.isActive ?? true)
+        _notes = State(initialValue: record?.notes ?? ""); _favorite = State(initialValue: record?.isFavorite ?? true); _active = State(initialValue: record?.isActive ?? true)
     }
 
     var body: some View {
@@ -200,8 +209,12 @@ private struct EquipmentEditor: View {
                 Section("Configuración") {
                     TextField("Configuración o especificaciones", text: $configuration, axis: .vertical).lineLimit(2...5)
                     TextField("Notas", text: $notes, axis: .vertical).lineLimit(2...5)
-                    Toggle("Favorito", isOn: $favorite); Toggle("Equipo activo", isOn: $active)
+                    Toggle(type == "BREWER_METHOD" ? "Mostrar en calculadora" : "Favorito", isOn: $favorite)
+                    Toggle("Equipo activo", isOn: $active)
                 }
+            }
+            .onChange(of: type) { oldValue, newValue in
+                if oldValue == "BREWER_METHOD" || newValue == "BREWER_METHOD" { favorite = newValue == "BREWER_METHOD" }
             }
             .navigationTitle(record == nil ? "Agregar equipo" : "Editar equipo")
             .toolbar {

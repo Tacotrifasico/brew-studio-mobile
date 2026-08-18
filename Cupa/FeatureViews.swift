@@ -87,10 +87,17 @@ struct HomeView: View {
 }
 
 struct BrewView: View {
+    @Environment(\.managedObjectContext) private var context
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.createdAt, ascending: true)],
+        predicate: NSPredicate(format: "deletedAt == nil AND isActive == YES")
+    ) private var activeEquipment: FetchedResults<EquipmentRecord>
     @Binding var selection: CupaTab
     @ObservedObject var calculator: CalculatorModel
     @ObservedObject var lab: LabModel
     @ObservedObject var preparation: PreparationModel
+    @State private var showingMethodManager = false
+    @State private var methodError: String?
 
     var body: some View {
         ZStack {
@@ -160,12 +167,18 @@ struct BrewView: View {
                                 }
                             }
 
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 7) {
-                                    ForEach(calculator.methods, id: \.self) { method in
-                                        Button(method) { calculator.selectMethod(method) }
+                            HStack(spacing: 8) {
+                                Button { showingMethodManager = true } label: { Image(systemName: "slider.horizontal.3") }
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .accessibilityLabel("Gestionar métodos de la calculadora")
+                                    .accessibilityIdentifier("calculator.manageMethods")
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 7) {
+                                        ForEach(quickMethodOptions) { option in
+                                            Button(option.name) { calculator.selectMethod(option.name, methodId: option.equipmentId) }
                                             .buttonStyle(.bordered)
-                                            .tint(calculator.method == method ? categoryColor : CupaTheme.secondaryText)
+                                            .tint(calculator.method.caseInsensitiveCompare(option.name) == .orderedSame ? categoryColor : CupaTheme.secondaryText)
+                                        }
                                     }
                                 }
                             }
@@ -207,6 +220,47 @@ struct BrewView: View {
         }
         .navigationTitle("Preparar")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingMethodManager) {
+            CalculatorMethodManager(
+                calculator: calculator,
+                equipment: methodEquipment,
+                onEquipmentPinnedChange: setEquipmentPinned
+            )
+        }
+        .alert("No se pudo actualizar el método", isPresented: Binding(get: { methodError != nil }, set: { if !$0 { methodError = nil } })) {
+            Button("Aceptar") {}
+        } message: { Text(methodError ?? "") }
+    }
+
+    private var methodEquipment: [EquipmentRecord] { activeEquipment.filter(\.isBrewingMethod) }
+
+    private var allMethodOptions: [CalculatorMethodOption] {
+        var seen = Set<String>()
+        var result = calculator.methods.map { name in
+            seen.insert(name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current))
+            return CalculatorMethodOption(name: name, equipmentId: nil)
+        }
+        for item in methodEquipment {
+            let key = item.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            if !item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, seen.insert(key).inserted {
+                result.append(.init(name: item.name, equipmentId: item.id))
+            }
+        }
+        return result
+    }
+
+    private var quickMethodOptions: [CalculatorMethodOption] {
+        let pinned = allMethodOptions.filter { option in
+            if let id = option.equipmentId { return methodEquipment.first(where: { $0.id == id })?.isFavorite == true }
+            return calculator.isMethodPinned(option.name)
+        }
+        return pinned.isEmpty ? allMethodOptions : pinned
+    }
+
+    private func setEquipmentPinned(_ equipment: EquipmentRecord, _ pinned: Bool) {
+        equipment.isFavorite = pinned; equipment.markUpdated()
+        do { try context.save() }
+        catch { context.rollback(); methodError = error.localizedDescription }
     }
 
     private var categoryColor: Color {
@@ -244,6 +298,50 @@ struct BrewView: View {
         .clipShape(RoundedRectangle(cornerRadius: 15))
     }
 
+}
+
+private struct CalculatorMethodOption: Identifiable {
+    let name: String
+    let equipmentId: UUID?
+    var id: String { equipmentId?.uuidString ?? "builtin:\(name)" }
+}
+
+private struct CalculatorMethodManager: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var calculator: CalculatorModel
+    let equipment: [EquipmentRecord]
+    let onEquipmentPinnedChange: (EquipmentRecord, Bool) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Métodos base") {
+                    ForEach(calculator.methods, id: \.self) { method in
+                        Toggle(method, isOn: Binding(
+                            get: { calculator.isMethodPinned(method) },
+                            set: { calculator.setMethodPinned(method, pinned: $0) }
+                        ))
+                    }
+                }
+                Section("Métodos del Almacén") {
+                    if equipment.isEmpty {
+                        Text("Registra un equipo de tipo Método para añadirlo a la calculadora.")
+                            .foregroundStyle(CupaTheme.secondaryText)
+                    } else {
+                        ForEach(equipment) { item in
+                            Toggle(item.name, isOn: Binding(
+                                get: { item.isFavorite },
+                                set: { onEquipmentPinnedChange(item, $0) }
+                            ))
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Gestionar métodos")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { dismiss() } } }
+        }
+    }
 }
 
 private enum LabControlCategory: String, CaseIterable, Identifiable {

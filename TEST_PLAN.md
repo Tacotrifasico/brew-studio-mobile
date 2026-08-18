@@ -29,6 +29,7 @@
 - `LabGoldenVerifier`: cuatro perfiles dorados aprobados (nivel del mar, CDMX/hervor, subextracción y sobreextracción).
 - Calculadora: favorito personalizado guardado, restaurado desde `UserDefaults` aislado y eliminado: aprobado.
 - Calculadora: restauración de método/café/ratio/agua y pasos rápidos V60, AeroPress y Espresso: aprobados.
+- Calculadora: cuatro métodos fijados iniciales, personalización persistente, método de equipo con ratio de respaldo 1:15 y conservación de su UUID en favorito, Laboratorio y Preparación: verificador ejecutado + XCTest y recorrido del gestor compilados.
 - Restauración de altitud, unidad y tiempo mediante `UserDefaults`: aprobada.
 - Frescura de café: cortes exactos en 7/21/35/60 días, interpolación hasta 100%, fecha futura, ausencia de fecha y alerta tras 14 días abierta: aprobados.
 - Alta, consulta y borrado lógico de café y molino; alta y actualización de equipo; alta de experimento en Core Data en memoria: aprobados.

@@ -17,6 +17,10 @@ final class CupaUITests: XCTestCase {
         XCTAssertTrue(app.textFields["calculator.ratio"].exists)
         XCTAssertTrue(app.textFields["calculator.water"].exists)
         XCTAssertTrue(app.buttons["calculator.prepare"].exists)
+        XCTAssertTrue(app.buttons["calculator.manageMethods"].exists)
+        app.buttons["calculator.manageMethods"].tap()
+        XCTAssertTrue(app.navigationBars["Gestionar métodos"].waitForExistence(timeout: 3))
+        app.buttons["Listo"].tap()
     }
 
     func testCriticalSectionsOpenWithoutPlaceholders() {

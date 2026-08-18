@@ -54,7 +54,7 @@ final class PreparationModel: ObservableObject {
     func load(calculator: CalculatorModel) {
         timer?.invalidate(); timer = nil
         state = PreparationState(
-            techniqueName: "\(calculator.method) Estándar", methodName: calculator.method,
+            techniqueName: "\(calculator.method) Estándar", methodId: calculator.selectedMethodId, methodName: calculator.method,
             doseGrams: calculator.coffee, waterMl: calculator.water, ratio: calculator.ratio,
             temperatureC: 93, executionMode: "GUIDED",
             steps: Self.quickSteps(method: calculator.method, waterMl: calculator.water)

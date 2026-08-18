@@ -30,7 +30,7 @@ Relaciones por UUID estables. Una sesión histórica conserva identificadores y 
 
 El historial de uso de `CoffeeBean` se deriva por su UUID estable: `BrewSession.beanId` aporta las preparaciones y `CupSession.beanId` las tazas/catas. No existe una relación duplicada ni un contador persistido. El borrado lógico del café no borra esas sesiones; sus snapshots mantienen nombres y parámetros históricos.
 
-`Equipment` conserva tipo canónico, nombre, marca, modelo, capacidad, configuración, notas, favorito y estado activo. Las sesiones futuras guardarán UUID y snapshot mínimo para conservar historial tras el borrado lógico.
+`Equipment` conserva tipo canónico, nombre, marca, modelo, capacidad, configuración, notas, favorito y estado activo. Cuando el tipo es `BREWER_METHOD`, activo determina si pertenece al catálogo de la calculadora y favorito si está fijado en sus accesos rápidos. Su UUID viaja por Calculadora, Laboratorio, Preparación y las sesiones históricas; no existe una segunda copia del método.
 
 `Recipe` → `RecipeIngredient` y `RecipeStep` por `recipeId`. La receta conserva tipo, intención, método sugerido, favorito, etiquetas, visibilidad y procedencia de copias. Ingredientes y pasos mantienen orden y UUID independientes.
 

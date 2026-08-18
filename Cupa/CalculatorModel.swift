@@ -16,6 +16,7 @@ enum RatioCategory {
 struct BrewPreset: Identifiable, Codable, Equatable {
     let id: String
     let method: String
+    let methodId: UUID?
     let coffee: Double
     let ratio: Double
     let isCustom: Bool
@@ -29,6 +30,7 @@ struct BrewPreset: Identifiable, Codable, Equatable {
 
 private struct CalculatorStateSnapshot: Codable {
     let method: String
+    let methodId: UUID?
     let coffee: Double
     let ratio: Double
     let water: Int
@@ -37,6 +39,7 @@ private struct CalculatorStateSnapshot: Codable {
 @MainActor
 final class CalculatorModel: ObservableObject {
     @Published var method = "V60"
+    @Published private(set) var selectedMethodId: UUID?
     @Published var coffee = 15.0
     @Published var ratio = 16.0
     @Published var water = 240
@@ -45,8 +48,10 @@ final class CalculatorModel: ObservableObject {
     @Published var waterInput = "240"
     @Published var microcopy = "Listo para preparar."
     @Published private(set) var savedPresets: [BrewPreset] = []
+    @Published private(set) var pinnedMethodNames: Set<String>
 
     let methods = ["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"]
+    private let defaultPinnedMethods: Set<String> = ["V60", "AeroPress", "Espresso", "Prensa francesa"]
 
     private let baseRatios: [String: Double] = [
         "V60": 16, "AeroPress": 13, "Prensa francesa": 15,
@@ -54,17 +59,18 @@ final class CalculatorModel: ObservableObject {
     ]
 
     private let builtInPresets = [
-        BrewPreset(id: "default_1", method: "V60", coffee: 15, ratio: 16, isCustom: false),
-        BrewPreset(id: "default_2", method: "AeroPress", coffee: 18, ratio: 13, isCustom: false),
-        BrewPreset(id: "default_3", method: "Prensa francesa", coffee: 20, ratio: 15, isCustom: false),
-        BrewPreset(id: "default_4", method: "Chemex", coffee: 24, ratio: 16, isCustom: false),
-        BrewPreset(id: "default_5", method: "Espresso", coffee: 18, ratio: 2, isCustom: false),
-        BrewPreset(id: "default_6", method: "Moka", coffee: 18, ratio: 10, isCustom: false),
-        BrewPreset(id: "default_7", method: "Cold brew", coffee: 50, ratio: 8, isCustom: false)
+        BrewPreset(id: "default_1", method: "V60", methodId: nil, coffee: 15, ratio: 16, isCustom: false),
+        BrewPreset(id: "default_2", method: "AeroPress", methodId: nil, coffee: 18, ratio: 13, isCustom: false),
+        BrewPreset(id: "default_3", method: "Prensa francesa", methodId: nil, coffee: 20, ratio: 15, isCustom: false),
+        BrewPreset(id: "default_4", method: "Chemex", methodId: nil, coffee: 24, ratio: 16, isCustom: false),
+        BrewPreset(id: "default_5", method: "Espresso", methodId: nil, coffee: 18, ratio: 2, isCustom: false),
+        BrewPreset(id: "default_6", method: "Moka", methodId: nil, coffee: 18, ratio: 10, isCustom: false),
+        BrewPreset(id: "default_7", method: "Cold brew", methodId: nil, coffee: 50, ratio: 8, isCustom: false)
     ]
 
     private let userDefaults: UserDefaults
     private let stateKey = "cupa.calculatorState.v1"
+    private let pinnedMethodsKey = "cupa.pinnedCalculatorMethods.v1"
 
     var presets: [BrewPreset] { savedPresets + builtInPresets }
 
@@ -83,14 +89,21 @@ final class CalculatorModel: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         userDefaults = defaults
+        if let stored = defaults.array(forKey: pinnedMethodsKey) as? [String] {
+            pinnedMethodNames = Set(stored)
+        } else {
+            pinnedMethodNames = defaultPinnedMethods
+        }
         if let data = defaults.data(forKey: "cupa.savedRatios"),
            let decoded = try? JSONDecoder().decode([BrewPreset].self, from: data) {
             savedPresets = decoded
         }
         if let data = defaults.data(forKey: stateKey),
            let restored = try? JSONDecoder().decode(CalculatorStateSnapshot.self, from: data),
-           methods.contains(restored.method), restored.coffee >= 1, restored.ratio >= 1, restored.water >= 1 {
-            method = restored.method; coffee = restored.coffee; ratio = restored.ratio; water = restored.water
+           !restored.method.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           restored.coffee >= 1, restored.ratio >= 1, restored.water >= 1 {
+            method = restored.method; selectedMethodId = restored.methodId
+            coffee = restored.coffee; ratio = restored.ratio; water = restored.water
             coffeeInput = format(restored.coffee, forceDecimal: true)
             ratioInput = format(restored.ratio, forceDecimal: true); waterInput = String(restored.water)
             microcopy = "Se restauró tu última preparación."
@@ -127,8 +140,9 @@ final class CalculatorModel: ObservableObject {
         persistState()
     }
 
-    func selectMethod(_ selected: String) {
+    func selectMethod(_ selected: String, methodId: UUID? = nil) {
         method = selected
+        selectedMethodId = methodId
         ratio = baseRatios[selected] ?? 15
         ratioInput = format(ratio, forceDecimal: true)
         water = Int(coffee * ratio)
@@ -139,6 +153,7 @@ final class CalculatorModel: ObservableObject {
 
     func apply(_ preset: BrewPreset) {
         method = preset.method
+        selectedMethodId = preset.methodId
         coffee = preset.coffee
         ratio = preset.ratio
         water = Int(coffee * ratio)
@@ -172,7 +187,7 @@ final class CalculatorModel: ObservableObject {
             microcopy = "Proporción eliminada de favoritos."
         } else {
             savedPresets.insert(
-                BrewPreset(id: UUID().uuidString, method: method, coffee: coffee, ratio: ratio, isCustom: true),
+                BrewPreset(id: UUID().uuidString, method: method, methodId: selectedMethodId, coffee: coffee, ratio: ratio, isCustom: true),
                 at: 0
             )
             microcopy = "Proporción guardada en favoritos."
@@ -182,12 +197,19 @@ final class CalculatorModel: ObservableObject {
         }
     }
 
+    func isMethodPinned(_ name: String) -> Bool { pinnedMethodNames.contains(name) }
+
+    func setMethodPinned(_ name: String, pinned: Bool) {
+        if pinned { pinnedMethodNames.insert(name) } else { pinnedMethodNames.remove(name) }
+        userDefaults.set(Array(pinnedMethodNames).sorted(), forKey: pinnedMethodsKey)
+    }
+
     private func parseDecimal(_ value: String) -> Double? {
         Double(value.replacingOccurrences(of: ",", with: "."))
     }
 
     private func persistState() {
-        let snapshot = CalculatorStateSnapshot(method: method, coffee: coffee, ratio: ratio, water: water)
+        let snapshot = CalculatorStateSnapshot(method: method, methodId: selectedMethodId, coffee: coffee, ratio: ratio, water: water)
         if let data = try? JSONEncoder().encode(snapshot) { userDefaults.set(data, forKey: stateKey) }
     }
 

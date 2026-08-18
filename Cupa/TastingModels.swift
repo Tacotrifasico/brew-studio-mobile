@@ -78,9 +78,13 @@ final class TastingModel: ObservableObject {
         if state.startedAt == nil { state.startedAt = .now }
         state.coolingStatus = .running; state.lastTickAt = .now; state.updatedAt = .now; scheduleTimer()
     }
-    func pause() { synchronizeClock(); timer?.invalidate(); timer = nil; state.coolingStatus = .paused; state.lastTickAt = nil; state.updatedAt = .now }
+    func pause() {
+        guard state.coolingStatus == .running else { return }
+        synchronizeClock(); timer?.invalidate(); timer = nil; state.coolingStatus = .paused; state.lastTickAt = nil; state.updatedAt = .now
+    }
     func resume() { start() }
     func reset() {
+        guard state.coolingStatus != .completed else { return }
         timer?.invalidate(); timer = nil; state.coolingStatus = .ready; state.coolingElapsedSeconds = 0
         state.startedAt = nil; state.lastTickAt = nil; state.observations = []; state.updatedAt = .now
     }
@@ -90,12 +94,17 @@ final class TastingModel: ObservableObject {
         if delta > 0 { state.coolingElapsedSeconds += delta; state.lastTickAt = now; state.updatedAt = now }
     }
     func addObservation() {
+        guard state.coolingStatus == .running || state.coolingStatus == .paused else { return }
         let observation = TastingObservationSnapshot(
             elapsedSeconds: state.coolingElapsedSeconds, stage: stageCode, notes: state.freeNotes,
             aroma: state.aroma, acidity: state.acidity, sweetness: state.sweetness,
             body: state.body, bitterness: state.bitterness, finish: state.finish
         )
         state.observations.append(observation); state.updatedAt = .now
+    }
+    func removeObservation(id: UUID) {
+        guard state.coolingStatus != .completed else { return }
+        state.observations.removeAll { $0.id == id }; state.updatedAt = .now
     }
     func load(record: TastingRecord, observations: [TastingObservationRecord]) {
         timer?.invalidate(); timer = nil
@@ -108,7 +117,9 @@ final class TastingModel: ObservableObject {
 
     private func scheduleTimer() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.synchronizeClock() } }
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.synchronizeClock() }
+        }
     }
     private func persist() { if let data = try? JSONEncoder().encode(state) { defaults.set(data, forKey: key) } }
 }

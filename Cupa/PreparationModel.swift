@@ -105,7 +105,7 @@ final class PreparationModel: ObservableObject {
     private func scheduleTimer() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.synchronizeClock() }
+            MainActor.assumeIsolated { self?.synchronizeClock() }
         }
     }
     private func updateAutomaticStep() {

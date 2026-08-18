@@ -436,6 +436,36 @@ final class PreparationModelTests: XCTestCase {
 }
 
 final class TastingModelTests: XCTestCase {
+    @MainActor func testCoolingStageBoundariesResetAndCompletedGuards() throws {
+        let suite = "TastingCoolingBoundariesTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = TastingModel(defaults: defaults)
+        for (seconds, expected) in [(0, "HOT"), (239, "HOT"), (240, "PEAK"), (599, "PEAK"), (600, "DECLINING"), (959, "DECLINING"), (960, "EXHAUSTED")] {
+            model.state.coolingElapsedSeconds = seconds
+            XCTAssertEqual(model.stageCode, expected)
+        }
+        model.state.coolingElapsedSeconds = 0
+        model.addObservation()
+        XCTAssertTrue(model.state.observations.isEmpty)
+        model.start(); let tick = try XCTUnwrap(model.state.lastTickAt)
+        model.synchronizeClock(now: tick.addingTimeInterval(245))
+        model.addObservation(); model.pause()
+        XCTAssertEqual(model.state.observations.map(\.stage), ["PEAK"])
+        XCTAssertEqual(model.state.coolingStatus, .paused)
+        let tastingId = model.state.id
+        model.reset()
+        XCTAssertEqual(model.state.id, tastingId)
+        XCTAssertEqual(model.state.coolingStatus, .ready)
+        XCTAssertEqual(model.state.coolingElapsedSeconds, 0)
+        XCTAssertTrue(model.state.observations.isEmpty)
+
+        model.start(); model.addObservation(); model.markSaved()
+        let completed = model.state
+        model.addObservation(); model.removeObservation(id: completed.observations[0].id); model.reset()
+        XCTAssertEqual(model.state, completed)
+        XCTAssertEqual(model.state.coolingStatus, .completed)
+    }
+
     @MainActor func testCoolingRecoveryObservationAndIndependentAggregates() throws {
         let suite = "TastingModelTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }

@@ -386,6 +386,15 @@ struct LabGoldenVerifier {
         let brew = BrewSessionRecord(context: context, state: brewState, recipeName: "Mora limpia", beanName: "Etiopía", grinderName: "C40")
         try! context.save()
         let model = TastingModel(defaults: defaults); model.state.brewSessionId = brew.id
+        for (seconds, expected) in [(0, "HOT"), (239, "HOT"), (240, "PEAK"), (599, "PEAK"), (600, "DECLINING"), (959, "DECLINING"), (960, "EXHAUSTED")] {
+            model.state.coolingElapsedSeconds = seconds; precondition(model.stageCode == expected)
+        }
+        model.addObservation(); precondition(model.state.observations.isEmpty)
+        model.reset(); let originalId = model.state.id
+        model.start(); let boundaryTick = model.state.lastTickAt!; model.synchronizeClock(now: boundaryTick.addingTimeInterval(245)); model.addObservation(); model.pause()
+        precondition(model.state.observations.map(\.stage) == ["PEAK"] && model.state.coolingStatus == .paused)
+        model.removeObservation(id: model.state.observations[0].id); precondition(model.state.observations.isEmpty)
+        model.reset(); precondition(model.state.id == originalId && model.state.coolingElapsedSeconds == 0)
         model.state.selectedFlavorNotes = ["Mora", "Jazmín"]; model.state.freeNotes = "Muy dulce"; model.start(); let tick = model.state.lastTickAt!
         model.synchronizeClock(now: tick.addingTimeInterval(601)); model.state.freeNotes = "Cacao"; model.addObservation(); model.pause()
         precondition(model.stageCode == "DECLINING")
@@ -416,6 +425,7 @@ struct LabGoldenVerifier {
         precondition((try! repository.observations(tastingId: tasting.id)).map(\.stage) == ["EXHAUSTED"])
         precondition((try! context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))).count == 1)
         editor.markSaved(); let savedId = editor.state.id; precondition(editor.state.coolingStatus == .completed)
+        let completed = editor.state; editor.addObservation(); editor.removeObservation(id: completed.observations[0].id); editor.reset(); precondition(editor.state == completed)
         editor.newTasting(); precondition(editor.state.id != savedId && editor.state.coolingStatus == .ready)
         try! repository.delete(tasting)
         precondition(tasting.syncStatusRaw == SyncStatus.pendingDelete.rawValue && cup.syncStatusRaw == SyncStatus.pendingDelete.rawValue)

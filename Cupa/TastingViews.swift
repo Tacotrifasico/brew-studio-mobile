@@ -11,6 +11,7 @@ struct TastingView: View {
     @Binding var selection: CupaTab
     @State private var message: String?; @State private var editingExisting = false
     @State private var selectedTasting: TastingRecord?; @State private var pendingEdit: TastingRecord?
+    @State private var confirmingCoolingReset = false
 
     var body: some View {
         ZStack {
@@ -41,6 +42,12 @@ struct TastingView: View {
                 onDelete: { remove(tasting); selectedTasting = nil }
             )
         }
+        .confirmationDialog("¿Reiniciar el seguimiento?", isPresented: $confirmingCoolingReset, titleVisibility: .visible) {
+            Button("Reiniciar tiempo y observaciones", role: .destructive, action: model.reset)
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Se borrarán el tiempo y las observaciones de enfriamiento que todavía no hayas guardado.")
+        }
         .alert("Cata", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("Aceptar") {} } message: { Text(message ?? "") }
     }
 
@@ -52,15 +59,37 @@ struct TastingView: View {
                 ProgressView(value: min(Double(model.state.coolingElapsedSeconds), 960), total: 960).tint(CupaTheme.terracotta)
                 HStack {
                     switch model.state.coolingStatus {
-                    case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest)
-                    case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta)
-                    case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest)
+                    case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest).accessibilityIdentifier("tasting.cooling.start")
+                    case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta).accessibilityIdentifier("tasting.cooling.pause")
+                    case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest).accessibilityIdentifier("tasting.cooling.resume")
                     case .completed: Label("Guardada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forest)
                     }
-                    Button("Reiniciar", action: model.reset).buttonStyle(.bordered)
-                    Button("Registrar etapa", action: model.addObservation).buttonStyle(.bordered).disabled(model.state.coolingStatus == .ready)
+                    Button("Reiniciar", action: requestCoolingReset).buttonStyle(.bordered)
+                        .disabled(model.state.coolingStatus == .completed)
+                        .accessibilityIdentifier("tasting.cooling.reset")
+                    Button("Registrar etapa", action: model.addObservation).buttonStyle(.bordered)
+                        .disabled(model.state.coolingStatus == .ready || model.state.coolingStatus == .completed)
+                        .accessibilityIdentifier("tasting.cooling.observe")
                 }.font(.caption)
-                if !model.state.observations.isEmpty { Text("\(model.state.observations.count) observaciones durante el enfriamiento").font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                if !model.state.observations.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("\(model.state.observations.count) observaciones durante el enfriamiento").font(.caption.bold()).foregroundStyle(CupaTheme.secondaryText)
+                        ForEach(model.state.observations) { observation in
+                            HStack(alignment: .top, spacing: 8) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("\(observationStageLabel(observation.stage)) · \(time(observation.elapsedSeconds))").font(.caption.bold())
+                                    Text("A \(Int(observation.aroma)) · Ac \(Int(observation.acidity)) · D \(Int(observation.sweetness)) · C \(Int(observation.body)) · Am \(Int(observation.bitterness)) · F \(Int(observation.finish))")
+                                        .font(.caption2).foregroundStyle(CupaTheme.forest)
+                                    if !observation.notes.isEmpty { Text(observation.notes).font(.caption2).foregroundStyle(CupaTheme.secondaryText) }
+                                }
+                                Spacer()
+                                Button(role: .destructive) { model.removeObservation(id: observation.id) } label: { Image(systemName: "trash") }
+                                    .disabled(model.state.coolingStatus == .completed)
+                                    .accessibilityLabel("Eliminar observación de \(observationStageLabel(observation.stage))")
+                            }
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
     }
@@ -162,6 +191,7 @@ struct TastingView: View {
     private func score(_ name: String, _ value: Binding<Double>) -> some View { HStack { Text(name).frame(width: 70, alignment: .leading); Slider(value: value, in: 1...5, step: 1).tint(CupaTheme.terracotta); Text("\(Int(value.wrappedValue))/5").monospacedDigit() } }
     private func toggle(_ note: String) { if let index = model.state.selectedFlavorNotes.firstIndex(of: note) { model.state.selectedFlavorNotes.remove(at: index) } else { model.state.selectedFlavorNotes.append(note) } }
     private func save() {
+        if model.state.coolingStatus == .running { model.pause() }
         let brew = brews.first { $0.id == model.state.brewSessionId }
         do { _ = try TastingRepository(context: context).save(model.state, brew: brew); model.markSaved(); editingExisting = false; message = "Cata, observaciones y taza guardadas offline." }
         catch { context.rollback(); message = error.localizedDescription }
@@ -171,6 +201,14 @@ struct TastingView: View {
     private var saveButtonTitle: String {
         if editingExisting { return "Actualizar cata" }
         return model.state.coolingStatus == .completed ? "Guardada" : "Guardar cata"
+    }
+    private func requestCoolingReset() {
+        guard model.state.coolingStatus != .completed else { return }
+        if model.state.coolingElapsedSeconds > 0 || !model.state.observations.isEmpty { confirmingCoolingReset = true }
+        else { model.reset() }
+    }
+    private func observationStageLabel(_ code: String) -> String {
+        switch code { case "HOT": "Caliente"; case "PEAK": "Pico"; case "DECLINING": "Descenso"; default: "Agotada" }
     }
     private func time(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }
 }

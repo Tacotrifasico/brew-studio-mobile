@@ -135,3 +135,7 @@ El historial no se limita a las últimas ocho filas: cada cata abre un detalle c
 ## D-034 — Detalle de inventario antes de editar o eliminar
 
 Molinos y equipos abren una ficha de lectura con todos sus datos persistidos antes de cualquier mutación. Editar conserva el UUID y marca una actualización sincronizable; eliminar exige confirmación y realiza borrado lógico. Las preparaciones previas mantienen los UUID y snapshots de molino y método, de modo que retirar inventario no vuelve ilegible el historial. La capacidad de un equipo sólo acepta enteros positivos y el rango del molino se mantiene ordenado.
+
+## D-035 — Cierre inmutable y reinicio confirmado de cata
+
+Una cata completada no admite reinicio ni nuevas observaciones: para otra evaluación se debe usar “Nueva”, que asigna otro UUID. Esto impide que reiniciar después de guardar sobrescriba silenciosamente el historial. Mientras la cata está activa, sus observaciones térmicas son visibles y removibles; reiniciar tiempo y observaciones exige confirmación cuando ya existe progreso. Guardar detiene primero el reloj para persistir un tiempo coherente y deja el estado pausado si Core Data falla.

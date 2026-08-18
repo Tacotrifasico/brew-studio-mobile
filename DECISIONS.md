@@ -87,3 +87,7 @@ Los modos `GUIDED` y `AUTOMATED` terminan al alcanzar la suma exacta de sus paso
 ## D-022 — Historial de tazas como snapshot autónomo
 
 `CupSession` replica el conjunto histórico de Android y se muestra localmente en Almacén, sin exigir cuenta. Al guardar una cata copia referencias, parámetros ejecutados, nombres, vida de taza, calificación, NPS, comentario y fecha desde `BrewSession` y `Tasting`. Borrar una cata o su taza marca también la otra y sus observaciones como borradas, evitando filas históricas huérfanas; borrar inventario no destruye los snapshots. El selector de Almacén usa botones desplazables porque seis categorías no caben de forma accesible en un control segmentado de iPhone.
+
+## D-023 — Frescura del café derivada, no persistida
+
+El estado de frescura se calcula al mostrar o editar el café a partir de las fechas persistidas de tueste y apertura; no se guarda una etiqueta que pueda quedar obsoleta. Se preservan los cortes, interpolación continua, textos y alerta de bolsa abierta de Android. La diferencia de días replica su normalización a medianoche y truncamiento de milisegundos, incluso alrededor de cambios de horario local.

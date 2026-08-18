@@ -139,6 +139,22 @@ final class CalculatorParityTests: XCTestCase {
 }
 
 final class LocalPersistenceTests: XCTestCase {
+    func testCoffeeFreshnessMatchesAndroidBoundariesAndOpenWarning() {
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_776_643_200)
+        let date: (Int) -> Date = { calendar.date(byAdding: .day, value: -$0, to: now)! }
+        let expected: [(Int, CoffeeFreshnessState)] = [
+            (7, .veryFresh), (8, .inWindow), (21, .inWindow), (22, .ideal),
+            (35, .ideal), (36, .declining), (60, .declining), (61, .old)
+        ]
+        for (days, state) in expected {
+            XCTAssertEqual(CoffeeFreshnessEngine.evaluate(roastDate: date(days), openedDate: nil, now: now, calendar: calendar).state, state)
+        }
+        XCTAssertEqual(CoffeeFreshnessEngine.progress(days: 80), 1, accuracy: 0.000_001)
+        let opened = CoffeeFreshnessEngine.evaluate(roastDate: date(15), openedDate: date(15), now: now, calendar: calendar)
+        XCTAssertEqual(opened.openWarning, "Abierto hace 15 días. Puede perder aroma más rápido.")
+    }
+
     func testCoffeeAndExperimentCRUDInMemory() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext

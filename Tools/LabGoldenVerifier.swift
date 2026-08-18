@@ -29,6 +29,7 @@ struct LabGoldenVerifier {
             scores: [78, 22, 32, 76, 84, 42]
         )
         verifyStateRestoration()
+        verifyCoffeeFreshnessParity()
         verifyCalculatorFavorites()
         verifyCalculatorQuickPreparation()
         verifyTransfersAndHistoricalSnapshots()
@@ -42,7 +43,7 @@ struct LabGoldenVerifier {
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
-        print("4 golden tests, agregados, preparación, cata, sincronización, IA, perfil y social aprobados")
+        print("4 golden tests, frescura, agregados, preparación, cata, sincronización, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -63,6 +64,28 @@ struct LabGoldenVerifier {
         precondition(restored.state.altitudeMeters == 2240)
         precondition(restored.state.temperatureUnit == .fahrenheit)
         precondition(restored.state.timeSeconds == 205)
+    }
+
+    private static func verifyCoffeeFreshnessParity() {
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_776_643_200)
+        func daysAgo(_ days: Int) -> Date { calendar.date(byAdding: .day, value: -days, to: now)! }
+        let cases: [(Int, CoffeeFreshnessState, Double)] = [
+            (0, .veryFresh, 0), (7, .veryFresh, 0.2), (8, .inWindow, 0.2 + 0.2 / 14),
+            (21, .inWindow, 0.4), (22, .ideal, 0.4 + 0.2 / 14), (35, .ideal, 0.6),
+            (36, .declining, 0.608), (60, .declining, 0.8), (61, .old, 0.81), (80, .old, 1)
+        ]
+        for item in cases {
+            let result = CoffeeFreshnessEngine.evaluate(roastDate: daysAgo(item.0), openedDate: nil, now: now, calendar: calendar)
+            precondition(result.daysFromRoast == item.0 && result.state == item.1)
+            precondition(abs(result.progress - item.2) < 0.000_001)
+        }
+        let future = CoffeeFreshnessEngine.evaluate(roastDate: daysAgo(-1), openedDate: nil, now: now, calendar: calendar)
+        precondition(future.state == .noDate && future.progress == 0)
+        let opened = CoffeeFreshnessEngine.evaluate(roastDate: daysAgo(15), openedDate: daysAgo(15), now: now, calendar: calendar)
+        precondition(opened.openWarning == "Abierto hace 15 días. Puede perder aroma más rápido.")
+        let missing = CoffeeFreshnessEngine.evaluate(roastDate: nil, openedDate: daysAgo(20), now: now, calendar: calendar)
+        precondition(missing.state == .noDate && missing.openStatusDetails == "Abierto hace 20 días" && missing.openWarning == nil)
     }
 
     @MainActor private static func verifyCalculatorFavorites() {

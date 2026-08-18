@@ -26,6 +26,8 @@ Relaciones por UUID estables. Una sesión histórica conserva identificadores y 
 
 `Grinder` conserva identidad, marca, modelo, tipo manual/eléctrico, unidad de escala, límites, calibración y notas. No se fusiona con `Equipment`.
 
+`CoffeeBean` conserva fechas de tueste y apertura; `CoffeeFreshnessEngine` deriva en tiempo real días, etapa, progreso, recomendación y advertencia de apertura con las reglas de Android. El resultado no se sincroniza porque depende de la fecha actual y se volvería obsoleto.
+
 `Equipment` conserva tipo canónico, nombre, marca, modelo, capacidad, configuración, notas, favorito y estado activo. Las sesiones futuras guardarán UUID y snapshot mínimo para conservar historial tras el borrado lógico.
 
 `Recipe` → `RecipeIngredient` y `RecipeStep` por `recipeId`. La receta conserva tipo, intención, método sugerido, favorito, etiquetas, visibilidad y procedencia de copias. Ingredientes y pasos mantienen orden y UUID independientes.

@@ -5,6 +5,104 @@ enum SyncStatus: String, Codable, CaseIterable {
     case synced, pendingCreate, pendingUpdate, pendingDelete, conflict, error
 }
 
+enum CoffeeFreshnessState: String, CaseIterable {
+    case noDate, veryFresh, inWindow, ideal, declining, old
+
+    var label: String {
+        switch self {
+        case .noDate: "Sin fecha"
+        case .veryFresh: "Muy fresco"
+        case .inWindow: "En ventana"
+        case .ideal: "Puntal ideal"
+        case .declining: "Bajando"
+        case .old: "Viejo"
+        }
+    }
+
+    var colorHex: UInt {
+        switch self {
+        case .noDate: 0x60756A
+        case .veryFresh: 0x84AD92
+        case .inWindow: 0x3F7A63
+        case .ideal: 0xC28B46
+        case .declining: 0xB76545
+        case .old: 0x8C5A2B
+        }
+    }
+}
+
+struct CoffeeFreshnessResult: Equatable {
+    let daysFromRoast: Int?
+    let daysFromOpen: Int?
+    let state: CoffeeFreshnessState
+    let progress: Double
+    let recommendation: String
+    let openStatusDetails: String
+    let openWarning: String?
+}
+
+enum CoffeeFreshnessEngine {
+    static func evaluate(
+        roastDate: Date?,
+        openedDate: Date?,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> CoffeeFreshnessResult {
+        let daysFromRoast = roastDate.map { dayDifference(from: $0, to: now, calendar: calendar) }
+        let daysFromOpen = openedDate.map { dayDifference(from: $0, to: now, calendar: calendar) }
+        guard let daysFromRoast else {
+            return .init(
+                daysFromRoast: nil, daysFromOpen: daysFromOpen, state: .noDate, progress: 0,
+                recommendation: "Agrega fecha de tostado para calcular frescura.",
+                openStatusDetails: openDetails(daysFromOpen), openWarning: nil
+            )
+        }
+
+        let state: CoffeeFreshnessState = switch daysFromRoast {
+        case ..<0: .noDate
+        case ...7: .veryFresh
+        case ...21: .inWindow
+        case ...35: .ideal
+        case ...60: .declining
+        default: .old
+        }
+        let recommendation = switch state {
+        case .noDate: "Agrega fecha de tostado para calcular frescura."
+        case .veryFresh: "Puede tener mucho gas; se sugiere preinfusión larga de 45–50 segundos (bloom)."
+        case .inWindow: "Excelente ventana de uso. El perfil de sabor es más estable y dulce."
+        case .ideal: "Punto ideal para filtrados. Buena retención de aromas y extracción equilibrada."
+        case .declining: "Va perdiendo expresión. Ajusta molienda un poco más fina o sube temperatura 1°C."
+        case .old: "Perfil más plano. Úsalo pronto o para recetas con leche/frías donde resalte intensidad."
+        }
+        return .init(
+            daysFromRoast: daysFromRoast, daysFromOpen: daysFromOpen, state: state,
+            progress: progress(days: daysFromRoast), recommendation: recommendation,
+            openStatusDetails: openDetails(daysFromOpen),
+            openWarning: daysFromOpen.map { $0 > 14 ? "Abierto hace \($0) días. Puede perder aroma más rápido." : nil } ?? nil
+        )
+    }
+
+    static func progress(days: Int) -> Double {
+        if days < 0 { return 0 }
+        switch days {
+        case ...7: return (Double(days) / 7) * 0.2
+        case ...21: return 0.2 + (Double(days - 7) / 14) * 0.2
+        case ...35: return 0.4 + (Double(days - 21) / 14) * 0.2
+        case ...60: return 0.6 + (Double(days - 35) / 25) * 0.2
+        default: return min(1, 0.8 + (Double(days - 60) / 20) * 0.2)
+        }
+    }
+
+    private static func dayDifference(from date: Date, to now: Date, calendar: Calendar) -> Int {
+        let seconds = calendar.startOfDay(for: now).timeIntervalSince(calendar.startOfDay(for: date))
+        return Int((seconds / 86_400).rounded(.towardZero))
+    }
+
+    private static func openDetails(_ days: Int?) -> String {
+        days.map { "Abierto hace \($0) días" } ?? "Sin abrir (Hermético)"
+    }
+}
+
 @objc(CoffeeBeanRecord)
 final class CoffeeBeanRecord: NSManagedObject {
     @NSManaged var id: UUID

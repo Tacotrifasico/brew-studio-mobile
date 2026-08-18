@@ -30,6 +30,7 @@
 - Calculadora: favorito personalizado guardado, restaurado desde `UserDefaults` aislado y eliminado: aprobado.
 - Calculadora: restauración de método/café/ratio/agua y pasos rápidos V60, AeroPress y Espresso: aprobados.
 - Restauración de altitud, unidad y tiempo mediante `UserDefaults`: aprobada.
+- Frescura de café: cortes exactos en 7/21/35/60 días, interpolación hasta 100%, fecha futura, ausencia de fecha y alerta tras 14 días abierta: aprobados.
 - Alta, consulta y borrado lógico de café y molino; alta y actualización de equipo; alta de experimento en Core Data en memoria: aprobados.
 - Receta: alta, edición por UUID, reordenamiento, duplicación profunda y borrado lógico de hijos: aprobados.
 - Técnica: alta, orden, duración total, agua acumulada y borrado lógico de pasos: aprobados.

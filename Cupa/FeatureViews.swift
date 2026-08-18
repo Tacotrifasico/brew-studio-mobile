@@ -761,11 +761,13 @@ private struct CoffeeInventoryView: View {
                         .listRowBackground(Color.clear)
                     } else {
                         ForEach(beans) { bean in
+                            let freshness = CoffeeFreshnessEngine.evaluate(roastDate: bean.roastDate, openedDate: bean.openedDate)
                             Button { editingBean = bean } label: {
                                 VStack(alignment: .leading, spacing: 6) {
                                     HStack {
                                         Text(bean.name).font(.headline)
                                         Spacer()
+                                        CoffeeFreshnessBadge(state: freshness.state)
                                         if bean.syncStatus != .synced {
                                             Image(systemName: "arrow.triangle.2.circlepath")
                                                 .font(.caption)
@@ -779,6 +781,11 @@ private struct CoffeeInventoryView: View {
                                         Text("\(bean.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles")
                                             .font(.caption)
                                             .foregroundStyle(CupaTheme.forest)
+                                    }
+                                    CoffeeFreshnessBar(result: freshness)
+                                    if let warning = freshness.openWarning {
+                                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                                            .font(.caption2).foregroundStyle(CupaTheme.terracotta)
                                     }
                                 }
                                 .padding(.vertical, 6)
@@ -816,6 +823,36 @@ private struct CoffeeInventoryView: View {
     private func softDelete(at offsets: IndexSet) {
         for index in offsets { beans[index].markDeleted() }
         try? modelContext.save()
+    }
+}
+
+private struct CoffeeFreshnessBadge: View {
+    let state: CoffeeFreshnessState
+    var body: some View {
+        Text(state.label.uppercased())
+            .font(.caption2.bold())
+            .foregroundStyle(Color(hex: state.colorHex))
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(Color(hex: state.colorHex).opacity(0.12), in: Capsule())
+    }
+}
+
+private struct CoffeeFreshnessBar: View {
+    let result: CoffeeFreshnessResult
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(result.daysFromRoast.map { "Día \($0) desde tostado" } ?? "Sin datos de tueste")
+                Spacer()
+                Text("\(Int((result.progress * 100).rounded(.towardZero)))% est. útil")
+            }
+            .font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
+            ProgressView(value: result.progress)
+                .tint(Color(hex: result.state.colorHex))
+                .accessibilityLabel("Maduración estimada")
+                .accessibilityValue("\(Int((result.progress * 100).rounded())) por ciento")
+            Text(result.openStatusDetails).font(.caption2).foregroundStyle(CupaTheme.secondaryText)
+        }
     }
 }
 
@@ -931,6 +968,14 @@ private struct CoffeeBeanEditor: View {
                     Toggle("Bolsa abierta", isOn: $hasOpenedDate)
                     if hasOpenedDate { DatePicker("Fecha de apertura", selection: $openedDate, displayedComponents: .date) }
                 }
+                Section("Frescura estimada") {
+                    HStack { CoffeeFreshnessBadge(state: freshness.state); Spacer(); Text(freshness.openStatusDetails).font(.caption).foregroundStyle(.secondary) }
+                    CoffeeFreshnessBar(result: freshness)
+                    Text(freshness.recommendation).font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                    if let warning = freshness.openWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(CupaTheme.terracotta)
+                    }
+                }
                 Section("Inventario") {
                     TextField("Cantidad inicial (g)", text: $initialQuantity).keyboardType(.decimalPad)
                     TextField("Cantidad restante (g)", text: $remainingQuantity).keyboardType(.decimalPad)
@@ -967,5 +1012,12 @@ private struct CoffeeBeanEditor: View {
 
     private func parseDecimal(_ text: String) -> Double {
         Double(text.replacingOccurrences(of: ",", with: ".")) ?? 0
+    }
+
+    private var freshness: CoffeeFreshnessResult {
+        CoffeeFreshnessEngine.evaluate(
+            roastDate: hasRoastDate ? roastDate : nil,
+            openedDate: hasOpenedDate ? openedDate : nil
+        )
     }
 }

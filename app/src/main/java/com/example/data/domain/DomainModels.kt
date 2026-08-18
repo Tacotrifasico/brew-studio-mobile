@@ -48,6 +48,18 @@ data class DomainBrewMethod(
     val schemaVersion: Int = 1
 )
 
+data class UserMethodItem(
+    val preferenceId: String,
+    val methodId: String,
+    val name: String,
+    val code: String,
+    val category: String = "POUR_OVER",
+    val defaultRatio: Float = 16.0f,
+    val isPinnedToCalculator: Boolean = true,
+    val isActive: Boolean = true,
+    val sourceInstrumentId: String? = null
+)
+
 data class DomainBean(
     val id: String = UUID.randomUUID().toString(),
     val roaster: String,

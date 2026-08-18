@@ -28,6 +28,7 @@ import com.example.data.database.Recipe
 import com.example.data.database.Technique
 import com.example.data.database.TechniqueStep
 import com.example.data.remote.models.RemoteShare
+import com.example.ui.components.V60Icon
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.SocialViewModel
 import com.example.ui.viewmodel.SocialUiState
@@ -394,7 +395,7 @@ fun MyLocalFormulasTab(viewModel: SocialViewModel) {
             }
             Tab(selected = activeViewMode == 1, onClick = { activeViewMode = 1 }) {
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Bolt, contentDescription = "Técnicas")
+                    Icon(V60Icon, contentDescription = "Técnicas")
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Mis Técnicas (${techniques.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
@@ -480,7 +481,13 @@ fun MyLocalFormulasTab(viewModel: SocialViewModel) {
 }
 
 @Composable
-fun LocalItemCard(title: String, subtitle: String, isShared: Boolean, onShare: () -> Unit) {
+fun LocalItemCard(
+    title: String,
+    subtitle: String,
+    isShared: Boolean,
+    onShare: () -> Unit,
+    onPrepare: (() -> Unit)? = null
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = SurfaceCard),
@@ -507,16 +514,31 @@ fun LocalItemCard(title: String, subtitle: String, isShared: Boolean, onShare: (
                 }
             }
 
-            Button(
-                onClick = onShare,
-                colors = ButtonDefaults.buttonColors(containerColor = if (isShared) CafeCalidoClaro else AcentoPrincipal),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
-            ) {
-                Icon(Icons.Default.Share, contentDescription = "Compartir", modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Compartir", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onPrepare != null) {
+                    OutlinedButton(
+                        onClick = onPrepare,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Preparar", modifier = Modifier.size(14.dp), tint = AcentoPrincipal)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Preparar", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                    }
+                }
+
+                Button(
+                    onClick = onShare,
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isShared) CafeCalidoClaro else AcentoPrincipal),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = "Compartir", modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Compartir", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

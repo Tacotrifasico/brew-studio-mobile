@@ -33,8 +33,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.testTag
 import com.example.ui.components.BaristaCalcCard
+import com.example.ui.components.V60Icon
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.BaristaCalcViewModel
+
+data class QuickAccessOptionItem(
+    val id: String,
+    val label: String,
+    val icon: ImageVector,
+    val accentColor: Color,
+    val action: () -> Unit
+)
 
 @Composable
 fun HomeScreen(
@@ -43,6 +52,29 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("app_quick_access_prefs", android.content.Context.MODE_PRIVATE) }
+
+    val allQuickAccessOptions = remember(onNavigateToSection) {
+        listOf(
+            QuickAccessOptionItem("cata", "Cata", Icons.Default.RateReview, CafeCalidoClaro) { onNavigateToSection("cata") },
+            QuickAccessOptionItem("lab", "Laboratorio", Icons.Default.Science, AcentoSecundario) { onNavigateToSection("lab") },
+            QuickAccessOptionItem("storage", "Almacén", Icons.Default.Inventory, CafeCalidoOscuro) { onNavigateToSection("storage") },
+            QuickAccessOptionItem("social", "Brew Hub", Icons.Default.Groups, Color(0xFFA15A95)) { onNavigateToSection("social") },
+            QuickAccessOptionItem("add_coffee", "Agregar Café", Icons.Default.Grass, AcentoPrincipal) { onNavigateToSection("storage") },
+            QuickAccessOptionItem("add_recipe", "Nueva Receta", Icons.AutoMirrored.Filled.MenuBook, CafeCalidoOscuro) { onNavigateToSection("storage") },
+            QuickAccessOptionItem("add_technique", "Nueva Técnica", V60Icon, AcentoSecundario) { onNavigateToSection("brew") },
+            QuickAccessOptionItem("add_grinder", "Registrar Molienda", Icons.Default.Tune, CafeCalidoClaro) { onNavigateToSection("storage") },
+            QuickAccessOptionItem("add_equipment", "Nuevo Equipo", Icons.Default.Handyman, TextSecundario) { onNavigateToSection("storage") }
+        )
+    }
+
+    var selectedAccessIds by remember {
+        val saved = prefs.getStringSet("selected_ids", null) ?: setOf("cata", "lab", "storage", "social")
+        mutableStateOf(saved)
+    }
+
+    var showCustomizeQuickAccessDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -280,7 +312,8 @@ fun HomeScreen(
                 onWaterFocusLost = { viewModel.onWaterFocusLost() },
                 onPrepare = { viewModel.onActionPrepare(); onNavigateToSection("brew") },
                 onLab = { viewModel.onActionLab(); onNavigateToSection("lab") },
-                onFavorite = { viewModel.onActionFavorite() }
+                onFavorite = { viewModel.onActionFavorite() },
+                onToggleMethodPinned = { methodId -> viewModel.toggleMethodPinned(methodId) }
             )
         }
 
@@ -299,13 +332,41 @@ fun HomeScreen(
                 shape = RoundedCornerShape(24.dp)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "ACCESOS RÁPIDOS",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecundario,
-                        letterSpacing = 1.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "ACCESOS RÁPIDOS",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecundario,
+                            letterSpacing = 1.sp
+                        )
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AcentoSuave)
+                                .clickable { showCustomizeQuickAccessDialog = true }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "Personalizar",
+                                tint = AcentoPrincipal,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "Personalizar",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AcentoPrincipal
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // Hero / Primary Action Card: Preparar (Organic & Dynamic)
@@ -389,46 +450,131 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        QuickAccessPill(
-                            label = "Cata",
-                            icon = Icons.Default.RateReview,
-                            accentColor = CafeCalidoClaro,
-                            onClick = { onNavigateToSection("cata") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        QuickAccessPill(
-                            label = "Laboratorio",
-                            icon = Icons.Default.Science,
-                            accentColor = AcentoSecundario,
-                            onClick = { onNavigateToSection("lab") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        QuickAccessPill(
-                            label = "Almacén",
-                            icon = Icons.Default.Inventory,
-                            accentColor = CafeCalidoOscuro,
-                            onClick = { onNavigateToSection("storage") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        QuickAccessPill(
-                            label = "Brew Hub",
-                            icon = Icons.Default.Groups,
-                            accentColor = Color(0xFFA15A95),
-                            onClick = { onNavigateToSection("social") },
-                            modifier = Modifier.weight(1f)
-                        )
+                    // Dynamic User Selected Quick Access Items
+                    val activeItems = allQuickAccessOptions.filter { selectedAccessIds.contains(it.id) }
+                    activeItems.chunked(2).forEachIndexed { index, pair ->
+                        if (index > 0) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            pair.forEach { item ->
+                                QuickAccessPill(
+                                    label = item.label,
+                                    icon = item.icon,
+                                    accentColor = item.accentColor,
+                                    onClick = item.action,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            if (pair.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
+            }
+        }
+
+        // Customization Dialog for Quick Access
+        if (showCustomizeQuickAccessDialog) {
+            item {
+                AlertDialog(
+                    onDismissRequest = { showCustomizeQuickAccessDialog = false },
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.Tune, contentDescription = null, tint = AcentoPrincipal)
+                            Text("Personalizar Accesos Rápidos", fontWeight = FontWeight.Bold, color = TextPrincipal, fontSize = 16.sp)
+                        }
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "Selecciona las acciones directas que deseas tener a la mano en la pantalla de inicio:",
+                                fontSize = 12.sp,
+                                color = TextSecundario,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                            allQuickAccessOptions.forEach { option ->
+                                val isChecked = selectedAccessIds.contains(option.id)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isChecked) AcentoSuave else MainBackgroundAlt)
+                                        .clickable {
+                                            val newSet = selectedAccessIds.toMutableSet()
+                                            if (isChecked) {
+                                                if (newSet.size > 1) newSet.remove(option.id)
+                                            } else {
+                                                newSet.add(option.id)
+                                            }
+                                            selectedAccessIds = newSet
+                                            prefs.edit().putStringSet("selected_ids", newSet).apply()
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(option.accentColor.copy(alpha = 0.2f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = option.icon,
+                                                contentDescription = null,
+                                                tint = option.accentColor,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                        }
+                                        Text(
+                                            text = option.label,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrincipal
+                                        )
+                                    }
+                                    Checkbox(
+                                        checked = isChecked,
+                                        onCheckedChange = { checked ->
+                                            val newSet = selectedAccessIds.toMutableSet()
+                                            if (checked) {
+                                                newSet.add(option.id)
+                                            } else {
+                                                if (newSet.size > 1) newSet.remove(option.id)
+                                            }
+                                            selectedAccessIds = newSet
+                                            prefs.edit().putStringSet("selected_ids", newSet).apply()
+                                        },
+                                        colors = CheckboxDefaults.colors(checkedColor = AcentoPrincipal)
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showCustomizeQuickAccessDialog = false }) {
+                            Text("Guardar", fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                        }
+                    },
+                    containerColor = SurfaceCard,
+                    shape = RoundedCornerShape(20.dp)
+                )
             }
         }
 
@@ -506,7 +652,7 @@ fun HomeScreen(
                             StatItem("Granos", state.beansCount.toString(), Icons.Default.Grass, CafeCalidoOscuro),
                             StatItem("Recetas", state.recipesCount.toString(), Icons.AutoMirrored.Filled.MenuBook, AcentoPrincipal),
                             StatItem("Tazas", state.cupsCount.toString(), Icons.Default.EmojiFoodBeverage, CafeCalidoClaro),
-                            StatItem("Técnicas", state.techniquesCount.toString(), Icons.Default.Bolt, AcentoSecundario),
+                            StatItem("Técnicas", state.techniquesCount.toString(), V60Icon, AcentoSecundario),
                             StatItem("Equipo", (state.equipmentCount + state.grindersCount).toString(), Icons.Default.Handyman, TextSecundario)
                         )
                         items(stats) { stat ->

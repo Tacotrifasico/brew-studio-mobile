@@ -13,6 +13,8 @@ import com.example.data.remote.models.RemoteActivityLog
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.SocialRepository
 import com.example.data.repository.SyncRepository
+import com.example.feature.social.data.*
+import com.example.domain.usecase.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,6 +83,20 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         recipeRemoteSource = recipeRemoteSource,
         techniqueRemoteSource = techniqueRemoteSource
     )
+
+    // Domain Repositories & Use Cases
+    val domainAuthRepo = AuthRepositoryImpl(authRepo, sessionManager)
+    val domainRecipeRepo = RecipeRepositoryImpl(database.recipeDao(), database.recipeIngredientDao(), database.recipeStepDao())
+    val domainTechniqueRepo = TechniqueRepositoryImpl(database.techniqueDao(), database.techniqueStepDao())
+    val domainSocialRepo = SocialRepositoryImpl(socialRemoteSource)
+
+    val shareRecipeUseCase = ShareRecipeUseCase(domainAuthRepo, domainRecipeRepo, domainSocialRepo)
+    val shareTechniqueUseCase = ShareTechniqueUseCase(domainAuthRepo, domainTechniqueRepo, domainSocialRepo)
+    val importRecipeShareUseCase = ImportRecipeShareUseCase(domainAuthRepo, domainRecipeRepo, domainSocialRepo)
+    val importTechniqueShareUseCase = ImportTechniqueShareUseCase(domainAuthRepo, domainTechniqueRepo, domainSocialRepo)
+    val forkRecipeShareUseCase = ForkRecipeShareUseCase(domainAuthRepo, domainRecipeRepo, domainSocialRepo)
+    val forkTechniqueShareUseCase = ForkTechniqueShareUseCase(domainAuthRepo, domainTechniqueRepo, domainSocialRepo)
+    val toggleLikeUseCase = ToggleShareLikeUseCase(domainAuthRepo, domainSocialRepo)
 
     private val _uiState = MutableStateFlow(SocialUiState())
     val uiState: StateFlow<SocialUiState> = _uiState.asStateFlow()
@@ -347,9 +363,21 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
     fun importShare(share: RemoteShare, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
-            val result = socialRepo.importShare(share)
+            // Register in domain social repository first to ensure share payload is available
+            val brewShare = mapRemoteShareToBrewShare(share)
+            domainSocialRepo.publish(brewShare)
+
+            val isRecipe = share.entityType == "recipe"
+            val result = if (isRecipe) {
+                importRecipeShareUseCase(share.id)
+            } else {
+                importTechniqueShareUseCase(share.id)
+            }
+
             if (result.isSuccess) {
-                onResult(true, "Copia registrada exitosamente en tu Almacén.")
+                // Also trigger remote import for backend syncing
+                socialRepo.importShare(share)
+                onResult(true, "Copia registrada exitosamente en tu biblioteca.")
                 fetchActivity()
             } else {
                 onResult(false, result.exceptionOrNull()?.message ?: "Error al importar copia")
@@ -359,14 +387,94 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
     fun forkShare(share: RemoteShare, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
-            val result = socialRepo.forkShare(share)
+            val brewShare = mapRemoteShareToBrewShare(share)
+            domainSocialRepo.publish(brewShare)
+
+            val isRecipe = share.entityType == "recipe"
+            val result = if (isRecipe) {
+                forkRecipeShareUseCase(share.id)
+            } else {
+                forkTechniqueShareUseCase(share.id)
+            }
+
             if (result.isSuccess) {
-                onResult(true, "Variante editable (Fork) guardada exitosamente en tu Almacén.")
+                socialRepo.forkShare(share)
+                onResult(true, "Variante editable (Fork) guardada exitosamente en tu biblioteca.")
                 fetchActivity()
             } else {
-                onResult(false, result.exceptionOrNull()?.message ?: "Error al forquear fórmula")
+                onResult(false, result.exceptionOrNull()?.message ?: "Error al forquear entidad")
             }
         }
+    }
+
+    private fun mapRemoteShareToBrewShare(share: RemoteShare): com.example.domain.model.BrewShare {
+        val snap = share.payloadSnapshotJson
+        val isRecipe = share.entityType == "recipe"
+        val uid = authRepo.getUserId() ?: "local_user"
+
+        val origAuthorId = share.originalAuthorUserId ?: share.fromUserId
+        val origAuthorName = share.originalAuthorName ?: share.fromName ?: "Barista"
+        val origEntityId = share.originalEntityId ?: share.entityId
+
+        val attribution = com.example.domain.model.Attribution(
+            required = true,
+            mode = null,
+            originalAuthorUserId = origAuthorId,
+            originalAuthorName = origAuthorName,
+            originalEntityId = origEntityId
+        )
+
+        val payload = if (isRecipe) {
+            val domainRecipe = com.example.domain.model.DomainRecipe(
+                id = share.entityId,
+                ownerUserId = share.fromUserId,
+                name = share.name,
+                method = snap["method"] as? String ?: "V60",
+                ingredientsSummary = snap["ingredientsSummary"] as? String ?: "",
+                stepsSummary = snap["stepsSummary"] as? String ?: "",
+                tags = snap["tags"] as? String ?: "",
+                originalAuthorUserId = origAuthorId,
+                originalAuthorName = origAuthorName,
+                originalEntityId = origEntityId,
+                attribution = attribution
+            )
+            com.example.domain.model.SharedPayload.RecipePayload(domainRecipe)
+        } else {
+            val domainTech = com.example.domain.model.PreparationTechnique(
+                id = share.entityId,
+                ownerUserId = share.fromUserId,
+                name = share.name,
+                method = snap["method"] as? String ?: "V60",
+                coffeeGrams = (snap["coffeeGrams"] as? Number)?.toDouble() ?: (snap["doseG"] as? Number)?.toDouble() ?: 15.0,
+                waterMl = (snap["waterMl"] as? Number)?.toDouble() ?: 240.0,
+                grind = (snap["grind"] as? Number)?.toDouble() ?: (snap["grindValue"] as? Number)?.toDouble() ?: 18.0,
+                temperatureC = (snap["temperature"] as? Number)?.toDouble() ?: (snap["temperatureC"] as? Number)?.toDouble() ?: 93.0,
+                totalTimeSeconds = (snap["totalTimeSeconds"] as? Number)?.toInt() ?: 180,
+                executionMode = snap["executionMode"] as? String ?: "GUIDED",
+                executionSteps = emptyList(),
+                originalAuthorUserId = origAuthorId,
+                originalAuthorName = origAuthorName,
+                originalEntityId = origEntityId,
+                attribution = attribution
+            )
+            com.example.domain.model.SharedPayload.TechniquePayload(domainTech)
+        }
+
+        return com.example.domain.model.BrewShare(
+            id = share.id,
+            entityType = if (isRecipe) com.example.domain.model.ShareEntityType.RECIPE else com.example.domain.model.ShareEntityType.TECHNIQUE,
+            entityId = share.entityId,
+            name = share.name,
+            subtitle = share.subtitle,
+            fromUserId = share.fromUserId,
+            fromDisplayName = share.fromName ?: "Barista",
+            fromHandle = share.fromHandle,
+            targetUserId = share.targetUserId,
+            visibility = if (share.visibility == "DIRECT" || share.visibility == "direct") com.example.domain.model.ShareVisibility.DIRECT else com.example.domain.model.ShareVisibility.PUBLIC,
+            message = share.message,
+            attribution = attribution,
+            payload = payload
+        )
     }
 
     fun shareRecipeToFeed(recipe: Recipe, message: String, targetUserId: String? = null, visibility: String = "public", onResult: (Boolean, String) -> Unit) {

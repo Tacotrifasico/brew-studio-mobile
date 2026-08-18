@@ -9,6 +9,32 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import java.time.Instant
 import java.util.UUID
 
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `user_method_preferences` (
+                `id` TEXT NOT NULL,
+                `userId` TEXT NOT NULL DEFAULT 'local_user',
+                `methodId` TEXT NOT NULL,
+                `isPinnedToCalculator` INTEGER NOT NULL DEFAULT 1,
+                `isActive` INTEGER NOT NULL DEFAULT 1,
+                `sourceInstrumentId` TEXT,
+                `addedAt` TEXT NOT NULL,
+                PRIMARY KEY(`id`)
+            )
+        """.trimIndent())
+
+        db.execSQL("""
+            INSERT OR IGNORE INTO user_method_preferences (id, userId, methodId, isPinnedToCalculator, isActive, sourceInstrumentId, addedAt) VALUES
+            ('pref-v60', 'local_user', '11111111-1111-4000-8000-000000000001', 1, 1, NULL, '2026-01-01T00:00:00Z'),
+            ('pref-aeropress', 'local_user', '11111111-1111-4000-8000-000000000002', 1, 1, NULL, '2026-01-01T00:00:00Z'),
+            ('pref-espresso', 'local_user', '11111111-1111-4000-8000-000000000003', 1, 1, NULL, '2026-01-01T00:00:00Z'),
+            ('pref-french_press', 'local_user', '11111111-1111-4000-8000-000000000004', 1, 1, NULL, '2026-01-01T00:00:00Z'),
+            ('pref-custom', 'local_user', '11111111-1111-4000-8000-000000000005', 0, 1, NULL, '2026-01-01T00:00:00Z')
+        """.trimIndent())
+    }
+}
+
 val MIGRATION_5_6 = object : Migration(5, 6) {
     override fun migrate(db: SupportSQLiteDatabase) {
         // 1. Create brew_methods table
@@ -871,6 +897,7 @@ private fun String?.isNull_or_Empty(): Boolean {
         RatioPreset::class,
         RatioLastUsed::class,
         BrewMethod::class,
+        UserMethodPreference::class,
         Bean::class,
         Instrument::class,
         GrinderProfile::class,
@@ -886,13 +913,14 @@ private fun String?.isNull_or_Empty(): Boolean {
         CataFlavorNote::class,
         LabExperiment::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun ratioPresetDao(): RatioPresetDao
     abstract fun ratioLastUsedDao(): RatioLastUsedDao
     abstract fun brewMethodDao(): BrewMethodDao
+    abstract fun userMethodPreferenceDao(): UserMethodPreferenceDao
     abstract fun beanDao(): BeanDao
     abstract fun instrumentDao(): InstrumentDao
     abstract fun grinderProfileDao(): GrinderProfileDao
@@ -919,7 +947,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "brew_studio_database_v2"
                 )
-                .addMigrations(MIGRATION_5_6)
+                .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
                 .build()
                 INSTANCE = instance
                 instance

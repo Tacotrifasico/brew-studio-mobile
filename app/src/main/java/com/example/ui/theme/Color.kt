@@ -30,6 +30,8 @@ val AcentoSecundario = Color(0xFFC86D51) // Warm Terracotta Accent
 // Warm, complementary accents for specialized states
 val CafeCalidoOscuro = Color(0xFFB85D42) // Rich terracotta
 val CafeCalidoClaro = Color(0xFFC86D51) // Terracotta gold
+val AccentGold = Color(0xFFD97706) // Warm Gold
+val SurfaceElevated = Color(0xFFEBE6DC) // Surface Elevated
 
 val Advertencia = Color(0xFFD9534F) // Clean red warning
 

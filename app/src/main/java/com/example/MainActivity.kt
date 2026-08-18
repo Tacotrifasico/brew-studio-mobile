@@ -26,6 +26,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.ui.components.V60Icon
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.BaristaCalcViewModel
@@ -54,7 +55,7 @@ sealed class Screen(
     val inactiveIcon: ImageVector
 ) {
     object Home : Screen("home", "Taller", Icons.Filled.Home, Icons.Outlined.Home)
-    object Brew : Screen("brew", "Preparar", Icons.Filled.LocalCafe, Icons.Outlined.LocalCafe)
+    object Brew : Screen("brew", "Preparar", V60Icon, V60Icon)
     class CataScreenConfig : Screen("cata", "Cata", Icons.Filled.Favorite, Icons.Outlined.Favorite)
     object Lab : Screen("lab", "Laboratorio", Icons.Filled.Science, Icons.Outlined.Science)
     object Storage : Screen("storage", "Almacen", Icons.Filled.Inventory, Icons.Outlined.Inventory)

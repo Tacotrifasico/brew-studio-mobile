@@ -46,6 +46,36 @@ interface BrewMethodDao {
 }
 
 @Dao
+interface UserMethodPreferenceDao {
+    @Query("SELECT * FROM user_method_preferences WHERE isActive = 1 ORDER BY addedAt ASC")
+    fun getAllActivePreferences(): Flow<List<UserMethodPreference>>
+
+    @Query("SELECT * FROM user_method_preferences WHERE isPinnedToCalculator = 1 AND isActive = 1 ORDER BY addedAt ASC")
+    fun getPinnedPreferences(): Flow<List<UserMethodPreference>>
+
+    @Query("SELECT * FROM user_method_preferences WHERE methodId = :methodId LIMIT 1")
+    suspend fun getPreferenceByMethodId(methodId: String): UserMethodPreference?
+
+    @Query("SELECT * FROM user_method_preferences WHERE sourceInstrumentId = :instrumentId LIMIT 1")
+    suspend fun getPreferenceByInstrumentId(instrumentId: String): UserMethodPreference?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPreference(pref: UserMethodPreference)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPreferences(prefs: List<UserMethodPreference>)
+
+    @Query("UPDATE user_method_preferences SET isPinnedToCalculator = :isPinned WHERE methodId = :methodId")
+    suspend fun setPinnedStatus(methodId: String, isPinned: Boolean)
+
+    @Query("DELETE FROM user_method_preferences WHERE sourceInstrumentId = :instrumentId")
+    suspend fun deletePreferenceByInstrumentId(instrumentId: String)
+
+    @Delete
+    suspend fun deletePreference(pref: UserMethodPreference)
+}
+
+@Dao
 interface BeanDao {
     @Query("SELECT * FROM beans ORDER BY createdAt DESC")
     fun getAllBeans(): Flow<List<Bean>>

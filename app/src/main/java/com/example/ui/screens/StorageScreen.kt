@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import com.example.data.database.*
 import com.example.data.engine.IngredientSuggestion
+import com.example.ui.components.*
 import com.example.data.engine.IngredientSuggestionEngine
 import com.example.data.engine.RecipeDraft
 import com.example.data.engine.RecipeIngredientInput
@@ -79,6 +80,32 @@ fun StorageScreen(
     var selectedRecipeForDetail by remember { mutableStateOf<Recipe?>(null) }
     var showRecipeImporterDialog by remember { mutableStateOf(false) }
     var importedRecipeDraft by remember { mutableStateOf<RecipeDraft?>(null) }
+
+    if (state.pendingPinDialogInstrument != null) {
+        val inst = state.pendingPinDialogInstrument!!
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissPinPromptDialog() },
+            title = { Text("¿Agregar a Calculadora?", fontWeight = FontWeight.Bold, color = TextPrincipal) },
+            text = { Text("¿Deseas fijar '${inst.name}' como un acceso rápido en la calculadora del Home?", color = TextSecundario) },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.confirmPinPromptDialog(true) },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentGold)
+                ) {
+                    Text("Sí, agregar", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { viewModel.confirmPinPromptDialog(false) }
+                ) {
+                    Text("Solo en almacén", color = TextPrincipal)
+                }
+            },
+            containerColor = SurfaceCard,
+            shape = RoundedCornerShape(18.dp)
+        )
+    }
 
     Box(
         modifier = modifier
@@ -325,7 +352,14 @@ fun StorageScreen(
                         }
                     } else {
                         items(state.equipmentList) { eq ->
-                            EquipmentItemCard(eq = eq, onDelete = { viewModel.deleteEquipment(eq) })
+                            val isMethodEquipment = eq.type == "BREWER_METHOD" || eq.type == "BREW_METHOD" || eq.type.contains("metodo", ignoreCase = true) || eq.type.contains("método", ignoreCase = true)
+                            val methodPref = state.userMethods.find { it.sourceInstrumentId == eq.id }
+                            EquipmentItemCard(
+                                eq = eq,
+                                isPinned = if (isMethodEquipment) (methodPref?.isPinnedToCalculator ?: false) else null,
+                                onTogglePinned = if (isMethodEquipment) { { viewModel.toggleMethodPinnedForInstrument(eq.id) } } else null,
+                                onDelete = { viewModel.deleteEquipment(eq) }
+                            )
                         }
                     }
                 }
@@ -417,7 +451,17 @@ fun StorageScreen(
                                 recipe = recipe,
                                 onClick = { selectedRecipeForDetail = recipe },
                                 onDelete = { viewModel.deleteRecipe(recipe) },
-                                onFavoriteToggle = { viewModel.toggleRecipeFavorite(recipe) }
+                                onFavoriteToggle = { viewModel.toggleRecipeFavorite(recipe) },
+                                onEdit = {
+                                    importedRecipeDraft = recipe.toRecipeDraft(isClone = false)
+                                    selectedCategory = "Recetas"
+                                    isAddingNewOther = true
+                                },
+                                onClone = {
+                                    importedRecipeDraft = recipe.toRecipeDraft(isClone = true)
+                                    selectedCategory = "Recetas"
+                                    isAddingNewOther = true
+                                }
                             )
                         }
                     }
@@ -503,6 +547,18 @@ fun StorageScreen(
             onFavoriteToggle = {
                 viewModel.toggleRecipeFavorite(recipe)
                 selectedRecipeForDetail = recipe.copy(isFavorite = !recipe.isFavorite)
+            },
+            onEdit = {
+                importedRecipeDraft = recipe.toRecipeDraft(isClone = false)
+                selectedCategory = "Recetas"
+                isAddingNewOther = true
+                selectedRecipeForDetail = null
+            },
+            onClone = {
+                importedRecipeDraft = recipe.toRecipeDraft(isClone = true)
+                selectedCategory = "Recetas"
+                isAddingNewOther = true
+                selectedRecipeForDetail = null
             }
         )
     }
@@ -1225,195 +1281,179 @@ fun AddEditBeanSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color.White,
+        containerColor = MainBackground,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 24.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (beanToEdit != null) "Editar Granos" else "Ingresar Granos",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Black,
-                    color = TextPrincipal
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Cerrar")
-                }
-            }
-
-            Divider(color = BordeSuave.copy(alpha = 0.5f))
-
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Nombre del Grano*") },
-                placeholder = { Text("ej. Geisha Esmeralda") },
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedTextField(
-                value = roaster,
-                onValueChange = { roaster = it },
-                label = { Text("Tostador / Marca*") },
-                placeholder = { Text("ej. Brewther Roasters") },
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = origin,
-                    onValueChange = { origin = it },
-                    label = { Text("Lugar Origen") },
-                    placeholder = { Text("ej. Panamá") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = altitude,
-                    onValueChange = { altitude = it },
-                    label = { Text("Altura (msnm)") },
-                    placeholder = { Text("ej. 1750") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = process,
-                    onValueChange = { process = it },
-                    label = { Text("Proceso (Beneficio)") },
-                    placeholder = { Text("ej. Natural anaeróbico") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1.2f)
-                )
-                OutlinedTextField(
-                    value = stockGrams,
-                    onValueChange = { stockGrams = it },
-                    label = { Text("Gramos Stock") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = roastDate,
-                    onValueChange = { roastDate = it },
-                    label = { Text("Fecha Tostado YYYY-MM-DD") },
-                    placeholder = { Text("ej. 2026-06-10") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = firstUseDate,
-                    onValueChange = { firstUseDate = it },
-                    label = { Text("Fecha Apertura YYYY-MM-DD") },
-                    placeholder = { Text("ej. 2026-06-12") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Text(
-                text = "Estado o Condición:",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrincipal
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                listOf("cerrado", "abierto", "terminado").forEach { st ->
-                    val isSel = status == st
-                    val color = when (st) {
-                        "cerrado" -> AcentoSecundario
-                        "abierto" -> AcentoPrincipal
-                        else -> Advertencia
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSel) color else Color(0x061F3129))
-                            .border(1.dp, if (isSel) Color.Transparent else BordeSuave, RoundedCornerShape(10.dp))
-                            .clickable {
-                                status = st
-                                if (st == "abierto" && firstUseDate.isBlank()) {
-                                    firstUseDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                                }
-                            }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = st.uppercase(),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Black,
-                            color = if (isSel) Color.White else TextSecundario
-                        )
-                    }
-                }
-            }
-
-            OutlinedTextField(
-                value = notes,
-                onValueChange = { notes = it },
-                label = { Text("Perfil sensorial / Descriptores") },
-                placeholder = { Text("ej. Jazmín, té negro, bergamota, cítricos") },
-                maxLines = 2,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Button(
-                onClick = {
-                    if (name.isNotBlank() && roaster.isNotBlank()) {
-                        viewModel.saveBean(
-                            id = beanToEdit?.id,
-                            roaster = roaster,
-                            name = name,
-                            origin = origin,
-                            altitude = altitude,
-                            process = process,
-                            roastDate = roastDate,
-                            firstUseDate = firstUseDate,
-                            notes = notes,
-                            status = status,
-                            stockGrams = stockGrams.toFloatOrNull() ?: 250f
-                        )
-                        onDismiss()
-                    }
-                },
+        FormAtmosphereBackground {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = CafeCalidoOscuro),
-                shape = RoundedCornerShape(16.dp)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(bottom = 24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = if (beanToEdit != null) "Guardar Cambios" else "Ingresar al Almacén",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Black
+                FormHeaderWithBlob(
+                    title = if (beanToEdit != null) "Editar Lote de Café" else "Registrar Nuevo Grano",
+                    subtitle = "Almacén sensorial y trazabilidad del origen",
+                    icon = Icons.Default.Inventory2,
+                    onClose = onDismiss
                 )
+
+                // Sub-Card 1: General Info
+                FormSubCard(
+                    title = "Datos del Tostador y Lote",
+                    titleIcon = Icons.Default.Coffee
+                ) {
+                    StyledOutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = "Nombre del Grano *",
+                        placeholder = "ej. Geisha Esmeralda Special Reserve"
+                    )
+
+                    StyledOutlinedTextField(
+                        value = roaster,
+                        onValueChange = { roaster = it },
+                        label = "Tostador / Marca *",
+                        placeholder = "ej. Brewther Specialty Roasters"
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StyledOutlinedTextField(
+                            value = origin,
+                            onValueChange = { origin = it },
+                            label = "Lugar de Origen",
+                            placeholder = "ej. Boquete, Panamá",
+                            modifier = Modifier.weight(1f)
+                        )
+                        StyledOutlinedTextField(
+                            value = altitude,
+                            onValueChange = { altitude = it },
+                            label = "Altura (msnm)",
+                            placeholder = "ej. 1750",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // Sub-Card 2: Process & Dates
+                FormSubCard(
+                    title = "Proceso, Fechas y Stock",
+                    titleIcon = Icons.Default.DateRange
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StyledOutlinedTextField(
+                            value = process,
+                            onValueChange = { process = it },
+                            label = "Proceso (Beneficio)",
+                            placeholder = "ej. Natural Anaeróbico",
+                            modifier = Modifier.weight(1.2f)
+                        )
+                        StyledOutlinedTextField(
+                            value = stockGrams,
+                            onValueChange = { stockGrams = it },
+                            label = "Stock (Gramos)",
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StyledOutlinedTextField(
+                            value = roastDate,
+                            onValueChange = { roastDate = it },
+                            label = "Fecha Tostado",
+                            placeholder = "YYYY-MM-DD",
+                            modifier = Modifier.weight(1f)
+                        )
+                        StyledOutlinedTextField(
+                            value = firstUseDate,
+                            onValueChange = { firstUseDate = it },
+                            label = "Fecha Apertura",
+                            placeholder = "YYYY-MM-DD",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Text(
+                        text = "ESTADO DE CONSERVACIÓN",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecundario,
+                        letterSpacing = 1.sp
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("cerrado", "abierto", "terminado").forEach { st ->
+                            val isSel = status == st
+                            val chipLabel = when(st) {
+                                "cerrado" -> "🔒 CERRADO"
+                                "abierto" -> "☕ ABIERTO"
+                                else -> "🏁 TERMINADO"
+                            }
+                            StyledCategoryChip(
+                                label = chipLabel,
+                                isSelected = isSel,
+                                onClick = {
+                                    status = st
+                                    if (st == "abierto" && firstUseDate.isBlank()) {
+                                        firstUseDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                // Sub-Card 3: Sensorial profile
+                FormSubCard(
+                    title = "Perfil Sensorial y Descriptores",
+                    titleIcon = Icons.Default.Psychology
+                ) {
+                    StyledOutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = "Descriptores / Perfil de Catación",
+                        placeholder = "ej. Jazmín, té negro, bergamota, acidez cítrica prolongada",
+                        maxLines = 3
+                    )
+                }
+
+                // Actions
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StyledPrimaryButton(
+                        text = if (beanToEdit != null) "Guardar Cambios" else "Archivar Grano en Almacén",
+                        icon = Icons.Default.Check,
+                        onClick = {
+                            if (name.isNotBlank() && roaster.isNotBlank()) {
+                                viewModel.saveBean(
+                                    id = beanToEdit?.id,
+                                    roaster = roaster,
+                                    name = name,
+                                    origin = origin,
+                                    altitude = altitude,
+                                    process = process,
+                                    roastDate = roastDate,
+                                    firstUseDate = firstUseDate,
+                                    notes = notes,
+                                    status = status,
+                                    stockGrams = stockGrams.toFloatOrNull() ?: 250f
+                                )
+                                onDismiss()
+                            }
+                        }
+                    )
+
+                    StyledSecondaryButton(
+                        text = "Cancelar",
+                        onClick = onDismiss
+                    )
+                }
             }
         }
     }
@@ -1450,7 +1490,12 @@ fun GrinderItemCard(grinder: Instrument, onDelete: () -> Unit) {
 }
 
 @Composable
-fun EquipmentItemCard(eq: Instrument, onDelete: () -> Unit) {
+fun EquipmentItemCard(
+    eq: Instrument,
+    isPinned: Boolean? = null,
+    onTogglePinned: (() -> Unit)? = null,
+    onDelete: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth().border(1.dp, BordeSuave, RoundedCornerShape(18.dp)),
         colors = CardDefaults.cardColors(containerColor = SurfaceCard),
@@ -1470,6 +1515,32 @@ fun EquipmentItemCard(eq: Instrument, onDelete: () -> Unit) {
                 if (eq.notes.isNotBlank()) {
                     Text(eq.notes, fontSize = 11.sp, color = TextSecundario)
                 }
+                if (isPinned != null && onTogglePinned != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isPinned) AccentGold.copy(alpha = 0.15f) else SurfaceElevated)
+                            .border(1.dp, if (isPinned) AccentGold else BordeSuave, RoundedCornerShape(8.dp))
+                            .clickable { onTogglePinned() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(
+                                imageVector = if (isPinned) Icons.Default.Star else Icons.Outlined.StarOutline,
+                                contentDescription = null,
+                                tint = if (isPinned) AccentGold else TextSecundario,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = if (isPinned) "En calculadora" else "Solo en almacén",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isPinned) AccentGold else TextSecundario
+                            )
+                        }
+                    }
+                }
             }
             IconButton(onClick = onDelete) {
                 Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar", tint = Advertencia.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
@@ -1478,12 +1549,42 @@ fun EquipmentItemCard(eq: Instrument, onDelete: () -> Unit) {
     }
 }
 
+fun Recipe.toRecipeDraft(isClone: Boolean = false): RecipeDraft {
+    val parsedIngs = IngredientSuggestionEngine.parseIngredientsSummary(ingredientsSummary)
+    val ingInputs = if (parsedIngs.isNotEmpty()) {
+        parsedIngs.map { p -> RecipeIngredientInput(name = p.name, amount = p.amount, unit = p.unit.ifBlank { "G" }) }
+    } else if (ingredientsSummary.isNotBlank()) {
+        listOf(RecipeIngredientInput(name = ingredientsSummary, amount = "", unit = "G"))
+    } else emptyList()
+
+    val stepInputs = if (stepsSummary.isNotBlank()) {
+        stepsSummary.lines().map { line ->
+            val cleanInst = line.replace(Regex("""^\d+[\.\)-]\s*"""), "").trim()
+            RecipeStepInput(instruction = cleanInst)
+        }.filter { it.instruction.isNotBlank() }
+    } else emptyList()
+
+    return RecipeDraft(
+        id = if (isClone) java.util.UUID.randomUUID().toString() else this.id,
+        name = if (isClone) "Copia de ${this.name}" else this.name,
+        recipeKind = this.recipeKind,
+        intention = this.intention,
+        suggestedMethod = this.suggestedMethodId ?: this.legacyMethodName ?: "",
+        ingredients = ingInputs,
+        steps = stepInputs,
+        tags = this.tags,
+        isFavorite = this.isFavorite
+    )
+}
+
 @Composable
 fun RecipeItemCard(
     recipe: Recipe,
     onClick: (() -> Unit)? = null,
     onDelete: () -> Unit,
-    onFavoriteToggle: (() -> Unit)? = null
+    onFavoriteToggle: (() -> Unit)? = null,
+    onEdit: (() -> Unit)? = null,
+    onClone: (() -> Unit)? = null
 ) {
     val (kindLabel, kindColor, kindIcon) = when (recipe.recipeKind) {
         "BLACK_COFFEE" -> Triple("Café Negro", Color(0xFF234E3C), Icons.Default.LocalCafe)
@@ -1560,6 +1661,28 @@ fun RecipeItemCard(
                             contentDescription = "Favorita",
                             tint = if (recipe.isFavorite) Color(0xFFFFB300) else TextSecundario,
                             modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                if (onClone != null) {
+                    IconButton(onClick = onClone) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Clonar",
+                            tint = AcentoPrincipal,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                if (onEdit != null) {
+                    IconButton(onClick = onEdit) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Editar",
+                            tint = CafeCalidoOscuro,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -1647,7 +1770,9 @@ fun SavedRecipeDetailDialog(
     recipe: Recipe,
     onDismiss: () -> Unit,
     onDelete: () -> Unit,
-    onFavoriteToggle: () -> Unit
+    onFavoriteToggle: () -> Unit,
+    onEdit: (() -> Unit)? = null,
+    onClone: (() -> Unit)? = null
 ) {
     val (kindLabel, kindColor, kindIcon) = when (recipe.recipeKind) {
         "BLACK_COFFEE" -> Triple("Café Negro", Color(0xFF234E3C), Icons.Default.LocalCafe)
@@ -1861,18 +1986,38 @@ fun SavedRecipeDetailDialog(
             // Bottom action buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Advertencia)
                 }
-                Button(
-                    onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = CafeCalidoOscuro),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Cerrar", fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.weight(1f))
+                if (onClone != null) {
+                    OutlinedButton(
+                        onClick = onClone,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AcentoPrincipal),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, AcentoPrincipal.copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Clonar", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+                if (onEdit != null) {
+                    Button(
+                        onClick = onEdit,
+                        colors = ButtonDefaults.buttonColors(containerColor = CafeCalidoOscuro),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Editar", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = TextSecundario)
                 }
             }
         }
@@ -2045,267 +2190,260 @@ fun AddingFormSelector(
     val coroutineScope = rememberCoroutineScope()
     val state by viewModel.state.collectAsState()
 
-    when (category) {
-        "Molinos" -> {
-            var brand by remember { mutableStateOf("") }
-            var model by remember { mutableStateOf("") }
-            var clickRange by remember { mutableStateOf("0 - 40 clicks") }
-            var calibracion by remember { mutableStateOf("") }
+    FormAtmosphereBackground {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(formScrollState)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(bottom = 60.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            when (category) {
+                "Molinos" -> {
+                    var brand by remember { mutableStateOf("") }
+                    var model by remember { mutableStateOf("") }
+                    var clickRange by remember { mutableStateOf("0 - 40 clicks") }
+                    var calibracion by remember { mutableStateOf("") }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(formScrollState),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Registrar Molino del Taller", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                    IconButton(onClick = onCompleted, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = TextSecundario)
+                    FormHeaderWithBlob(
+                        title = "Registrar Molino del Taller",
+                        subtitle = "Equipamiento de molienda y rangos de calibración",
+                        icon = Icons.Default.Settings,
+                        onClose = onCompleted
+                    )
+
+                    FormSubCard(
+                        title = "Especificaciones del Molino",
+                        titleIcon = Icons.Default.Tune
+                    ) {
+                        StyledOutlinedTextField(
+                            value = brand,
+                            onValueChange = { brand = it },
+                            label = "Marca (ej. Comandante, Timemore, Fellow)"
+                        )
+                        StyledOutlinedTextField(
+                            value = model,
+                            onValueChange = { model = it },
+                            label = "Modelo * (ej. C40 MK4, Chestnut C3)"
+                        )
+                        StyledOutlinedTextField(
+                            value = clickRange,
+                            onValueChange = { clickRange = it },
+                            label = "Rango de Clicks Operativo",
+                            placeholder = "ej. 12 - 28 clicks"
+                        )
+                        StyledOutlinedTextField(
+                            value = calibracion,
+                            onValueChange = { calibracion = it },
+                            label = "Notas de Calibración",
+                            placeholder = "ej. Punto cero en click 0, molienda uniforme"
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StyledPrimaryButton(
+                            text = "Archivar Molino",
+                            icon = Icons.Default.Check,
+                            onClick = {
+                                if (model.isNotBlank()) {
+                                    viewModel.addGrinder(brand, model, clickRange, calibracion)
+                                    onCompleted()
+                                }
+                            }
+                        )
+                        StyledSecondaryButton(
+                            text = "Cancelar",
+                            onClick = onCompleted
+                        )
                     }
                 }
-                OutlinedTextField(value = brand, onValueChange = { brand = it }, label = { Text("Marca (ej. Comandante)") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = model, onValueChange = { model = it }, label = { Text("Modelo (ej. C40 MK4)") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = clickRange, onValueChange = { clickRange = it }, label = { Text("Rango de clicks operativo") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = calibracion, onValueChange = { calibracion = it }, label = { Text("Notas de calibración") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                
-                Button(
-                    onClick = {
-                        if (model.isNotBlank()) {
-                            viewModel.addGrinder(brand, model, clickRange, calibracion)
-                            onCompleted()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = CafeCalidoOscuro),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) {
-                    Text("Archivar Molino", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-        "Recetas" -> {
-            var name by remember(initialDraft) { mutableStateOf(initialDraft?.name ?: "") }
-            var recipeKind by remember(initialDraft) { mutableStateOf(initialDraft?.recipeKind ?: "BLACK_COFFEE") }
-            var intention by remember(initialDraft) { mutableStateOf(initialDraft?.intention ?: "") }
-            var suggestedMethod by remember(initialDraft) { mutableStateOf(initialDraft?.suggestedMethod ?: "") }
-            var tagsText by remember(initialDraft) { mutableStateOf(initialDraft?.tags ?: "") }
-            var isFavorite by remember(initialDraft) { mutableStateOf(initialDraft?.isFavorite ?: false) }
+                "Recetas" -> {
+                    var name by remember(initialDraft) { mutableStateOf(initialDraft?.name ?: "") }
+                    var recipeKind by remember(initialDraft) { mutableStateOf(initialDraft?.recipeKind ?: "BLACK_COFFEE") }
+                    var intention by remember(initialDraft) { mutableStateOf(initialDraft?.intention ?: "") }
+                    var suggestedMethod by remember(initialDraft) { mutableStateOf(initialDraft?.suggestedMethod ?: "") }
+                    var tagsText by remember(initialDraft) { mutableStateOf(initialDraft?.tags ?: "") }
+                    var isFavorite by remember(initialDraft) { mutableStateOf(initialDraft?.isFavorite ?: false) }
 
-            val ingredientsList = remember(initialDraft) {
-                if (!initialDraft?.ingredients.isNullOrEmpty()) {
-                    mutableStateListOf<RecipeIngredientInput>().apply { addAll(initialDraft!!.ingredients) }
-                } else {
-                    mutableStateListOf(
-                        RecipeIngredientInput(name = "Café de especialidad", amount = "18", unit = "G"),
-                        RecipeIngredientInput(name = "Agua filtrada o Leche", amount = "150", unit = "ML")
-                    )
-                }
-            }
-
-            val stepsList = remember(initialDraft) {
-                if (!initialDraft?.steps.isNullOrEmpty()) {
-                    mutableStateListOf<RecipeStepInput>().apply { addAll(initialDraft!!.steps) }
-                } else {
-                    mutableStateListOf(
-                        RecipeStepInput(instruction = "Añadir la base y combinar los ingredientes"),
-                        RecipeStepInput(instruction = "Servir a temperatura adecuada y disfrutar")
-                    )
-                }
-            }
-
-            // Ingredient Suggestion Index from saved recipes & storage beans
-            val suggestionIndex = remember(state.recipesList, state.beansList) {
-                IngredientSuggestionEngine.buildIndex(state.recipesList, beans = state.beansList)
-            }
-
-            fun addNewIngredientRow() {
-                ingredientsList.add(RecipeIngredientInput(name = "", amount = "", unit = "G"))
-                coroutineScope.launch {
-                    kotlinx.coroutines.delay(80)
-                    formScrollState.animateScrollTo(formScrollState.maxValue)
-                }
-            }
-
-            fun addNewStepRow() {
-                stepsList.add(RecipeStepInput(instruction = ""))
-                coroutineScope.launch {
-                    kotlinx.coroutines.delay(80)
-                    formScrollState.animateScrollTo(formScrollState.maxValue)
-                }
-            }
-
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 540.dp)
-                        .verticalScroll(formScrollState),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (initialDraft != null) {
-                                Icon(Icons.Default.AutoFixHigh, contentDescription = null, tint = AcentoPrincipal, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                            }
-                            Text(
-                                if (initialDraft != null) "Revisar Receta Importada" else "Archivar Nueva Receta de Bebida",
-                                fontSize = 16.sp,
-                                fontFamily = FontFamily.Serif,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrincipal
+                    val ingredientsList = remember(initialDraft) {
+                        if (!initialDraft?.ingredients.isNullOrEmpty()) {
+                            mutableStateListOf<RecipeIngredientInput>().apply { addAll(initialDraft!!.ingredients) }
+                        } else {
+                            mutableStateListOf(
+                                RecipeIngredientInput(name = "Café de especialidad", amount = "18", unit = "G"),
+                                RecipeIngredientInput(name = "Agua filtrada o Leche", amount = "150", unit = "ML")
                             )
                         }
-                        IconButton(onClick = onCompleted, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = TextSecundario)
+                    }
+
+                    val stepsList = remember(initialDraft) {
+                        if (!initialDraft?.steps.isNullOrEmpty()) {
+                            mutableStateListOf<RecipeStepInput>().apply { addAll(initialDraft!!.steps) }
+                        } else {
+                            mutableStateListOf(
+                                RecipeStepInput(instruction = "Añadir la base y combinar los ingredientes"),
+                                RecipeStepInput(instruction = "Servir a temperatura adecuada y disfrutar")
+                            )
                         }
                     }
 
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Nombre de la Receta*") },
-                        placeholder = { Text("ej. Espresso Tonic de Autor, Cappuccino Clásico") },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    val suggestionIndex = remember(state.recipesList, state.beansList) {
+                        IngredientSuggestionEngine.buildIndex(state.recipesList, beans = state.beansList)
+                    }
+
+                    fun addNewIngredientRow() {
+                        ingredientsList.add(RecipeIngredientInput(name = "", amount = "", unit = "G"))
+                        coroutineScope.launch {
+                            delay(80)
+                            formScrollState.animateScrollTo(formScrollState.maxValue)
+                        }
+                    }
+
+                    fun addNewStepRow() {
+                        stepsList.add(RecipeStepInput(instruction = ""))
+                        coroutineScope.launch {
+                            delay(80)
+                            formScrollState.animateScrollTo(formScrollState.maxValue)
+                        }
+                    }
+
+                    val isEditingExisting = initialDraft != null && state.recipesList.any { it.id == initialDraft.id }
+                    val headerTitle = when {
+                        isEditingExisting -> "Editar Receta Guardada"
+                        initialDraft != null && initialDraft.name.startsWith("Copia de ") -> "Clonar y Personalizar Receta"
+                        initialDraft != null -> "Revisar Receta Importada"
+                        else -> "Nueva Receta"
+                    }
+
+                    FormHeaderWithBlob(
+                        title = headerTitle,
+                        subtitle = "Fórmula e ingredientes de bebida de autor",
+                        icon = Icons.Default.LocalDrink,
+                        onClose = onCompleted
                     )
 
-                    Text("Categoría / Tipo de Bebida:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val kinds = listOf(
-                            "BLACK_COFFEE" to "Café Negro",
-                            "MILK_DRINK" to "Leche",
-                            "COLD_DRINK" to "Bebida Fría",
-                            "SIGNATURE" to "Autor",
-                            "DESSERT" to "Postre",
-                            "OTHER" to "Otro"
+                    FormSubCard(
+                        title = "Datos Principales",
+                        titleIcon = Icons.Default.ReceiptLong
+                    ) {
+                        StyledOutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            label = "Nombre de la Receta *",
+                            placeholder = "ej. Espresso Tonic de Autor, Flat White"
                         )
-                        items(kinds) { (code, label) ->
-                            val isSel = recipeKind == code
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSel) CafeCalidoOscuro else SurfaceCard)
-                                    .border(1.dp, if (isSel) Color.Transparent else BordeSuave, RoundedCornerShape(8.dp))
-                                    .clickable { recipeKind = code }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isSel) Color.White else TextSecundario)
+
+                        Text("Categoría / Tipo de Bebida:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecundario)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val kinds = listOf(
+                                "BLACK_COFFEE" to "Café Negro",
+                                "MILK_DRINK" to "Leche",
+                                "COLD_DRINK" to "Bebida Fría",
+                                "SIGNATURE" to "Autor",
+                                "DESSERT" to "Postre",
+                                "OTHER" to "Otro"
+                            )
+                            items(kinds) { (code, label) ->
+                                StyledCategoryChip(
+                                    label = label,
+                                    isSelected = recipeKind == code,
+                                    onClick = { recipeKind = code }
+                                )
                             }
                         }
                     }
 
-                    HorizontalDivider(color = BordeSuave, thickness = 0.8.dp)
+                    FormSubCard(
+                        title = "Ingredientes de la Receta",
+                        titleIcon = Icons.Default.FormatListBulleted
+                    ) {
+                        ingredientsList.forEachIndexed { index, ing ->
+                            var showSuggestions by remember { mutableStateOf(false) }
+                            val suggestions = remember(ing.name, suggestionIndex) {
+                                if (ing.name.length >= 2) {
+                                    IngredientSuggestionEngine.getSuggestions(ing.name, suggestionIndex)
+                                } else emptyList()
+                            }
 
-                    // --- INGREDIENTES SECTION ---
-                    Text("Ingredientes de la Receta:", fontSize = 13.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
-
-                    ingredientsList.forEachIndexed { index, ing ->
-                        var showSuggestions by remember { mutableStateOf(false) }
-                        val suggestions = remember(ing.name, suggestionIndex) {
-                            if (ing.name.length >= 2) {
-                                IngredientSuggestionEngine.getSuggestions(ing.name, suggestionIndex)
-                            } else emptyList()
-                        }
-
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MainBackground),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, BordeSuave, RoundedCornerShape(12.dp))
-                        ) {
                             Column(
-                                modifier = Modifier.padding(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(SurfaceElevated, RoundedCornerShape(12.dp))
+                                    .border(1.dp, BordeSuave, RoundedCornerShape(12.dp))
+                                    .padding(10.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        OutlinedTextField(
-                                            value = ing.name,
-                                            onValueChange = { newName ->
-                                                ingredientsList[index] = ing.copy(name = newName)
-                                                showSuggestions = true
-                                            },
-                                            label = { Text("Ingrediente #${index + 1}") },
-                                            placeholder = { Text("ej. Café extraído, Leche, Hielo") },
-                                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                                            shape = RoundedCornerShape(8.dp),
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        if (ingredientsList.size > 1) {
-                                            IconButton(
-                                                onClick = { ingredientsList.removeAt(index) },
-                                                modifier = Modifier.size(36.dp)
-                                            ) {
-                                                Icon(Icons.Default.Close, contentDescription = "Eliminar", tint = Advertencia)
-                                            }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    StyledOutlinedTextField(
+                                        value = ing.name,
+                                        onValueChange = { newName ->
+                                            ingredientsList[index] = ing.copy(name = newName)
+                                            showSuggestions = true
+                                        },
+                                        label = "Ingrediente #${index + 1}",
+                                        placeholder = "ej. Café extraído, Leche, Hielo",
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (ingredientsList.size > 1) {
+                                        IconButton(
+                                            onClick = { ingredientsList.removeAt(index) },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(Icons.Default.Close, contentDescription = "Eliminar", tint = Advertencia)
                                         }
                                     }
+                                }
 
-                                    // Autocomplete suggestions dropdown menu
-                                    if (showSuggestions && suggestions.isNotEmpty()) {
-                                        Card(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(top = 4.dp),
-                                            colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                                            shape = RoundedCornerShape(8.dp),
-                                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                                        ) {
-                                            Column {
-                                                suggestions.forEach { suggestion ->
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .clickable {
-                                                                ingredientsList[index] = ing.copy(
-                                                                    name = suggestion.name,
-                                                                    unit = suggestion.defaultUnit
-                                                                )
-                                                                showSuggestions = false
-                                                            }
-                                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            Icon(
-                                                                imageVector = if (suggestion.isFromStorageBean) Icons.Default.Inventory2 else Icons.Default.History,
-                                                                contentDescription = null,
-                                                                tint = if (suggestion.isFromStorageBean) AcentoPrincipal else TextSecundario,
-                                                                modifier = Modifier.size(16.dp)
+                                if (showSuggestions && suggestions.isNotEmpty()) {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                                        shape = RoundedCornerShape(8.dp),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                                    ) {
+                                        Column {
+                                            suggestions.forEach { suggestion ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            ingredientsList[index] = ing.copy(
+                                                                name = suggestion.name,
+                                                                unit = suggestion.defaultUnit
                                                             )
-                                                            Spacer(modifier = Modifier.width(8.dp))
-                                                            Text(suggestion.name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrincipal)
+                                                            showSuggestions = false
                                                         }
+                                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(
+                                                            imageVector = if (suggestion.isFromStorageBean) Icons.Default.Inventory2 else Icons.Default.History,
+                                                            contentDescription = null,
+                                                            tint = if (suggestion.isFromStorageBean) AcentoPrincipal else TextSecundario,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text(suggestion.name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrincipal)
+                                                    }
 
-                                                        if (suggestion.isFromStorageBean) {
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .clip(RoundedCornerShape(4.dp))
-                                                                    .background(AcentoPrincipal.copy(alpha = 0.15f))
-                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                            ) {
-                                                                Text("De tu almacén", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
-                                                            }
-                                                        } else {
-                                                            Text("Unid: ${suggestion.defaultUnit}", fontSize = 10.sp, color = TextSecundario)
+                                                    if (suggestion.isFromStorageBean) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .clip(RoundedCornerShape(4.dp))
+                                                                .background(AcentoPrincipal.copy(alpha = 0.15f))
+                                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        ) {
+                                                            Text("De tu almacén", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
                                                         }
+                                                    } else {
+                                                        Text("Unid: ${suggestion.defaultUnit}", fontSize = 10.sp, color = TextSecundario)
                                                     }
                                                 }
                                             }
@@ -2318,29 +2456,14 @@ fun AddingFormSelector(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    val isNonNumericAmount = remember(ing.amount) {
-                                        val trimmed = ing.amount.trim()
-                                        if (trimmed.isBlank()) false
-                                        else {
-                                            val isNumeric = trimmed.toFloatOrNull() != null || Regex("""^\d+/\d+$""").matches(trimmed)
-                                            val isExpression = listOf("al gusto", "gusto", "pizca", "c.s.").any { trimmed.lowercase().contains(it) }
-                                            !isNumeric && !isExpression
-                                        }
-                                    }
-
-                                    OutlinedTextField(
+                                    StyledOutlinedTextField(
                                         value = ing.amount,
                                         onValueChange = { newAmt ->
                                             ingredientsList[index] = ing.copy(amount = newAmt)
                                         },
-                                        label = { Text("Cantidad") },
-                                        placeholder = { Text("ej. 30") },
-                                        isError = isNonNumericAmount,
-                                        supportingText = if (isNonNumericAmount) {
-                                            { Text("⚠️ Sugerido: número (ej. 30, 1/2) o 'al gusto'", fontSize = 10.sp, color = Advertencia) }
-                                        } else null,
+                                        label = "Cantidad",
+                                        placeholder = "ej. 30",
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next),
-                                        shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier.weight(1f)
                                     )
 
@@ -2348,8 +2471,8 @@ fun AddingFormSelector(
                                     Box(modifier = Modifier.weight(1f)) {
                                         OutlinedButton(
                                             onClick = { expandedUnit = true },
-                                            shape = RoundedCornerShape(8.dp),
-                                            modifier = Modifier.fillMaxWidth().height(54.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.fillMaxWidth().height(52.dp),
                                             contentPadding = PaddingValues(horizontal = 10.dp)
                                         ) {
                                             Row(
@@ -2379,46 +2502,34 @@ fun AddingFormSelector(
                                 }
                             }
                         }
+
+                        StyledSecondaryButton(
+                            text = "+ Agregar Ingrediente",
+                            onClick = { addNewIngredientRow() }
+                        )
                     }
 
-                    // Dynamic placement: Button ALWAYS immediately follows last ingredient item
-                    OutlinedButton(
-                        onClick = { addNewIngredientRow() },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    FormSubCard(
+                        title = "Pasos de Preparación",
+                        titleIcon = Icons.Default.Numbers
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Agregar Ingrediente", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    HorizontalDivider(color = BordeSuave, thickness = 0.8.dp)
-
-                    // --- PASOS SECTION ---
-                    Text("Pasos / Instrucciones:", fontSize = 13.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
-
-                    stepsList.forEachIndexed { index, step ->
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MainBackground),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, BordeSuave, RoundedCornerShape(12.dp))
-                        ) {
+                        stepsList.forEachIndexed { index, step ->
                             Row(
-                                modifier = Modifier.padding(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(SurfaceElevated, RoundedCornerShape(12.dp))
+                                    .border(1.dp, BordeSuave, RoundedCornerShape(12.dp))
+                                    .padding(8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OutlinedTextField(
+                                StyledOutlinedTextField(
                                     value = step.instruction,
                                     onValueChange = { newInst ->
                                         stepsList[index] = step.copy(instruction = newInst)
                                     },
-                                    label = { Text("Paso ${index + 1}") },
-                                    placeholder = { Text("ej. Mezclar café con tónica y servir con hielo") },
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                                    shape = RoundedCornerShape(8.dp),
+                                    label = "Paso ${index + 1}",
+                                    placeholder = "ej. Vertir tónica en copa fría con hielo",
                                     modifier = Modifier.weight(1f)
                                 )
                                 if (stepsList.size > 1) {
@@ -2431,281 +2542,316 @@ fun AddingFormSelector(
                                 }
                             }
                         }
-                    }
 
-                    // Dynamic placement: Button ALWAYS immediately follows last step item
-                    OutlinedButton(
-                        onClick = { addNewStepRow() },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Agregar Paso", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    HorizontalDivider(color = BordeSuave, thickness = 0.8.dp)
-
-                    OutlinedTextField(
-                        value = suggestedMethod,
-                        onValueChange = { suggestedMethod = it },
-                        label = { Text("Método Recomendado (opcional)") },
-                        placeholder = { Text("ej. V60, Aeropress, Espresso") },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = intention,
-                        onValueChange = { intention = it },
-                        label = { Text("Notas e Intención Organoléptica") },
-                        placeholder = { Text("ej. Perfil floral y acidez brillante con final dulce.") },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = tagsText,
-                            onValueChange = { tagsText = it },
-                            label = { Text("Etiquetas (separadas por coma)") },
-                            placeholder = { Text("ej. Verano, Dulce, Cítrico") },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
+                        StyledSecondaryButton(
+                            text = "+ Agregar Paso",
+                            onClick = { addNewStepRow() }
                         )
+                    }
+
+                    FormSubCard(
+                        title = "Detalles y Notas Organolépticas",
+                        titleIcon = Icons.Default.Psychology
+                    ) {
+                        StyledOutlinedTextField(
+                            value = suggestedMethod,
+                            onValueChange = { suggestedMethod = it },
+                            label = "Método Recomendado (opcional)",
+                            placeholder = "ej. V60, Espresso, Prensa Francesa"
+                        )
+
+                        StyledOutlinedTextField(
+                            value = intention,
+                            onValueChange = { intention = it },
+                            label = "Notas e Intención Organoléptica",
+                            placeholder = "ej. Perfil floral y acidez brillante con final dulce",
+                            maxLines = 2
+                        )
+
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable { isFavorite = !isFavorite }
-                                .padding(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Checkbox(
-                                checked = isFavorite,
-                                onCheckedChange = { isFavorite = it }
+                            StyledOutlinedTextField(
+                                value = tagsText,
+                                onValueChange = { tagsText = it },
+                                label = "Etiquetas (separadas por coma)",
+                                placeholder = "ej. Verano, Dulce, Cítrico",
+                                modifier = Modifier.weight(1f)
                             )
-                            Text("Favorito", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { isFavorite = !isFavorite }
+                                    .padding(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = isFavorite,
+                                    onCheckedChange = { isFavorite = it }
+                                )
+                                Text("Favorito", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                            }
                         }
                     }
 
-                    // SAVE BUTTON
-                    Button(
-                        onClick = {
-                            if (name.isNotBlank()) {
-                                val ingSummary = ingredientsList
-                                    .filter { it.name.isNotBlank() }
-                                    .joinToString(", ") { ing ->
-                                        val amtStr = ing.amount.trim()
-                                        val unitStr = ing.unit.trim()
-                                        val qtyPart = when {
-                                            amtStr.isNotBlank() && unitStr.isNotBlank() -> "$amtStr $unitStr"
-                                            amtStr.isNotBlank() -> amtStr
-                                            unitStr.isNotBlank() -> unitStr
-                                            else -> ""
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StyledPrimaryButton(
+                            text = if (isEditingExisting) "Guardar" else "Guardar Receta",
+                            icon = Icons.Default.Check,
+                            onClick = {
+                                if (name.isNotBlank()) {
+                                    val ingSummary = ingredientsList
+                                        .filter { it.name.isNotBlank() }
+                                        .joinToString(", ") { ing ->
+                                            val amtStr = ing.amount.trim()
+                                            val unitStr = ing.unit.trim()
+                                            val qtyPart = when {
+                                                amtStr.isNotBlank() && unitStr.isNotBlank() -> "$amtStr $unitStr"
+                                                amtStr.isNotBlank() -> amtStr
+                                                unitStr.isNotBlank() -> unitStr
+                                                else -> ""
+                                            }
+                                            if (qtyPart.isNotBlank()) "${ing.name.trim()} ($qtyPart)" else ing.name.trim()
                                         }
-                                        if (qtyPart.isNotBlank()) "${ing.name.trim()} ($qtyPart)" else ing.name.trim()
-                                    }
-                                val stepSummary = stepsList
-                                    .filter { it.instruction.isNotBlank() }
-                                    .mapIndexed { idx, st -> "${idx + 1}. ${st.instruction}" }
-                                    .joinToString("\n")
+                                    val stepSummary = stepsList
+                                        .filter { it.instruction.isNotBlank() }
+                                        .mapIndexed { idx, st -> "${idx + 1}. ${st.instruction}" }
+                                        .joinToString("\n")
 
-                                viewModel.addRecipe(
-                                    name = name,
-                                    recipeKind = recipeKind,
-                                    ingredientsSummary = ingSummary,
-                                    stepsSummary = stepSummary,
-                                    intention = intention,
-                                    suggestedMethod = suggestedMethod,
-                                    tags = tagsText,
-                                    isFavorite = isFavorite,
-                                    ingredientsList = ingredientsList.filter { it.name.isNotBlank() }
-                                )
+                                    viewModel.addRecipe(
+                                        name = name,
+                                        recipeKind = recipeKind,
+                                        ingredientsSummary = ingSummary,
+                                        stepsSummary = stepSummary,
+                                        intention = intention,
+                                        suggestedMethod = suggestedMethod,
+                                        tags = tagsText,
+                                        isFavorite = isFavorite,
+                                        ingredientsList = ingredientsList.filter { it.name.isNotBlank() },
+                                        recipeId = if (isEditingExisting) initialDraft?.id else null
+                                    )
+                                    onCompleted()
+                                }
+                            }
+                        )
+
+                        StyledSecondaryButton(
+                            text = "Cancelar",
+                            onClick = onCompleted
+                        )
+                    }
+                }
+                "Tazas" -> {
+                    var beanName by remember { mutableStateOf("") }
+                    var method by remember { mutableStateOf("V60") }
+                    var foundNotes by remember { mutableStateOf("") }
+                    var comment by remember { mutableStateOf("") }
+
+                    FormHeaderWithBlob(
+                        title = "Archivar Taza Evaluada",
+                        subtitle = "Evaluación organoléptica de la taza extraída",
+                        icon = Icons.Default.EmojiFoodBeverage,
+                        onClose = onCompleted
+                    )
+
+                    FormSubCard(
+                        title = "Datos de Catación",
+                        titleIcon = Icons.Default.Star
+                    ) {
+                        StyledOutlinedTextField(
+                            value = beanName,
+                            onValueChange = { beanName = it },
+                            label = "Nombre del Café Catado *",
+                            placeholder = "ej. Geisha Esmeralda Lote 2"
+                        )
+                        StyledOutlinedTextField(
+                            value = method,
+                            onValueChange = { method = it },
+                            label = "Método Utilizado",
+                            placeholder = "ej. V60, Chemex"
+                        )
+                        StyledOutlinedTextField(
+                            value = foundNotes,
+                            onValueChange = { foundNotes = it },
+                            label = "Descriptores / Notas Sensoriales",
+                            placeholder = "ej. Jazmín, durazno, miel, acidez málica"
+                        )
+                        StyledOutlinedTextField(
+                            value = comment,
+                            onValueChange = { comment = it },
+                            label = "Comentario Final",
+                            placeholder = "ej. Excelente dulzor, cuerpo medio aterciopelado",
+                            maxLines = 2
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StyledPrimaryButton(
+                            text = "Archivar Taza",
+                            icon = Icons.Default.Check,
+                            onClick = {
+                                if (beanName.isNotBlank()) {
+                                    viewModel.saveCup(
+                                        notesFound = foundNotes,
+                                        notesExpected = "",
+                                        score = 4.5f,
+                                        comment = "Café: $beanName. Método: $method. $comment"
+                                    )
+                                    onCompleted()
+                                }
+                            }
+                        )
+                        StyledSecondaryButton(
+                            text = "Cancelar",
+                            onClick = onCompleted
+                        )
+                    }
+                }
+                "Ciencia" -> {
+                    var method by remember { mutableStateOf("V60") }
+                    var coffeeStr by remember { mutableStateOf("15") }
+                    var waterStr by remember { mutableStateOf("240") }
+                    var tempStr by remember { mutableStateOf("93") }
+                    var grindSize by remember { mutableStateOf("Media") }
+                    var notes by remember { mutableStateOf("") }
+
+                    FormHeaderWithBlob(
+                        title = "Archivar Experimento de Laboratorio",
+                        subtitle = "Parámetros técnicos e hipótesis de extracción",
+                        icon = Icons.Default.Science,
+                        onClose = onCompleted
+                    )
+
+                    FormSubCard(
+                        title = "Parámetros de Extracción",
+                        titleIcon = Icons.Default.Analytics
+                    ) {
+                        StyledOutlinedTextField(
+                            value = method,
+                            onValueChange = { method = it },
+                            label = "Método o Hipótesis",
+                            placeholder = "ej. Extracción a 93°C vs 88°C"
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StyledOutlinedTextField(
+                                value = coffeeStr,
+                                onValueChange = { coffeeStr = it },
+                                label = "Café (g)",
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f)
+                            )
+                            StyledOutlinedTextField(
+                                value = waterStr,
+                                onValueChange = { waterStr = it },
+                                label = "Agua (ml)",
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f)
+                            )
+                            StyledOutlinedTextField(
+                                value = tempStr,
+                                onValueChange = { tempStr = it },
+                                label = "Temp (°C)",
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        StyledOutlinedTextField(
+                            value = grindSize,
+                            onValueChange = { grindSize = it },
+                            label = "Tamaño de Molienda",
+                            placeholder = "ej. Media fina (24 clicks)"
+                        )
+                        StyledOutlinedTextField(
+                            value = notes,
+                            onValueChange = { notes = it },
+                            label = "Notas de Resultados o Hipótesis",
+                            placeholder = "ej. Mayor extracción de azúcares con vertidos lentos",
+                            maxLines = 2
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StyledPrimaryButton(
+                            text = "Archivar Experimento",
+                            icon = Icons.Default.Check,
+                            onClick = {
+                                val c = coffeeStr.toFloatOrNull() ?: 15f
+                                val w = waterStr.toIntOrNull() ?: 240
+                                val t = tempStr.toIntOrNull() ?: 93
+                                val r = if (c > 0) w / c else 16f
+                                viewModel.addExperiment(method, c, w, r, t, grindSize, notes)
                                 onCompleted()
                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = CafeCalidoOscuro),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                        )
+                        StyledSecondaryButton(
+                            text = "Cancelar",
+                            onClick = onCompleted
+                        )
+                    }
+                }
+                else -> { // "Equipos"
+                    var name by remember { mutableStateOf("") }
+                    var type by remember { mutableStateOf("método") }
+                    var notes by remember { mutableStateOf("") }
+
+                    FormHeaderWithBlob(
+                        title = "Registrar Equipo de Extracción",
+                        subtitle = "Herramientas e instrumentos del taller de café",
+                        icon = Icons.Default.Build,
+                        onClose = onCompleted
+                    )
+
+                    FormSubCard(
+                        title = "Información del Equipo",
+                        titleIcon = Icons.Default.HomeRepairService
                     ) {
-                        Text("Guardar Receta", fontWeight = FontWeight.Bold)
-                    }
-                }
+                        StyledOutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            label = "Nombre / Descripción *",
+                            placeholder = "ej. Cafetera V60 Switch 02 Glass"
+                        )
 
-                // Floating Action Button Shortcut (Bottom Right)
-                SmallFloatingActionButton(
-                    onClick = { addNewIngredientRow() },
-                    containerColor = AcentoPrincipal,
-                    contentColor = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = 12.dp, end = 12.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Agregar Ingrediente Rápido")
-                }
-            }
-        }
-        "Tazas" -> {
-            var beanName by remember { mutableStateOf("") }
-            var method by remember { mutableStateOf("V60") }
-            var foundNotes by remember { mutableStateOf("") }
-            var comment by remember { mutableStateOf("") }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(formScrollState),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Archivar Taza Evaluada", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                    IconButton(onClick = onCompleted, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = TextSecundario)
-                    }
-                }
-                OutlinedTextField(value = beanName, onValueChange = { beanName = it }, label = { Text("Nombre del Café Catado*") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = method, onValueChange = { method = it }, label = { Text("Método Utilizado") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = foundNotes, onValueChange = { foundNotes = it }, label = { Text("Descriptores / Notas Sensoriales") }, placeholder = { Text("ej. Jazmín, durazno, miel") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = comment, onValueChange = { comment = it }, label = { Text("Comentario Final") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                
-                Button(
-                    onClick = {
-                        if (beanName.isNotBlank()) {
-                            viewModel.saveCup(
-                                notesFound = foundNotes,
-                                notesExpected = "",
-                                score = 4.5f,
-                                comment = "Café: $beanName. Método: $method. $comment"
-                            )
-                            onCompleted()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = CafeCalidoOscuro),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) {
-                    Text("Archivar Taza", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-        "Ciencia" -> {
-            var method by remember { mutableStateOf("V60") }
-            var coffeeStr by remember { mutableStateOf("15") }
-            var waterStr by remember { mutableStateOf("240") }
-            var tempStr by remember { mutableStateOf("93") }
-            var grindSize by remember { mutableStateOf("Media") }
-            var notes by remember { mutableStateOf("") }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(formScrollState),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Archivar Experimento de Laboratorio", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                    IconButton(onClick = onCompleted, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = TextSecundario)
-                    }
-                }
-                OutlinedTextField(value = method, onValueChange = { method = it }, label = { Text("Método o Hipótesis") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = coffeeStr, onValueChange = { coffeeStr = it }, label = { Text("Café (g)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = waterStr, onValueChange = { waterStr = it }, label = { Text("Agua (ml)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = tempStr, onValueChange = { tempStr = it }, label = { Text("Temp (°C)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f))
-                }
-                OutlinedTextField(value = grindSize, onValueChange = { grindSize = it }, label = { Text("Tamaño de Molienda") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notas de Resultados o Hipótesis") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                
-                Button(
-                    onClick = {
-                        val c = coffeeStr.toFloatOrNull() ?: 15f
-                        val w = waterStr.toIntOrNull() ?: 240
-                        val t = tempStr.toIntOrNull() ?: 93
-                        val r = if (c > 0) w / c else 16f
-                        viewModel.addExperiment(method, c, w, r, t, grindSize, notes)
-                        onCompleted()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = CafeCalidoOscuro),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) {
-                    Text("Archivar Experimento", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-        else -> { // "Equipos"
-            var name by remember { mutableStateOf("") }
-            var type by remember { mutableStateOf("método") }
-            var notes by remember { mutableStateOf("") }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(formScrollState),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Registrar Equipo de Extracción", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                    IconButton(onClick = onCompleted, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = TextSecundario)
-                    }
-                }
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre / Descripción") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                
-                Text("Categoría del Equipo:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("método", "tetera", "báscula", "accesorios").forEach { t ->
-                        val isSel = type == t
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSel) CafeCalidoOscuro else Color(0x111F3129))
-                                .clickable { type = t }
-                                .padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
+                        Text("Categoría del Equipo:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecundario)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(t, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isSel) Color.White else TextSecundario)
+                            listOf("método", "tetera", "báscula", "accesorios").forEach { t ->
+                                StyledCategoryChip(
+                                    label = t.uppercase(),
+                                    isSelected = type == t,
+                                    onClick = { type = t },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
-                    }
-                }
 
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notas o especificaciones técnicas") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
-                
-                Button(
-                    onClick = {
-                        if (name.isNotBlank()) {
-                            viewModel.addEquipment(name, type, notes)
-                            onCompleted()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = CafeCalidoOscuro),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) {
-                    Text("Archivar Equipo", fontWeight = FontWeight.Bold)
+                        StyledOutlinedTextField(
+                            value = notes,
+                            onValueChange = { notes = it },
+                            label = "Notas o Especificaciones Técnicas",
+                            placeholder = "ej. Capacidad 600ml, flujo controlado"
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StyledPrimaryButton(
+                            text = "Archivar Equipo",
+                            icon = Icons.Default.Check,
+                            onClick = {
+                                if (name.isNotBlank()) {
+                                    viewModel.addEquipment(name, type, notes)
+                                    onCompleted()
+                                }
+                            }
+                        )
+                        StyledSecondaryButton(
+                            text = "Cancelar",
+                            onClick = onCompleted
+                        )
+                    }
                 }
             }
         }

@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.database.Technique
 import com.example.ui.theme.*
+import com.example.ui.components.*
 import com.example.ui.viewmodel.BaristaCalcViewModel
 import java.util.Locale
 
@@ -211,7 +212,7 @@ fun BrewSetupView(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.LocalCafe,
+                        imageVector = V60Icon,
                         contentDescription = "Timer",
                         tint = Color.White,
                         modifier = Modifier.size(26.dp)
@@ -329,7 +330,7 @@ fun BrewSetupView(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Coffee,
+                                imageVector = V60Icon,
                                 contentDescription = null,
                                 tint = AcentoPrincipal,
                                 modifier = Modifier.size(24.dp)
@@ -630,12 +631,33 @@ fun CreateTechniqueFormView(
     viewModel: BaristaCalcViewModel,
     onDone: () -> Unit
 ) {
+    val state by viewModel.state.collectAsState()
+
     var name by remember { mutableStateOf("") }
-    var method by remember { mutableStateOf("V60") }
+    
+    // Method Picker state
+    val availableMethods = if (state.userMethods.isNotEmpty()) state.userMethods else listOf(
+        com.example.data.domain.UserMethodItem("1", "11111111-1111-4000-8000-000000000001", "V60", "v60"),
+        com.example.data.domain.UserMethodItem("2", "11111111-1111-4000-8000-000000000002", "AeroPress", "aeropress"),
+        com.example.data.domain.UserMethodItem("3", "11111111-1111-4000-8000-000000000003", "Espresso", "espresso"),
+        com.example.data.domain.UserMethodItem("4", "11111111-1111-4000-8000-000000000004", "Prensa francesa", "french_press")
+    )
+    var selectedMethodId by remember { mutableStateOf(availableMethods.firstOrNull()?.methodId ?: "11111111-1111-4000-8000-000000000001") }
+    var methodDropdownExpanded by remember { mutableStateOf(false) }
+    var showAddMethodDialog by remember { mutableStateOf(false) }
+    var newMethodInputName by remember { mutableStateOf("") }
+
     var coffee by remember { mutableStateOf("15.0") }
     var water by remember { mutableStateOf("240") }
     var temp by remember { mutableStateOf("93") }
-    var grinder by remember { mutableStateOf("Comandante") }
+
+    // Grinder Picker state
+    val grinders = state.grindersList.ifEmpty { state.equipmentList.filter { it.type == "GRINDER" } }
+    var selectedGrinderId by remember { mutableStateOf<String?>(grinders.firstOrNull()?.id) }
+    var selectedGrinderName by remember { mutableStateOf(grinders.firstOrNull()?.name ?: "Molino Manual") }
+    var grinderDropdownExpanded by remember { mutableStateOf(false) }
+    var showAddGrinderDialog by remember { mutableStateOf(false) }
+
     var clicks by remember { mutableStateOf("24") }
     var notes by remember { mutableStateOf("") }
 
@@ -648,268 +670,477 @@ fun CreateTechniqueFormView(
     var stepTime2 by remember { mutableStateOf("45") }
     var stepWater2 by remember { mutableStateOf("90") }
 
-    var stepTitle3 by remember { mutableStateOf("Segundo Vertido Seguro") }
+    var stepTitle3 by remember { mutableStateOf("Segundo Vertido") }
     var stepTime3 by remember { mutableStateOf("40") }
     var stepWater3 by remember { mutableStateOf("100") }
 
     val scrollState = rememberScrollState()
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(scrollState)
-            .padding(bottom = 60.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Card(
+    // Calculated summary preview
+    val parsedCoffee = coffee.replace(',', '.').trim().toFloatOrNull() ?: 15.0f
+    val parsedStepW1 = stepWater1.replace(',', '.').trim().toIntOrNull() ?: 0
+    val parsedStepW2 = stepWater2.replace(',', '.').trim().toIntOrNull() ?: 0
+    val parsedStepW3 = stepWater3.replace(',', '.').trim().toIntOrNull() ?: 0
+    val stepWaterSum = parsedStepW1 + parsedStepW2 + parsedStepW3
+    val parsedWater = if (stepWaterSum > 0) stepWaterSum else (water.replace(',', '.').trim().toIntOrNull() ?: 240)
+    
+    val rawRatio = if (parsedCoffee > 0f) parsedWater / parsedCoffee else 16.0f
+    val calculatedRatio = if (rawRatio % 1.0f == 0.0f) {
+        String.format(Locale.US, "%.0f", rawRatio)
+    } else {
+        String.format(Locale.US, "%.1f", rawRatio)
+    }
+
+    if (showAddGrinderDialog) {
+        var newBrand by remember { mutableStateOf("") }
+        var newModel by remember { mutableStateOf("") }
+        var newClicks by remember { mutableStateOf("20") }
+        var newNotes by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showAddGrinderDialog = false },
+            title = { Text("Agregar Molino Nuevo", fontWeight = FontWeight.Bold, color = TextPrincipal) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StyledOutlinedTextField(
+                        value = newBrand,
+                        onValueChange = { newBrand = it },
+                        label = "Marca (ej. Comandante, Timemore)"
+                    )
+                    StyledOutlinedTextField(
+                        value = newModel,
+                        onValueChange = { newModel = it },
+                        label = "Modelo (ej. C40, Chestnut C3)"
+                    )
+                    StyledOutlinedTextField(
+                        value = newNotes,
+                        onValueChange = { newNotes = it },
+                        label = "Notas de calibración"
+                    )
+                }
+            },
+            confirmButton = {
+                StyledPrimaryButton(
+                    text = "Guardar y Seleccionar",
+                    onClick = {
+                        if (newModel.isNotBlank() || newBrand.isNotBlank()) {
+                            viewModel.addGrinder(newBrand, newModel, newClicks, newNotes) { createdInst ->
+                                selectedGrinderId = createdInst.id
+                                selectedGrinderName = createdInst.name
+                                showAddGrinderDialog = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddGrinderDialog = false }) {
+                    Text("Cancelar", color = TextSecundario)
+                }
+            },
+            containerColor = SurfaceCard,
+            shape = RoundedCornerShape(22.dp)
+        )
+    }
+
+    FormAtmosphereBackground {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, BordeSuave, RoundedCornerShape(22.dp)),
-            colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-            shape = RoundedCornerShape(22.dp)
+                .verticalScroll(scrollState)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Datos Generales de la Técnica", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                
-                OutlinedTextField(
+            // Header with ambient glow blob
+            FormHeaderWithBlob(
+                title = "Preparar Café",
+                subtitle = "Crear nueva técnica de extracción con temporizador guiado",
+                icon = V60Icon,
+                onClose = onDone
+            )
+
+            // Hero Card Level 3: Ratio & Water Summary Preview
+            FormHeroCard(
+                title = "Relación de Extracción Calculada",
+                primaryValue = "1:$calculatedRatio",
+                secondaryValue = "$parsedWater ml Total",
+                details = listOf(
+                    "Dosis" to "${parsedCoffee}g",
+                    "Temp" to "${temp}°C",
+                    "Molino" to selectedGrinderName
+                )
+            )
+
+            // Group 1: General Info Sub-Card Level 2
+            FormSubCard(
+                title = "Datos Generales de la Técnica",
+                titleIcon = Icons.Default.Tune
+            ) {
+                StyledOutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nombre de la técnica") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    label = "Nombre de la técnica",
+                    placeholder = "ej. V60 Receta de Competencia 2026",
+                    singleLine = true
                 )
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = method,
-                        onValueChange = { method = it },
-                        label = { Text("Método") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Method Dropdown Selector
+                    Box(modifier = Modifier.weight(1.4f)) {
+                        val currentMethod = availableMethods.find { it.methodId == selectedMethodId }
+                        StyledOutlinedTextField(
+                            value = currentMethod?.name ?: "V60",
+                            onValueChange = {},
+                            readOnly = true,
+                            singleLine = true,
+                            label = "Método",
+                            trailingIcon = {
+                                IconButton(onClick = { methodDropdownExpanded = !methodDropdownExpanded }) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Seleccionar método")
+                                }
+                            },
+                            modifier = Modifier.clickable { methodDropdownExpanded = !methodDropdownExpanded }
+                        )
+                        DropdownMenu(
+                            expanded = methodDropdownExpanded,
+                            onDismissRequest = { methodDropdownExpanded = false },
+                            modifier = Modifier.heightIn(max = 260.dp)
+                        ) {
+                            availableMethods.forEach { m ->
+                                DropdownMenuItem(
+                                    text = { Text(m.name, fontWeight = FontWeight.Bold) },
+                                    onClick = {
+                                        selectedMethodId = m.methodId
+                                        methodDropdownExpanded = false
+                                    }
+                                )
+                            }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(Icons.Default.Add, contentDescription = null, tint = AcentoPrincipal, modifier = Modifier.size(16.dp))
+                                        Text("Nuevo Método...", fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                                    }
+                                },
+                                onClick = {
+                                    methodDropdownExpanded = false
+                                    showAddMethodDialog = true
+                                }
+                            )
+                        }
+                    }
+
+                    if (showAddMethodDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showAddMethodDialog = false },
+                            title = { Text("Nuevo Método de Extracción", fontWeight = FontWeight.Bold, color = TextPrincipal) },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Ingresa el nombre de tu nuevo extractor o cafetera. Se guardará en tu Almacén y estará disponible en toda la app:", fontSize = 12.sp, color = TextSecundario)
+                                    StyledOutlinedTextField(
+                                        value = newMethodInputName,
+                                        onValueChange = { newMethodInputName = it },
+                                        label = "Nombre del método",
+                                        placeholder = "ej. Kalita Wave, V60 Switch, Tricolate"
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                StyledPrimaryButton(
+                                    text = "Guardar en Almacén",
+                                    onClick = {
+                                        if (newMethodInputName.isNotBlank()) {
+                                            viewModel.addEquipment(newMethodInputName, "BREWER_METHOD", "Método personalizado")
+                                            showAddMethodDialog = false
+                                            newMethodInputName = ""
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showAddMethodDialog = false }) {
+                                    Text("Cancelar", color = TextSecundario)
+                                }
+                            },
+                            containerColor = SurfaceCard,
+                            shape = RoundedCornerShape(22.dp)
+                        )
+                    }
+
+                    StyledOutlinedTextField(
                         value = temp,
                         onValueChange = { temp = it },
-                        label = { Text("Temp °C") },
+                        label = "Temp (°C)",
+                        singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
                 }
+            }
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+            // Group 2: Dose, Water & Grinder Sub-Card Level 2
+            FormSubCard(
+                title = "Dosis, Agua y Molienda",
+                titleIcon = Icons.Default.Scale
+            ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StyledOutlinedTextField(
                         value = coffee,
                         onValueChange = { coffee = it },
-                        label = { Text("Café g") },
+                        label = "Café (g)",
+                        singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
-                    OutlinedTextField(
+                    StyledOutlinedTextField(
                         value = water,
-                        onValueChange = { water = it },
-                        label = { Text("Agua ml") },
+                        onValueChange = {
+                            water = it
+                            val totalW = it.replace(',', '.').trim().toIntOrNull()
+                            if (totalW != null && totalW > 0) {
+                                val w1 = stepWater1.replace(',', '.').trim().toIntOrNull() ?: 50
+                                val remaining = (totalW - w1).coerceAtLeast(0)
+                                val w2 = remaining / 2
+                                val w3 = remaining - w2
+                                stepWater2 = w2.toString()
+                                stepWater3 = w3.toString()
+                            }
+                        },
+                        label = "Agua Total (ml)",
+                        singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = grinder,
-                        onValueChange = { grinder = it },
-                        label = { Text("Molino") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1.5f)
-                    )
-                    OutlinedTextField(
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Grinder Dropdown Selector
+                    Box(modifier = Modifier.weight(1.5f)) {
+                        StyledOutlinedTextField(
+                            value = selectedGrinderName,
+                            onValueChange = {},
+                            readOnly = true,
+                            singleLine = true,
+                            label = "Molino de Café",
+                            trailingIcon = {
+                                IconButton(onClick = { grinderDropdownExpanded = !grinderDropdownExpanded }) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Seleccionar molino")
+                                }
+                            },
+                            modifier = Modifier.clickable { grinderDropdownExpanded = !grinderDropdownExpanded }
+                        )
+                        DropdownMenu(
+                            expanded = grinderDropdownExpanded,
+                            onDismissRequest = { grinderDropdownExpanded = false },
+                            modifier = Modifier.heightIn(max = 260.dp)
+                        ) {
+                            grinders.forEach { g ->
+                                DropdownMenuItem(
+                                    text = { Text(g.name, fontWeight = FontWeight.Medium) },
+                                    onClick = {
+                                        selectedGrinderId = g.id
+                                        selectedGrinderName = g.name
+                                        grinderDropdownExpanded = false
+                                    }
+                                )
+                            }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("+ Agregar molino nuevo", color = AccentGold, fontWeight = FontWeight.Bold) },
+                                onClick = {
+                                    grinderDropdownExpanded = false
+                                    showAddGrinderDialog = true
+                                }
+                            )
+                        }
+                    }
+
+                    StyledOutlinedTextField(
                         value = clicks,
                         onValueChange = { clicks = it },
-                        label = { Text("Clicks") },
+                        label = "Clicks",
+                        singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                OutlinedTextField(
+                StyledOutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Notas o instrucciones de calibración") },
-                    maxLines = 2,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    label = "Notas de Calibración / Molido",
+                    placeholder = "ej. Molienda media fina, verter suavemente",
+                    maxLines = 2
                 )
             }
-        }
 
-        // Steps definitions card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, BordeSuave, RoundedCornerShape(22.dp)),
-            colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-            shape = RoundedCornerShape(22.dp)
-        ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Estructura de Pasos (3 Pasos)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-
-                // Paso 1
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Paso 1 (Bloom Inicial)", fontSize = 11.sp, color = AcentoPrincipal, fontWeight = FontWeight.Bold)
-                    OutlinedTextField(
+            // Group 3: Steps Structure Sub-Card Level 2
+            FormSubCard(
+                title = "Estructura de Pasos Guiados",
+                titleIcon = Icons.Default.Timer
+            ) {
+                // Step 1
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Paso 1 · Preinfusión (Bloom)", fontSize = 12.sp, color = AcentoPrincipal, fontWeight = FontWeight.Bold)
+                    StyledOutlinedTextField(
                         value = stepTitle1,
                         onValueChange = { stepTitle1 = it },
-                        label = { Text("Título") },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        label = "Título del Paso 1",
+                        singleLine = true
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
+                        StyledOutlinedTextField(
                             value = stepTime1,
                             onValueChange = { stepTime1 = it },
-                            label = { Text("Segundos") },
+                            label = "Segundos",
+                            singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         )
-                        OutlinedTextField(
+                        StyledOutlinedTextField(
                             value = stepWater1,
-                            onValueChange = { stepWater1 = it },
-                            label = { Text("Agua ml") },
+                            onValueChange = {
+                                stepWater1 = it
+                                val s1 = it.replace(',', '.').trim().toIntOrNull() ?: 0
+                                val s2 = stepWater2.replace(',', '.').trim().toIntOrNull() ?: 0
+                                val s3 = stepWater3.replace(',', '.').trim().toIntOrNull() ?: 0
+                                if (s1 + s2 + s3 > 0) water = (s1 + s2 + s3).toString()
+                            },
+                            label = "Agua (ml)",
+                            singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         )
                     }
                 }
 
-                // Paso 2
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Paso 2 (Extracción)", fontSize = 11.sp, color = AcentoPrincipal, fontWeight = FontWeight.Bold)
-                    OutlinedTextField(
+                HorizontalDivider(color = BordeSuave)
+
+                // Step 2
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Paso 2 · Extracción Principal", fontSize = 12.sp, color = AcentoPrincipal, fontWeight = FontWeight.Bold)
+                    StyledOutlinedTextField(
                         value = stepTitle2,
                         onValueChange = { stepTitle2 = it },
-                        label = { Text("Título") },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        label = "Título del Paso 2",
+                        singleLine = true
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
+                        StyledOutlinedTextField(
                             value = stepTime2,
                             onValueChange = { stepTime2 = it },
-                            label = { Text("Segundos") },
+                            label = "Segundos",
+                            singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         )
-                        OutlinedTextField(
+                        StyledOutlinedTextField(
                             value = stepWater2,
-                            onValueChange = { stepWater2 = it },
-                            label = { Text("Agua ml") },
+                            onValueChange = {
+                                stepWater2 = it
+                                val s1 = stepWater1.replace(',', '.').trim().toIntOrNull() ?: 0
+                                val s2 = it.replace(',', '.').trim().toIntOrNull() ?: 0
+                                val s3 = stepWater3.replace(',', '.').trim().toIntOrNull() ?: 0
+                                if (s1 + s2 + s3 > 0) water = (s1 + s2 + s3).toString()
+                            },
+                            label = "Agua (ml)",
+                            singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         )
                     }
                 }
 
-                // Paso 3
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Paso 3 (Decantación final)", fontSize = 11.sp, color = AcentoPrincipal, fontWeight = FontWeight.Bold)
-                    OutlinedTextField(
+                HorizontalDivider(color = BordeSuave)
+
+                // Step 3
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Paso 3 · Decantación Final", fontSize = 12.sp, color = AcentoPrincipal, fontWeight = FontWeight.Bold)
+                    StyledOutlinedTextField(
                         value = stepTitle3,
                         onValueChange = { stepTitle3 = it },
-                        label = { Text("Título") },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        label = "Título del Paso 3",
+                        singleLine = true
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
+                        StyledOutlinedTextField(
                             value = stepTime3,
                             onValueChange = { stepTime3 = it },
-                            label = { Text("Segundos") },
+                            label = "Segundos",
+                            singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         )
-                        OutlinedTextField(
+                        StyledOutlinedTextField(
                             value = stepWater3,
-                            onValueChange = { stepWater3 = it },
-                            label = { Text("Agua ml") },
+                            onValueChange = {
+                                stepWater3 = it
+                                val s1 = stepWater1.replace(',', '.').trim().toIntOrNull() ?: 0
+                                val s2 = stepWater2.replace(',', '.').trim().toIntOrNull() ?: 0
+                                val s3 = it.replace(',', '.').trim().toIntOrNull() ?: 0
+                                if (s1 + s2 + s3 > 0) water = (s1 + s2 + s3).toString()
+                            },
+                            label = "Agua (ml)",
+                            singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         )
                     }
                 }
             }
-        }
 
-        // Save & Done Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Button(
-                onClick = {
-                    if (name.isNotBlank()) {
-                        val parsedCoffee = coffee.toFloatOrNull() ?: 15.0f
-                        val parsedWater = water.toIntOrNull() ?: 240
-                        val parsedRatio = parsedWater / parsedCoffee
-                        val parsedTemp = temp.toIntOrNull() ?: 93
-                        val parsedClicks = clicks.toIntOrNull() ?: 24
-                        
-                        val titles = listOf(stepTitle1, stepTitle2, stepTitle3)
-                        val times = listOf(
-                            stepTime1.toIntOrNull() ?: 35,
-                            stepTime2.toIntOrNull() ?: 45,
-                            stepTime3.toIntOrNull() ?: 40
-                        )
-                        val waters = listOf(
-                            stepWater1.toIntOrNull() ?: 50,
-                            stepWater2.toIntOrNull() ?: 90,
-                            stepWater3.toIntOrNull() ?: 100
-                        )
+            // Action Buttons
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                StyledPrimaryButton(
+                    text = "Guardar y Lista para Extraer",
+                    icon = Icons.Default.Check,
+                    onClick = {
+                        if (name.isNotBlank()) {
+                            val pCoffee = coffee.replace(',', '.').trim().toFloatOrNull() ?: 15.0f
+                            val w1 = stepWater1.replace(',', '.').trim().toIntOrNull() ?: 50
+                            val w2 = stepWater2.replace(',', '.').trim().toIntOrNull() ?: 90
+                            val w3 = stepWater3.replace(',', '.').trim().toIntOrNull() ?: 100
+                            val pWater = w1 + w2 + w3
+                            val pRatio = if (pCoffee > 0f) pWater / pCoffee else 16.0f
+                            val pTemp = temp.replace(',', '.').trim().toIntOrNull() ?: 93
+                            val pClicks = clicks.replace(',', '.').trim().toIntOrNull() ?: 24
+                            
+                            val titles = listOf(stepTitle1, stepTitle2, stepTitle3)
+                            val times = listOf(
+                                stepTime1.replace(',', '.').trim().toIntOrNull() ?: 35,
+                                stepTime2.replace(',', '.').trim().toIntOrNull() ?: 45,
+                                stepTime3.replace(',', '.').trim().toIntOrNull() ?: 40
+                            )
+                            val waters = listOf(w1, w2, w3)
 
-                        viewModel.createAndSaveTechnique(
-                            name = name,
-                            method = method,
-                            coffee = parsedCoffee,
-                            water = parsedWater,
-                            ratio = parsedRatio,
-                            temp = parsedTemp,
-                            grinder = grinder,
-                            clicks = parsedClicks,
-                            notes = notes,
-                            stepTitles = titles,
-                            stepTimes = times,
-                            stepWaters = waters
-                        )
-                        onDone()
+                            viewModel.createAndSaveTechnique(
+                                name = name,
+                                methodId = selectedMethodId,
+                                coffee = pCoffee,
+                                water = pWater,
+                                ratio = pRatio,
+                                temp = pTemp,
+                                grinderId = selectedGrinderId,
+                                grinderName = selectedGrinderName,
+                                clicks = pClicks,
+                                notes = notes,
+                                stepTitles = titles,
+                                stepTimes = times,
+                                stepWaters = waters
+                            )
+                            onDone()
+                        }
                     }
-                },
-                modifier = Modifier
-                    .weight(1.5f)
-                    .height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text("Guardar Técnica", fontWeight = FontWeight.Bold)
-            }
+                )
 
-            Button(
-                onClick = onDone,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SurfaceCard, contentColor = TextPrincipal),
-                shape = RoundedCornerShape(16.dp),
-                border = borderStrokeSuave
-            ) {
-                Text("Descartar", fontWeight = FontWeight.SemiBold)
+                StyledSecondaryButton(
+                    text = "Descartar Cambios",
+                    onClick = onDone
+                )
             }
         }
     }

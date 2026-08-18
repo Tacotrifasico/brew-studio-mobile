@@ -17,7 +17,9 @@ class BrewRepository(
     private val cataDao: CataDao,
     private val cupDao: CupDao,
     private val labExperimentDao: LabExperimentDao,
-    private val recipeIngredientDao: RecipeIngredientDao? = null
+    private val recipeIngredientDao: RecipeIngredientDao? = null,
+    private val brewMethodDao: BrewMethodDao? = null,
+    private val userMethodPreferenceDao: UserMethodPreferenceDao? = null
 ) {
     // Flows for data lists
     val allPresets: Flow<List<RatioPreset>> = ratioPresetDao.getAllPresets()
@@ -29,6 +31,43 @@ class BrewRepository(
     val allCatas: Flow<List<Cata>> = cataDao.getAllCatas()
     val allCups: Flow<List<Cup>> = cupDao.getAllCups()
     val allExperiments: Flow<List<LabExperiment>> = labExperimentDao.getAllExperiments()
+    val allBrewMethods: Flow<List<BrewMethod>> = brewMethodDao?.getAllMethods() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    val userMethodPreferences: Flow<List<UserMethodPreference>> = userMethodPreferenceDao?.getAllActivePreferences() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    val pinnedUserMethodPreferences: Flow<List<UserMethodPreference>> = userMethodPreferenceDao?.getPinnedPreferences() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+    suspend fun setMethodPinnedStatus(methodId: String, isPinned: Boolean) {
+        userMethodPreferenceDao?.setPinnedStatus(methodId, isPinned)
+    }
+
+    suspend fun getPreferenceByMethodId(methodId: String): UserMethodPreference? {
+        return userMethodPreferenceDao?.getPreferenceByMethodId(methodId)
+    }
+
+    suspend fun getPreferenceByInstrumentId(instrumentId: String): UserMethodPreference? {
+        return userMethodPreferenceDao?.getPreferenceByInstrumentId(instrumentId)
+    }
+
+    suspend fun insertUserMethodPreference(pref: UserMethodPreference) {
+        userMethodPreferenceDao?.insertPreference(pref)
+    }
+
+    suspend fun getBrewMethodById(id: String): BrewMethod? {
+        return brewMethodDao?.getMethodById(id)
+    }
+
+    suspend fun getOrCreateBrewMethodForInstrument(name: String): BrewMethod {
+        val code = name.lowercase().replace(" ", "_").replace(Regex("[^a-z0-9_]"), "")
+        val existing = brewMethodDao?.getMethodByCode(code)
+        if (existing != null) return existing
+        val newMethod = BrewMethod(
+            code = if (code.isBlank()) "method_${System.currentTimeMillis()}" else code,
+            nameKey = name,
+            category = "POUR_OVER",
+            defaultRatio = 16.0f
+        )
+        brewMethodDao?.insertMethod(newMethod)
+        return newMethod
+    }
 
     // Counts
     val beansCount: Flow<Int> = beanDao.getBeansCount()
@@ -56,7 +95,10 @@ class BrewRepository(
 
     // Instruments
     suspend fun insertInstrument(instrument: Instrument) = instrumentDao.insertInstrument(instrument)
-    suspend fun deleteInstrument(instrument: Instrument) = instrumentDao.deleteInstrument(instrument)
+    suspend fun deleteInstrument(instrument: Instrument) {
+        instrumentDao.deleteInstrument(instrument)
+        userMethodPreferenceDao?.deletePreferenceByInstrumentId(instrument.id)
+    }
 
     // Techniques & Steps
     suspend fun insertTechnique(technique: Technique, steps: List<TechniqueStep>) {

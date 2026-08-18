@@ -66,10 +66,20 @@ fun BaristaCalcCard(
     onPrepare: () -> Unit,
     onLab: () -> Unit,
     onFavorite: () -> Unit,
+    onToggleMethodPinned: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
+    var showManageMethodsDialog by remember { mutableStateOf(false) }
+
+    val isCurrentRatioSaved = remember(state.method, state.coffee, state.ratio, state.savedRatioPresets) {
+        state.savedRatioPresets.any {
+            it.methodName == state.method &&
+            Math.abs(it.coffeeGrams - state.coffee) < 0.2f &&
+            Math.abs(it.ratio - state.ratio) < 0.2f
+        }
+    }
 
     // Sensory Profile Color Themes based on state
     val sensorTheme = remember(state.ratioCategory, isDarkThemeGlobal) {
@@ -136,7 +146,7 @@ fun BaristaCalcCard(
             ) {
                 Column {
                     Text(
-                        text = "Barista Calc",
+                        text = "Barc",
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                         fontSize = 26.sp,
                         fontWeight = FontWeight.Black,
@@ -622,12 +632,25 @@ fun BaristaCalcCard(
                             }
                             .padding(horizontal = 14.dp, vertical = 8.dp)
                     ) {
-                        Text(
-                            text = preset.label,
-                            fontSize = 12.sp,
-                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isActive) sensorTheme.accentColor else TextSecundario
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (preset.isCustom) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = Advertencia,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                            Text(
+                                text = preset.label,
+                                fontSize = 12.sp,
+                                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isActive) sensorTheme.accentColor else TextSecundario
+                            )
+                        }
                     }
                 }
             }
@@ -640,19 +663,41 @@ fun BaristaCalcCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Métodos rápidos:",
-                    fontSize = 12.sp,
-                    color = TextSecundario,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "Métodos rápidos:",
+                        fontSize = 12.sp,
+                        color = TextSecundario,
+                        fontWeight = FontWeight.Medium
+                    )
+                    IconButton(
+                        onClick = { showManageMethodsDialog = true },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Gestionar métodos",
+                            tint = AccentGold,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
                 LazyRow(
                     modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val quickMethods = listOf("V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew")
+                    val quickMethods = if (state.pinnedMethods.isNotEmpty()) {
+                        state.pinnedMethods.map { it.name }
+                    } else if (state.userMethods.isNotEmpty()) {
+                        state.userMethods.map { it.name }
+                    } else {
+                        listOf("V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew")
+                    }
                     items(quickMethods) { method ->
-                        val isSelected = state.method == method
+                        val isSelected = state.method.equals(method, ignoreCase = true)
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
@@ -670,6 +715,19 @@ fun BaristaCalcCard(
                         }
                     }
                 }
+            }
+
+            if (showManageMethodsDialog && onToggleMethodPinned != null) {
+                ManageMethodsDialog(
+                    userMethods = if (state.userMethods.isNotEmpty()) state.userMethods else listOf(
+                        com.example.data.domain.UserMethodItem("1", "11111111-1111-4000-8000-000000000001", "V60", "v60", isPinnedToCalculator = true),
+                        com.example.data.domain.UserMethodItem("2", "11111111-1111-4000-8000-000000000002", "AeroPress", "aeropress", isPinnedToCalculator = true),
+                        com.example.data.domain.UserMethodItem("3", "11111111-1111-4000-8000-000000000003", "Espresso", "espresso", isPinnedToCalculator = true),
+                        com.example.data.domain.UserMethodItem("4", "11111111-1111-4000-8000-000000000004", "Prensa francesa", "french_press", isPinnedToCalculator = true)
+                    ),
+                    onTogglePinned = { methodId -> onToggleMethodPinned(methodId) },
+                    onDismiss = { showManageMethodsDialog = false }
+                )
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -707,7 +765,7 @@ fun BaristaCalcCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Secondary Action: Laboratorio
+                // Secondary Action: Laboratorio (Icon-only)
                 Button(
                     onClick = onLab,
                     modifier = Modifier
@@ -722,18 +780,12 @@ fun BaristaCalcCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Science,
-                        contentDescription = "Lab",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Laboratorio",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
+                        contentDescription = "Laboratorio",
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
-                // Primary Action: Preparar
+                // Primary Action: Preparar (Icon-only)
                 Button(
                     onClick = onPrepare,
                     modifier = Modifier
@@ -748,14 +800,8 @@ fun BaristaCalcCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Brew",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Preparar",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
+                        contentDescription = "Preparar",
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -765,12 +811,16 @@ fun BaristaCalcCard(
                     modifier = Modifier
                         .size(48.dp)
                         .background(SurfaceCard, RoundedCornerShape(16.dp))
-                        .border(1.dp, BordeMedio, RoundedCornerShape(16.dp))
+                        .border(
+                            width = 1.dp,
+                            color = if (isCurrentRatioSaved) Advertencia else BordeMedio,
+                            shape = RoundedCornerShape(16.dp)
+                        )
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Favorite,
-                        contentDescription = "Favoritos",
-                        tint = Advertencia
+                        imageVector = if (isCurrentRatioSaved) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Guardar Ratio en Calculadora",
+                        tint = if (isCurrentRatioSaved) Advertencia else TextSecundario
                     )
                 }
             }
@@ -900,4 +950,56 @@ fun ResponsiveInputTextField(
                 .onFocusChanged { if (!it.isFocused) onFocusLost() }
         )
     }
+}
+
+@Composable
+fun ManageMethodsDialog(
+    userMethods: List<com.example.data.domain.UserMethodItem>,
+    onTogglePinned: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Listo", color = AccentGold, fontWeight = FontWeight.Bold)
+            }
+        },
+        title = {
+            Text("Gestionar Métodos en Calculadora", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Selecciona los métodos que quieres ver en el acceso directo de la calculadora del Home:", fontSize = 12.sp, color = TextSecundario)
+                Spacer(modifier = Modifier.height(4.dp))
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier.heightIn(max = 300.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(userMethods, key = { it.methodId }) { item ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(SurfaceElevated)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(item.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                                Text(item.category, fontSize = 11.sp, color = TextSecundario)
+                            }
+                            Switch(
+                                checked = item.isPinnedToCalculator,
+                                onCheckedChange = { onTogglePinned(item.methodId) }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        containerColor = SurfaceCard,
+        shape = RoundedCornerShape(18.dp)
+    )
 }

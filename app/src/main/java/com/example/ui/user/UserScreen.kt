@@ -528,7 +528,7 @@ fun AboutTeamCard() {
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.PhotoCamera,
+                                imageVector = Icons.Default.Public,
                                 contentDescription = "Instagram",
                                 tint = Color.White,
                                 modifier = Modifier.size(20.dp)

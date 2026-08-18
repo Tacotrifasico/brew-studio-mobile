@@ -44,6 +44,17 @@ data class BrewMethod(
     val schemaVersion: Int = 1
 )
 
+@Entity(tableName = "user_method_preferences")
+data class UserMethodPreference(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val userId: String = "local_user",
+    val methodId: String,          // referencia a BrewMethod.id
+    val isPinnedToCalculator: Boolean = true,  // true = aparece en accesos rápidos de Barista Calc
+    val isActive: Boolean = true,          // true = disponible en general (pickers de Technique, etc.)
+    val sourceInstrumentId: String? = null, // si vino de un Instrument (type=BREW_METHOD / BREWER_METHOD) registrado en Almacén
+    val addedAt: String = currentIso8601()
+)
+
 @Entity(tableName = "beans")
 data class Bean(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),

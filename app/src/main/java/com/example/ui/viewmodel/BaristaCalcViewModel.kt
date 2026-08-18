@@ -144,7 +144,8 @@ data class BaristaPreset(
     val method: String,
     val coffee: Float,
     val ratio: Float,
-    val label: String
+    val label: String,
+    val isCustom: Boolean = false
 )
 
 data class BaristaCalcState(
@@ -163,6 +164,7 @@ data class BaristaCalcState(
     val snackbarMessage: String? = null,
 
     // Storage lists loaded from DB flows
+    val savedRatioPresets: List<RatioPreset> = emptyList(),
     val beansList: List<Bean> = emptyList(),
     val equipmentList: List<Instrument> = emptyList(),
     val grindersList: List<Instrument> = emptyList(),
@@ -171,6 +173,10 @@ data class BaristaCalcState(
     val catasList: List<Cata> = emptyList(),
     val cupsList: List<Cup> = emptyList(),
     val experimentsList: List<LabExperiment> = emptyList(),
+    val userMethods: List<com.example.data.domain.UserMethodItem> = emptyList(),
+    val pinnedMethods: List<com.example.data.domain.UserMethodItem> = emptyList(),
+    val allBrewMethods: List<BrewMethod> = emptyList(),
+    val pendingPinDialogInstrument: Instrument? = null,
 
     // Counts for dashboard
     val beansCount: Int = 0,
@@ -221,6 +227,8 @@ data class BaristaCalcState(
     val labBeanFreshness: String = "en ventana", // "muy fresco", "en ventana", "punto ideal", "bajando", "viejo"
     val labEstTimeSeconds: Int = 180,
     val labNotes: String = "",
+    val labAltitudeMeters: Int = 0, // Metros sobre el nivel del mar (0 a 4000 msnm)
+    val labCityName: String = "Nivel del mar (0m)",
 
     // Diagnostic/hypotheses results (100% offline)
     val labPreviewIntensity: String = "Balanceado",
@@ -247,7 +255,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         cataDao = database.cataDao(),
         cupDao = database.cupDao(),
         labExperimentDao = database.labExperimentDao(),
-        recipeIngredientDao = database.recipeIngredientDao()
+        recipeIngredientDao = database.recipeIngredientDao(),
+        brewMethodDao = database.brewMethodDao(),
+        userMethodPreferenceDao = database.userMethodPreferenceDao()
     )
 
     private val _state = MutableStateFlow(BaristaCalcState())
@@ -263,21 +273,41 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         "Cold brew" to 8.0f
     )
 
-    val presets = listOf(
-        BaristaPreset("1", "V60", 15.0f, 16.0f, "V60 · 15g · 1:16"),
-        BaristaPreset("2", "AeroPress", 18.0f, 13.0f, "AeroPress · 18g · 1:13"),
-        BaristaPreset("3", "Prensa francesa", 20.0f, 15.0f, "Prensa · 20g · 1:15"),
-        BaristaPreset("4", "Chemex", 24.0f, 16.0f, "Chemex · 24g · 1:16"),
-        BaristaPreset("5", "Espresso", 18.0f, 2.0f, "Espresso · 18g · 1:2"),
-        BaristaPreset("6", "Moka", 18.0f, 10.0f, "Moka · 18g · 1:10"),
-        BaristaPreset("7", "Cold brew", 50.0f, 8.0f, "Cold brew · 50g · 1:8")
+    private val defaultPresets = listOf(
+        BaristaPreset("default_1", "V60", 15.0f, 16.0f, "V60 · 15g · 1:16"),
+        BaristaPreset("default_2", "AeroPress", 18.0f, 13.0f, "AeroPress · 18g · 1:13"),
+        BaristaPreset("default_3", "Prensa francesa", 20.0f, 15.0f, "Prensa · 20g · 1:15"),
+        BaristaPreset("default_4", "Chemex", 24.0f, 16.0f, "Chemex · 24g · 1:16"),
+        BaristaPreset("default_5", "Espresso", 18.0f, 2.0f, "Espresso · 18g · 1:2"),
+        BaristaPreset("default_6", "Moka", 18.0f, 10.0f, "Moka · 18g · 1:10"),
+        BaristaPreset("default_7", "Cold brew", 50.0f, 8.0f, "Cold brew · 50g · 1:8")
     )
+
+    val presets: List<BaristaPreset>
+        get() {
+            val custom = _state.value.savedRatioPresets.map { r ->
+                BaristaPreset(
+                    id = r.id,
+                    method = r.methodName,
+                    coffee = r.coffeeGrams,
+                    ratio = r.ratio,
+                    label = r.label,
+                    isCustom = true
+                )
+            }
+            return custom + defaultPresets
+        }
 
     private var timerJob: Job? = null
     private var cataTimerJob: Job? = null
 
     init {
         // Collect DB changes and update states
+        viewModelScope.launch {
+            repository.allPresets.collect { list ->
+                _state.update { it.copy(savedRatioPresets = list) }
+            }
+        }
         viewModelScope.launch {
             repository.allBeans.collect { list ->
                 _state.update { it.copy(beansList = list) }
@@ -317,6 +347,84 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             repository.allExperiments.collect { list ->
                 _state.update { it.copy(experimentsList = list) }
             }
+        }
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                repository.allBrewMethods,
+                repository.userMethodPreferences,
+                repository.allInstruments
+            ) { brewMethods, prefs, instruments ->
+                val userItems = mutableListOf<com.example.data.domain.UserMethodItem>()
+                val existingPrefMethodIds = mutableSetOf<String>()
+                val existingInstrumentIds = mutableSetOf<String?>()
+
+                prefs.forEach { pref ->
+                    val bm = brewMethods.find { it.id == pref.methodId }
+                    if (bm != null) {
+                        val name = when (bm.code.lowercase()) {
+                            "v60" -> "V60"
+                            "aeropress" -> "AeroPress"
+                            "espresso" -> "Espresso"
+                            "french_press" -> "Prensa francesa"
+                            "chemex" -> "Chemex"
+                            "moka" -> "Moka"
+                            "cold_brew" -> "Cold brew"
+                            else -> bm.nameKey.removePrefix("brew_method.").removeSuffix(".name")
+                        }
+                        userItems.add(
+                            com.example.data.domain.UserMethodItem(
+                                preferenceId = pref.id,
+                                methodId = bm.id,
+                                name = name,
+                                code = bm.code,
+                                category = bm.category,
+                                defaultRatio = bm.defaultRatio,
+                                isPinnedToCalculator = pref.isPinnedToCalculator,
+                                isActive = pref.isActive,
+                                sourceInstrumentId = pref.sourceInstrumentId
+                            )
+                        )
+                        existingPrefMethodIds.add(bm.id)
+                        if (pref.sourceInstrumentId != null) {
+                            existingInstrumentIds.add(pref.sourceInstrumentId)
+                        }
+                    }
+                }
+
+                // Also include any equipment saved in Storage (Almacén) of method type
+                instruments.forEach { inst ->
+                    val isMethodType = inst.type.equals("BREWER_METHOD", ignoreCase = true) ||
+                            inst.type.equals("BREW_METHOD", ignoreCase = true) ||
+                            inst.type.contains("metodo", ignoreCase = true) ||
+                            inst.type.contains("método", ignoreCase = true)
+                    if (isMethodType && inst.id !in existingInstrumentIds) {
+                        val code = inst.name.lowercase().replace(" ", "_").replace(Regex("[^a-z0-9_]"), "")
+                        val alreadyPresent = userItems.any { it.name.equals(inst.name, ignoreCase = true) || it.code.equals(code, ignoreCase = true) }
+                        if (!alreadyPresent) {
+                            userItems.add(
+                                com.example.data.domain.UserMethodItem(
+                                    preferenceId = "inst_pref_${inst.id}",
+                                    methodId = inst.id,
+                                    name = inst.name,
+                                    code = if (code.isBlank()) inst.id else code,
+                                    category = "POUR_OVER",
+                                    defaultRatio = 16.0f,
+                                    isPinnedToCalculator = true,
+                                    isActive = true,
+                                    sourceInstrumentId = inst.id
+                                )
+                            )
+                        }
+                    }
+                }
+
+                val pinned = userItems.filter { it.isPinnedToCalculator && it.isActive }
+                _state.update { it.copy(
+                    allBrewMethods = brewMethods,
+                    userMethods = userItems,
+                    pinnedMethods = pinned
+                ) }
+            }.collect {}
         }
 
         // Collect counts
@@ -583,12 +691,33 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun onActionFavorite() {
         viewModelScope.launch {
-            repository.insertRecipe(Recipe(
-                name = "Favorito ${_state.value.method} 1:${_state.value.ratio}",
-                recipeKind = "BLACK_COFFEE",
-                intention = "Agregado desde Barista Calc."
-            ))
-            showToast("Receta guardada en Favoritos del Almacén.")
+            val currentMethod = _state.value.method
+            val currentCoffee = _state.value.coffee
+            val currentRatio = _state.value.ratio
+
+            val existing = _state.value.savedRatioPresets.find {
+                it.methodName == currentMethod &&
+                Math.abs(it.coffeeGrams - currentCoffee) < 0.2f &&
+                Math.abs(it.ratio - currentRatio) < 0.2f
+            }
+
+            if (existing != null) {
+                repository.deletePreset(existing)
+                showToast("Ratio eliminado de los guardados de la Calculadora.")
+            } else {
+                val coffeeStr = if (currentCoffee % 1 == 0f) currentCoffee.toInt().toString() else currentCoffee.toString()
+                val ratioStr = if (currentRatio % 1 == 0f) currentRatio.toInt().toString() else currentRatio.toString()
+                val label = "⭐ $currentMethod · ${coffeeStr}g · 1:${ratioStr}"
+
+                val newPreset = RatioPreset(
+                    methodName = currentMethod,
+                    coffeeGrams = currentCoffee,
+                    ratio = currentRatio,
+                    label = label
+                )
+                repository.insertPreset(newPreset)
+                showToast("Ratio guardado en Presets de la Calculadora.")
+            }
         }
     }
 
@@ -695,22 +824,36 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun createAndSaveTechnique(name: String, method: String, coffee: Float, water: Int, ratio: Float, temp: Int, grinder: String, clicks: Int, notes: String, stepTitles: List<String>, stepTimes: List<Int>, stepWaters: List<Int>) {
+    fun createAndSaveTechnique(
+        name: String,
+        methodId: String,
+        coffee: Float,
+        water: Int,
+        ratio: Float,
+        temp: Int,
+        grinderId: String?,
+        grinderName: String,
+        clicks: Int,
+        notes: String,
+        stepTitles: List<String>,
+        stepTimes: List<Int>,
+        stepWaters: List<Int>
+    ) {
         viewModelScope.launch {
             val sumTime = stepTimes.sum()
             val techId = UUID.randomUUID().toString()
-            val defaultMethodUuid = "11111111-1111-4000-8000-000000000001"
             val tech = Technique(
                 id = techId,
                 name = name,
-                methodId = defaultMethodUuid,
+                methodId = methodId.ifBlank { "11111111-1111-4000-8000-000000000001" },
+                grinderId = grinderId,
                 doseG = coffee,
                 waterMl = water,
                 ratio = ratio,
                 temperatureC = temp,
                 executionMode = "GUIDED",
                 grindValue = clicks.toDouble(),
-                grindDescription = grinder,
+                grindDescription = grinderName.ifBlank { "$clicks Clicks" },
                 notes = notes,
                 totalTimeSeconds = sumTime
             )
@@ -863,7 +1006,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         bean: String? = null,
         freshness: String? = null,
         estTimeSeconds: Int? = null,
-        notes: String? = null
+        notes: String? = null,
+        altitudeMeters: Int? = null,
+        cityName: String? = null
     ) {
         _state.update { current ->
             current.copy(
@@ -876,7 +1021,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 labBean = bean ?: current.labBean,
                 labBeanFreshness = freshness ?: current.labBeanFreshness,
                 labEstTimeSeconds = estTimeSeconds ?: current.labEstTimeSeconds,
-                labNotes = notes ?: current.labNotes
+                labNotes = notes ?: current.labNotes,
+                labAltitudeMeters = altitudeMeters ?: current.labAltitudeMeters,
+                labCityName = cityName ?: current.labCityName
             )
         }
         calculateOfflineLabHypothesis()
@@ -888,6 +1035,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         val temp = s.labTemp
         val clicks = s.labClicks
         val freshness = s.labBeanFreshness
+        val alt = s.labAltitudeMeters
+        val timeSec = s.labEstTimeSeconds
+        val tBoil = (100.0f - (alt.coerceIn(0, 5000) * 0.0034f)).coerceIn(80.0f, 100.0f)
+        val effectiveTemp = minOf(temp.toFloat(), tBoil)
 
         // 1. Intensity calculation
         val intensity = when {
@@ -912,28 +1063,35 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             else -> "Baja, prima la intensidad sobre notas individuales"
         }
 
-        // 4. Extraction estimation
+        // 4. Extraction estimation with altitude & time awareness
         val extraction = when {
-            temp >= 96 && clicks <= 12 -> "Sobre-extracción Extrema (Riesgo amargo/seco)"
-            temp < 86 && ratio <= 12 -> "Sub-extracción (Agria y salada)"
-            temp in 88..94 && clicks in 14..26 -> "Extracción Ideal del Brewther"
-            else -> "Hipótesis aceptable. Verifique molienda."
+            (effectiveTemp >= 96 && clicks <= 12) || (timeSec > 270 && clicks <= 15) -> "Sobre-extracción Extrema (Riesgo amargo/seco)"
+            (effectiveTemp < 86 && ratio <= 12) || (timeSec < 100 && clicks >= 24) -> "Sub-extracción (Agria y salada)"
+            effectiveTemp in 88f..94.5f && clicks in 14..26 && timeSec in 120..240 -> "Extracción Ideal del Barista"
+            else -> "Hipótesis aceptable. Verifique molienda, tiempo y temperatura."
         }
 
         // 5. Risks and diagnostic
         val risks = StringBuilder()
-        if (temp > 95) risks.append("• Alta temperatura puede evaporar notas florales y dejar amargor.\n")
-        if (temp < 87) risks.append("• Temperatura baja acentuará acidez frágil.\n")
+        if (temp > tBoil) {
+            risks.append("• ¡Alerta de Altitud!: A ${alt}m el agua hierve a ${String.format(java.util.Locale.US, "%.1f", tBoil)}°C. La temperatura real del agua no superará el punto de ebullición local.\n")
+        }
+        if (effectiveTemp > 95f) risks.append("• Alta temperatura puede evaporar notas florales y dejar amargor.\n")
+        if (effectiveTemp < 87f) risks.append("• Temperatura baja acentuará acidez frágil.\n")
         if (clicks < 13) risks.append("• Molienda fina obstruirá paso, causando taza turbia y astringencia.\n")
         if (clicks > 28) risks.append("• Molienda gruesa puede dar canalización y taza aguada.\n")
+        if (timeSec > 270) risks.append("• Tiempo prolongado (>4:30 min) puede saturar de amargor y taninos.\n")
+        if (timeSec < 100) risks.append("• Tiempo muy rápido (<1:40 min) puede dejar el café sub-extraído y ácido.\n")
         if (freshness == "muy fresco") risks.append("• Grano joven (turbulencia de CO2). Necesitas preinfusión larga de 50s.\n")
         if (freshness == "viejo") risks.append("• Grano antiguo (perdió gas). Sube temperatura y muele más fino.\n")
         if (risks.isEmpty()) risks.append("Taza perfectamente calibrada. ¡Fórmula óptima!")
 
         val rec = when {
-            ratio <= 3.0f -> "Hypótesis Corto Espresso: Produce alta concentración de aceites."
+            temp > tBoil -> "En tu ciudad el hervor ocurre a ${String.format(java.util.Locale.US, "%.1f", tBoil)}°C. Muele 1 click más fino para compensar la menor energía térmica."
+            alt >= 2000 -> "Altitud elevada (${alt}m): La menor presión facilita acidez brillante; ajusta molienda fina para retener dulzor."
+            ratio <= 3.0f -> "Hipótesis Corto Espresso: Produce alta concentración de aceites."
             freshness == "muy fresco" -> "Aumenta el tiempo del bloom para drenar dióxido de carbono."
-            temp >= 94 -> "Vierte suave para no agitar de más y evitar sabores astringentes."
+            effectiveTemp >= 94f -> "Vierte suave para no agitar de más y evitar sabores astringentes."
             else -> "Mantenimiento ideal del ciclo brew -> taste -> diagnose -> adjust."
         }
 
@@ -1150,10 +1308,76 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun setMethodPinned(methodId: String, isPinned: Boolean) {
+        viewModelScope.launch {
+            repository.setMethodPinnedStatus(methodId, isPinned)
+        }
+    }
+
+    fun toggleMethodPinned(methodId: String) {
+        val currentPref = _state.value.userMethods.find { it.methodId == methodId }
+        val newStatus = !(currentPref?.isPinnedToCalculator ?: true)
+        setMethodPinned(methodId, newStatus)
+    }
+
+    fun toggleMethodPinnedForInstrument(instrumentId: String) {
+        viewModelScope.launch {
+            val pref = repository.getPreferenceByInstrumentId(instrumentId)
+            if (pref != null) {
+                repository.setMethodPinnedStatus(pref.methodId, !pref.isPinnedToCalculator)
+            } else {
+                val inst = _state.value.equipmentList.find { it.id == instrumentId }
+                if (inst != null) {
+                    val bm = repository.getOrCreateBrewMethodForInstrument(inst.name)
+                    val newPref = UserMethodPreference(
+                        methodId = bm.id,
+                        sourceInstrumentId = inst.id,
+                        isPinnedToCalculator = true,
+                        isActive = true
+                    )
+                    repository.insertUserMethodPreference(newPref)
+                }
+            }
+        }
+    }
+
+    fun confirmPinPromptDialog(isPinned: Boolean) {
+        val inst = _state.value.pendingPinDialogInstrument
+        _state.update { it.copy(pendingPinDialogInstrument = null) }
+        if (inst != null) {
+            viewModelScope.launch {
+                val pref = repository.getPreferenceByInstrumentId(inst.id)
+                if (pref != null) {
+                    repository.setMethodPinnedStatus(pref.methodId, isPinned)
+                }
+            }
+        }
+    }
+
+    fun dismissPinPromptDialog() {
+        _state.update { it.copy(pendingPinDialogInstrument = null) }
+    }
+
     fun addEquipment(name: String, type: String, notes: String) {
         viewModelScope.launch {
-            repository.insertInstrument(Instrument(name = name, type = type, notes = notes))
-            showToast("Equipo '$name' registrado.")
+            val isMethodType = type.equals("BREWER_METHOD", ignoreCase = true) ||
+                    type.equals("BREW_METHOD", ignoreCase = true) ||
+                    type.contains("metodo", ignoreCase = true) ||
+                    type.contains("método", ignoreCase = true)
+            val normalizedType = if (isMethodType) "BREWER_METHOD" else type
+            val inst = Instrument(name = name, type = normalizedType, notes = notes)
+            repository.insertInstrument(inst)
+            if (isMethodType) {
+                val bm = repository.getOrCreateBrewMethodForInstrument(name)
+                val pref = UserMethodPreference(
+                    methodId = bm.id,
+                    sourceInstrumentId = inst.id,
+                    isPinnedToCalculator = true,
+                    isActive = true
+                )
+                repository.insertUserMethodPreference(pref)
+            }
+            showToast("Equipo / Método '$name' registrado en el Almacén.")
         }
     }
 
@@ -1164,10 +1388,12 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun addGrinder(brand: String, model: String, clicks: String, calibracion: String) {
+    fun addGrinder(brand: String, model: String, clicks: String, calibracion: String, onCreated: ((Instrument) -> Unit)? = null) {
         viewModelScope.launch {
-            repository.insertInstrument(Instrument(name = "$brand $model".trim(), type = "GRINDER", brand = brand, model = model, notes = calibracion))
+            val inst = Instrument(name = "$brand $model".trim(), type = "GRINDER", brand = brand, model = model, notes = calibracion)
+            repository.insertInstrument(inst)
             showToast("Molino '$model' guardado.")
+            onCreated?.invoke(inst)
         }
     }
 
@@ -1187,10 +1413,13 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         suggestedMethod: String = "",
         tags: String = "",
         isFavorite: Boolean = false,
-        ingredientsList: List<RecipeIngredientInput> = emptyList()
+        ingredientsList: List<RecipeIngredientInput> = emptyList(),
+        recipeId: String? = null
     ) {
         viewModelScope.launch {
+            val isEdit = recipeId != null
             val recipe = Recipe(
+                id = recipeId ?: java.util.UUID.randomUUID().toString(),
                 name = name,
                 recipeKind = recipeKind,
                 ingredientsSummary = ingredientsSummary,
@@ -1201,7 +1430,24 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 isFavorite = isFavorite
             )
             repository.insertRecipe(recipe, ingredientsList)
-            showToast("Receta '$name' archivada en el Almacén.")
+            if (isEdit) {
+                showToast("Receta '$name' actualizada.")
+            } else {
+                showToast("Receta '$name' guardada en el Almacén.")
+            }
+        }
+    }
+
+    fun cloneRecipe(recipe: Recipe) {
+        viewModelScope.launch {
+            val clonedName = "Copia de ${recipe.name}"
+            val cloned = recipe.copy(
+                id = java.util.UUID.randomUUID().toString(),
+                name = clonedName,
+                createdAt = com.example.data.database.currentIso8601()
+            )
+            repository.insertRecipe(cloned)
+            showToast("Receta clonada como '$clonedName'.")
         }
     }
 

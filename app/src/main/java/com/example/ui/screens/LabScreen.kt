@@ -9,6 +9,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -26,7 +28,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,122 +47,109 @@ data class LabFlavorProfile(
     val body: Int,
     val bitterness: Int,
     val finish: Int,
+    val extractionIndex: Float,
     val labels: List<String>,
     val summary: String
 )
 
-// Heuristic engine to simulate coffee attributes dynamically
+// Continuous extraction physics and sensory equalizer calculation
 fun calculateLabProfile(
     coffeeGrams: Float,
     waterMl: Int,
     ratio: Float,
     temperature: Int,
     grindClicks: Int,
-    freshnessState: String
+    freshnessState: String,
+    altitudeMeters: Int = 0,
+    timeSeconds: Int = 180
 ): LabFlavorProfile {
-    var aromaBase = 68
-    var acidityBase = 62
-    var sweetnessBase = 65
-    var bodyBase = 58
-    var bitternessBase = 32
-    var finishBase = 64
-
-    val activeLabels = mutableListOf<String>()
-
-    // Ratio influence
-    if (ratio < 12.0f) {
-        bodyBase += 25
-        bitternessBase += 12
-        acidityBase -= 12
-        sweetnessBase -= 8
-        activeLabels.add("Más cuerpo")
-        activeLabels.add("Alta intensidad")
-    } else if (ratio in 14.0f..16.5f) {
-        sweetnessBase += 15
-        acidityBase += 8
-        bodyBase += 5
-        activeLabels.add("Ventana dorada")
-    } else { // ratio > 16.5
-        bodyBase -= 20
-        acidityBase += 15
-        sweetnessBase -= 5
-        finishBase += 10
-        activeLabels.add("Más ligera")
-        activeLabels.add("Alta claridad")
-    }
-
-    // Temperature influence
-    if (temperature > 94) {
-        bitternessBase += 24
-        bodyBase += 8
-        acidityBase -= 14
-        aromaBase += 8
-        activeLabels.add("Mayor extracción")
-    } else if (temperature in 90..94) {
-        sweetnessBase += 10
-        acidityBase += 10
-    } else { // temperature < 88
-        acidityBase += 18
-        sweetnessBase -= 15
-        bodyBase -= 15
-        bitternessBase -= 18
-        activeLabels.add("Sub-extracción")
-    }
-
-    // Grind clicks influence
-    if (grindClicks < 14) {
-        bodyBase += 18
-        bitternessBase += 18
-        sweetnessBase += 4
-        acidityBase -= 8
-        activeLabels.add("Molienda fina")
-    } else if (grindClicks in 14..26) {
-        sweetnessBase += 10
-        finishBase += 8
+    // Effective ratio (water / coffee) fallback to ratio parameter if safe
+    val effectiveRatio = if (ratio > 0f) {
+        ratio
     } else {
-        bodyBase -= 22
-        acidityBase += 12
-        bitternessBase -= 12
-        activeLabels.add("Molienda gruesa")
+        16.0f
+    }.coerceIn(5f, 30f)
+
+    // Boiling point at altitude: T_boil = 100 - (altitude * 0.0034)
+    val tBoil = (100.0f - (altitudeMeters.coerceIn(0, 5000) * 0.0034f)).coerceIn(80.0f, 100.0f)
+
+    // Effective water temperature cannot exceed boiling point at atmospheric pressure
+    val tempEffective = minOf(temperature.toFloat(), tBoil)
+
+    // Altitude efficiency factor for extraction
+    val altitudeFactor = kotlin.math.sqrt(tBoil / 100.0f)
+
+    // Extraction physics calculation
+    // extRaw = (tiempoActual / tiempoTechnique) × (moliendaTechnique / moliendaActual) × ((temperaturaC - 35) / 55) * altitudeFactor
+    val clicksActual = grindClicks.coerceIn(4, 50).toFloat()
+    val timeFactor = (timeSeconds.coerceIn(60, 360).toFloat() / 180.0f).coerceIn(0.55f, 1.85f)
+
+    val extRaw = timeFactor * (22.0f / clicksActual) * ((tempEffective - 35.0f) / 55.0f) * altitudeFactor
+    val extractionIndex = extRaw.coerceIn(0.45f, 1.65f)
+
+    // Seis puntuaciones enteras, limitadas entre 8 y 96:
+    // aroma = 58 + (temperatura - 88) × 1.4 - max(0, extracción - 1.22) × 16 + max(0, 22 - clicks) × 0.9
+    val aromaRaw = 58.0f + (tempEffective - 88.0f) * 1.4f - maxOf(0.0f, extractionIndex - 1.22f) * 16.0f + maxOf(0.0f, 22.0f - clicksActual) * 0.9f
+
+    // acidez = 54 + (1 - extracción) × 42 + (89 - temperatura) × 0.5 + max(0, ratio - 15.5) × 0.8
+    val acidityRaw = 54.0f + (1.0f - extractionIndex) * 42.0f + (89.0f - tempEffective) * 0.5f + maxOf(0.0f, effectiveRatio - 15.5f) * 0.8f
+
+    // dulzor = 92 - abs(1 - extracción) × 82 - abs(temperatura - 91) × 0.9
+    val sweetnessRaw = 92.0f - kotlin.math.abs(1.0f - extractionIndex) * 82.0f - kotlin.math.abs(tempEffective - 91.0f) * 0.9f
+
+    // cuerpo = 40 + 150 / ratio + max(0, 24 - clicks) × 0.9 + max(0, extracción - 1) × 10
+    val bodyRaw = 40.0f + (150.0f / effectiveRatio) + maxOf(0.0f, 24.0f - clicksActual) * 0.9f + maxOf(0.0f, extractionIndex - 1.0f) * 10.0f
+
+    // amargor = 32 + max(0, extracción - 1) × 44 + max(0, temperatura - 92) × 2 + max(0, 18 - clicks) × 1.1
+    val bitternessRaw = 32.0f + maxOf(0.0f, extractionIndex - 1.0f) * 44.0f + maxOf(0.0f, tempEffective - 92.0f) * 2.0f + maxOf(0.0f, 18.0f - clicksActual) * 1.1f
+
+    val finalAroma = Math.round(aromaRaw).coerceIn(8, 96)
+    val finalAcidity = Math.round(acidityRaw).coerceIn(8, 96)
+    val finalSweetness = Math.round(sweetnessRaw).coerceIn(8, 96)
+    val finalBody = Math.round(bodyRaw).coerceIn(8, 96)
+    val finalBitterness = Math.round(bitternessRaw).coerceIn(8, 96)
+
+    // final = 48 + (dulzor - 50) × 0.25 + (cuerpo - 50) × 0.18 - max(0, amargor - 58) × 0.22
+    val finishRaw = 48.0f + (finalSweetness - 50.0f) * 0.25f + (finalBody - 50.0f) * 0.18f - maxOf(0.0f, finalBitterness - 58.0f) * 0.22f
+    val finalFinish = Math.round(finishRaw).coerceIn(8, 96)
+
+    // Freshness & qualitative badge tags
+    val activeLabels = mutableListOf<String>()
+    when {
+        extractionIndex > 1.20f -> activeLabels.add("Alta Extracción")
+        extractionIndex < 0.85f -> activeLabels.add("Sub-Extracción")
+        else -> activeLabels.add("Ventana Óptima")
     }
 
-    // Freshness influence
+    if (effectiveRatio < 13.0f) activeLabels.add("Cuerpo Denso")
+    else if (effectiveRatio > 17.0f) activeLabels.add("Alta Claridad")
+
+    if (tempEffective < 88.0f) activeLabels.add("Acidez Brillante")
+    else if (tempEffective > 94.0f) activeLabels.add("Tono Tostado")
+
+    if (timeSeconds < 105) activeLabels.add("Paso Rápido")
+    else if (timeSeconds > 270) activeLabels.add("Contacto Prolongado")
+
+    if (temperature > tBoil) {
+        activeLabels.add("Hervor ${String.format(java.util.Locale.US, "%.1f", tBoil)}°C")
+    } else if (altitudeMeters >= 1800) {
+        activeLabels.add("Altitud ${altitudeMeters}m")
+    }
+
     when (freshnessState) {
-        "muy fresco" -> {
-            aromaBase += 14
-            sweetnessBase -= 10
-            activeLabels.add("Bloom largo")
-        }
-        "en ventana", "punto ideal" -> {
-            sweetnessBase += 16
-            aromaBase += 12
-            activeLabels.add("Taza balanceada")
-        }
-        "bajando" -> {
-            aromaBase -= 8
-            sweetnessBase -= 4
-        }
-        "viejo" -> {
-            aromaBase -= 25
-            sweetnessBase -= 22
-            bodyBase -= 6
-            activeLabels.add("Aroma bajo")
-        }
+        "muy fresco" -> activeLabels.add("Bloom Largo")
+        "en ventana", "punto ideal" -> activeLabels.add("Grano en Punto")
+        "viejo" -> activeLabels.add("Desgasificado")
     }
-
-    val finalAroma = aromaBase.coerceIn(8, 98)
-    val finalAcidity = acidityBase.coerceIn(8, 98)
-    val finalSweetness = sweetnessBase.coerceIn(8, 98)
-    val finalBody = bodyBase.coerceIn(8, 98)
-    val finalBitterness = bitternessBase.coerceIn(8, 98)
-    val finalFinish = finishBase.coerceIn(8, 98)
 
     val summary = when {
-        finalBitterness > 65 -> "Infusión robusta e intensa, con riesgo de amargor marcado."
-        finalBody < 35 -> "Taza ligera estilo té y alta claridad, con riesgo de sub-extracción."
-        finalSweetness > 70 && finalBitterness < 45 -> "Taza redonda, dulce y con cuerpo aterciopelado óptimo."
-        finalAcidity > 70 && finalSweetness < 55 -> "Acidez chispeante y nítida."
-        else -> "Infusión equilibrada de cuerpo medio y excelente armonía."
+        temperature > tBoil -> "A ${altitudeMeters} msnm el agua hierve a ${String.format(java.util.Locale.US, "%.1f", tBoil)}°C. La temperatura está acotada al hervor; muele más fino para potenciar extracción."
+        finalBitterness >= 60 -> "Extracción intensa con perfil seco/amargo pronunciado; disminuye temperatura o engruesa la molienda."
+        finalAcidity >= 68 && finalSweetness < 50 -> "Acidez dominante con sub-extracción; aumenta temperatura o afina la molienda."
+        finalSweetness >= 65 && finalBitterness < 45 -> "Taza balanceada con dulzor redondo y acidez perfectamente integrada."
+        finalBody >= 65 -> "Sensación táctil densa y untuosa con postgusto prolongado."
+        finalBody <= 35 -> "Taza ligera y cristalina con marcada separación aromática."
+        else -> "Perfil armónico y equilibrado con desarrollo limpio de sabores."
     }
 
     return LabFlavorProfile(
@@ -168,6 +159,7 @@ fun calculateLabProfile(
         body = finalBody,
         bitterness = finalBitterness,
         finish = finalFinish,
+        extractionIndex = extractionIndex,
         labels = activeLabels.distinct().take(3),
         summary = summary
     )
@@ -187,7 +179,8 @@ fun LabScreen(
     val state by viewModel.state.collectAsState()
     val scrollState = rememberScrollState()
 
-    var selectedCategory by remember { mutableStateOf(LabCategory.Proporcion) }
+    var selectedCategory by remember { mutableStateOf(LabCategory.Extraccion) }
+    var isFahrenheit by remember { mutableStateOf(false) }
     var showInfoSheet by remember { mutableStateOf(false) }
 
     var showRecipeDialog by remember { mutableStateOf(false) }
@@ -195,13 +188,20 @@ fun LabScreen(
     var inputRecipeName by remember { mutableStateOf("") }
     var inputTechniqueName by remember { mutableStateOf("") }
 
+    var isAltitudePanelExpanded by remember { mutableStateOf(false) }
+    var showCustomCityDialog by remember { mutableStateOf(false) }
+    var customCityNameInput by remember { mutableStateOf("") }
+    var customCityAltitudeInput by remember { mutableStateOf("") }
+
     val currentProfile = remember(
         state.labCoffee,
         state.labWater,
         state.labRatio,
         state.labTemp,
         state.labClicks,
-        state.labBeanFreshness
+        state.labBeanFreshness,
+        state.labAltitudeMeters,
+        state.labEstTimeSeconds
     ) {
         calculateLabProfile(
             coffeeGrams = state.labCoffee,
@@ -209,7 +209,9 @@ fun LabScreen(
             ratio = state.labRatio,
             temperature = state.labTemp,
             grindClicks = state.labClicks,
-            freshnessState = state.labBeanFreshness
+            freshnessState = state.labBeanFreshness,
+            altitudeMeters = state.labAltitudeMeters,
+            timeSeconds = state.labEstTimeSeconds
         )
     }
 
@@ -291,6 +293,77 @@ fun LabScreen(
         )
     }
 
+    if (showCustomCityDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomCityDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.LocationCity,
+                        contentDescription = null,
+                        tint = AcentoPrincipal,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text("Tu Ciudad y Altura", fontWeight = FontWeight.Bold, color = TextPrincipal, fontSize = 16.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Ingresa el nombre de tu ciudad y su elevación sobre el nivel del mar para calibrar el punto de ebullición exacto.",
+                        fontSize = 12.5.sp,
+                        color = TextSecundario
+                    )
+                    OutlinedTextField(
+                        value = customCityNameInput,
+                        onValueChange = { customCityNameInput = it },
+                        label = { Text("Nombre de la ciudad") },
+                        placeholder = { Text("Ej: Cusco, Denver, Manizales...") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = customCityAltitudeInput,
+                        onValueChange = { input ->
+                            if (input.all { it.isDigit() } && input.length <= 5) {
+                                customCityAltitudeInput = input
+                            }
+                        },
+                        label = { Text("Altitud (msnm / metros)") },
+                        placeholder = { Text("Ej: 2150") },
+                        trailingIcon = { Text("msnm", fontSize = 12.sp, color = TextSecundario) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val altVal = customCityAltitudeInput.toIntOrNull()?.coerceIn(0, 5000) ?: 0
+                        val nameVal = customCityNameInput.ifBlank { "Mi Ciudad" }
+                        val displayStr = "$nameVal (${altVal}m)"
+                        viewModel.updateLabVariables(altitudeMeters = altVal, cityName = displayStr)
+                        showCustomCityDialog = false
+                        isAltitudePanelExpanded = false
+                        customCityNameInput = ""
+                        customCityAltitudeInput = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal)
+                ) {
+                    Text("Guardar y Calibrar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomCityDialog = false }) {
+                    Text("Cancelar", color = TextSecundario)
+                }
+            }
+        )
+    }
+
     if (showInfoSheet) {
         LabInfoSheet(onDismissRequest = { showInfoSheet = false })
     }
@@ -326,7 +399,21 @@ fun LabScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. SCREEN HEADER
+            // 1. AJUSTE DE ELEVACIÓN / ALTITUD & PUNTO DE EBULLICIÓN (PRIMER ELEMENTO DE LA PANTALLA)
+            com.example.ui.screens.components.LabAltitudeHeaderCard(
+                state = state,
+                viewModel = viewModel,
+                isFahrenheit = isFahrenheit,
+                isExpanded = isAltitudePanelExpanded,
+                onToggleExpand = { isAltitudePanelExpanded = !isAltitudePanelExpanded },
+                onOpenCustomCityDialog = {
+                    customCityNameInput = ""
+                    customCityAltitudeInput = if (state.labAltitudeMeters > 0) state.labAltitudeMeters.toString() else ""
+                    showCustomCityDialog = true
+                }
+            )
+
+            // 2. SCREEN HEADER
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -409,45 +496,6 @@ fun LabScreen(
                 }
             }
 
-            // --- LECTURA ACTIVA DE CATA BANNER (LEVEL 2 CARD) ---
-            if (state.selectedFoundNotes.isNotBlank() || state.cataTexture.isNotBlank()) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(elevation = 2.dp, shape = RoundedCornerShape(18.dp), spotColor = CafeCalidoOscuro.copy(alpha = 0.12f))
-                        .border(1.dp, BordeSuave, RoundedCornerShape(18.dp)),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LocalCafe,
-                                contentDescription = null,
-                                tint = CafeCalidoOscuro,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Lectura activa de Cata",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = CafeCalidoOscuro
-                            )
-                        }
-                        Text(
-                            text = "Notas: ${state.selectedFoundNotes.ifEmpty { "vacío" }}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrincipal
-                        )
-                    }
-                }
-            }
-
             // 2. TARJETA SUPERIOR DE HIPÓTESIS (LEVEL 3 HERO)
             LabHypothesisCard(profile = currentProfile, state = state)
 
@@ -465,6 +513,8 @@ fun LabScreen(
                 category = selectedCategory,
                 state = state,
                 viewModel = viewModel,
+                isFahrenheit = isFahrenheit,
+                onToggleFahrenheit = { isFahrenheit = it },
                 onNavigateToSection = onNavigateToSection
             )
         }
@@ -877,11 +927,238 @@ fun LabVariableGroupTabs(
     }
 }
 
+/**
+ * Custom interactive calibrated slider with:
+ * - Highlighted optimal/recommended zone with rounded pill indicator and micro-ticks
+ * - Non-linear visual track expansion around the recommended range for surgical precision
+ * - Material 3 tactile thumb with inner contrast core
+ * - Built-in Haptic Feedback on value stepping and boundary crossing
+ */
+@Composable
+fun LabCalibratedSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    range: ClosedFloatingPointRange<Float>,
+    recommendedRange: ClosedFloatingPointRange<Float>?,
+    step: Float = 1f,
+    activeColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    var lastValueRef by remember { mutableStateOf(value) }
+    var wasInRecommendedRef by remember { mutableStateOf(recommendedRange?.let { value in it } ?: false) }
+
+    // Helper functions for non-linear compression/expansion
+    fun valueToFraction(v: Float): Float {
+        val clamped = v.coerceIn(range.start, range.endInclusive)
+        if (recommendedRange == null) {
+            return ((clamped - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
+        }
+        val rStart = recommendedRange.start
+        val rEnd = recommendedRange.endInclusive
+        val totalSpan = range.endInclusive - range.start
+        val recSpan = rEnd - rStart
+
+        // Give 50% of the visual track width to the recommended range
+        val recTrackShare = 0.50f
+        val leftTrackShare = 0.25f
+        val rightTrackShare = 0.25f
+
+        return when {
+            clamped <= rStart -> {
+                val subProg = if (rStart > range.start) (clamped - range.start) / (rStart - range.start) else 0f
+                (subProg * leftTrackShare).coerceIn(0f, leftTrackShare)
+            }
+            clamped >= rEnd -> {
+                val subProg = if (range.endInclusive > rEnd) (clamped - rEnd) / (range.endInclusive - rEnd) else 0f
+                (leftTrackShare + recTrackShare + subProg * rightTrackShare).coerceIn(0f, 1f)
+            }
+            else -> {
+                val subProg = if (recSpan > 0f) (clamped - rStart) / recSpan else 0f
+                (leftTrackShare + subProg * recTrackShare).coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    fun fractionToValue(f: Float): Float {
+        val clampedF = f.coerceIn(0f, 1f)
+        if (recommendedRange == null) {
+            val raw = range.start + clampedF * (range.endInclusive - range.start)
+            return if (step > 0f) Math.round(raw / step) * step else raw
+        }
+        val rStart = recommendedRange.start
+        val rEnd = recommendedRange.endInclusive
+        val recTrackShare = 0.50f
+        val leftTrackShare = 0.25f
+        val rightTrackShare = 0.25f
+
+        val raw = when {
+            clampedF <= leftTrackShare -> {
+                val p = clampedF / leftTrackShare
+                range.start + p * (rStart - range.start)
+            }
+            clampedF >= (leftTrackShare + recTrackShare) -> {
+                val p = (clampedF - (leftTrackShare + recTrackShare)) / rightTrackShare
+                rEnd + p * (range.endInclusive - rEnd)
+            }
+            else -> {
+                val p = (clampedF - leftTrackShare) / recTrackShare
+                rStart + p * (rEnd - rStart)
+            }
+        }
+        val stepped = if (step > 0f) Math.round(raw / step) * step else raw
+        return stepped.coerceIn(range.start, range.endInclusive)
+    }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .pointerInput(range, recommendedRange, step) {
+                detectTapGestures { offset ->
+                    val frac = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                    val newValue = fractionToValue(frac)
+                    if (newValue != lastValueRef) {
+                        lastValueRef = newValue
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onValueChange(newValue)
+                    }
+                }
+            }
+            .pointerInput(range, recommendedRange, step) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        val frac = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        val newValue = fractionToValue(frac)
+                        if (newValue != lastValueRef) {
+                            lastValueRef = newValue
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            onValueChange(newValue)
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        val frac = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        val newValue = fractionToValue(frac)
+                        if (newValue != lastValueRef) {
+                            lastValueRef = newValue
+                            val inRec = recommendedRange?.let { newValue in it } ?: false
+                            if (inRec != wasInRecommendedRef) {
+                                wasInRecommendedRef = inRec
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            } else {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            }
+                            onValueChange(newValue)
+                        }
+                    }
+                )
+            },
+        contentAlignment = Alignment.CenterStart
+    ) {
+        val widthPx = constraints.maxWidth.toFloat()
+        val thumbFraction = valueToFraction(value)
+        val thumbX = widthPx * thumbFraction
+
+        // Canvas drawing background track, recommended range highlight, and ticks
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val trackHeight = 8.dp.toPx()
+            val centerY = size.height / 2f
+            val cornerRadius = androidx.compose.ui.geometry.CornerRadius(trackHeight / 2f, trackHeight / 2f)
+
+            // 1. Inactive full base track
+            drawRoundRect(
+                color = if (isDarkThemeGlobal) Color(0xFF2B322E) else Color(0xFFE2DDD2),
+                topLeft = Offset(0f, centerY - trackHeight / 2f),
+                size = androidx.compose.ui.geometry.Size(size.width, trackHeight),
+                cornerRadius = cornerRadius
+            )
+
+            // 2. Highlight recommended optimal range if present
+            if (recommendedRange != null) {
+                val startFrac = valueToFraction(recommendedRange.start)
+                val endFrac = valueToFraction(recommendedRange.endInclusive)
+                val recLeft = size.width * startFrac
+                val recRight = size.width * endFrac
+                val recWidth = (recRight - recLeft).coerceAtLeast(4f)
+
+                // Recommended range glowing pill background
+                val recGlowColor = activeColor.copy(alpha = if (isDarkThemeGlobal) 0.35f else 0.22f)
+                drawRoundRect(
+                    color = recGlowColor,
+                    topLeft = Offset(recLeft, centerY - (trackHeight + 6.dp.toPx()) / 2f),
+                    size = androidx.compose.ui.geometry.Size(recWidth, trackHeight + 6.dp.toPx()),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx(), 8.dp.toPx())
+                )
+
+                // Subdued border on recommended range
+                drawRoundRect(
+                    color = activeColor.copy(alpha = 0.55f),
+                    topLeft = Offset(recLeft, centerY - (trackHeight + 6.dp.toPx()) / 2f),
+                    size = androidx.compose.ui.geometry.Size(recWidth, trackHeight + 6.dp.toPx()),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx(), 8.dp.toPx()),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                )
+
+                // Subtle calibration tick marks inside recommended range
+                val tickSteps = 4
+                for (i in 0..tickSteps) {
+                    val tickFrac = startFrac + (endFrac - startFrac) * (i.toFloat() / tickSteps)
+                    val tickX = size.width * tickFrac
+                    drawLine(
+                        color = activeColor.copy(alpha = 0.60f),
+                        start = Offset(tickX, centerY - 8.dp.toPx()),
+                        end = Offset(tickX, centerY + 8.dp.toPx()),
+                        strokeWidth = 1.5.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+
+            // 3. Active progress track up to thumb position
+            if (thumbX > 0f) {
+                drawRoundRect(
+                    color = activeColor,
+                    topLeft = Offset(0f, centerY - trackHeight / 2f),
+                    size = androidx.compose.ui.geometry.Size(thumbX.coerceIn(0f, size.width), trackHeight),
+                    cornerRadius = cornerRadius
+                )
+            }
+        }
+
+        // 4. Custom Thumb Indicator with shadow and tactile inner ring
+        Box(
+            modifier = Modifier
+                .offset(
+                    x = with(androidx.compose.ui.platform.LocalDensity.current) {
+                        (thumbX - 14.dp.toPx()).coerceIn(0f, widthPx - 28.dp.toPx()).toDp()
+                    }
+                )
+                .size(28.dp)
+                .shadow(elevation = 4.dp, shape = CircleShape, spotColor = activeColor.copy(alpha = 0.5f))
+                .clip(CircleShape)
+                .background(SurfaceCard)
+                .border(3.dp, activeColor, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            // Inner core dot
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(activeColor)
+            )
+        }
+    }
+}
+
 @Composable
 fun LabVariableDock(
     category: LabCategory,
     state: com.example.ui.viewmodel.BaristaCalcState,
     viewModel: BaristaCalcViewModel,
+    isFahrenheit: Boolean,
+    onToggleFahrenheit: (Boolean) -> Unit,
     onNavigateToSection: (String) -> Unit
 ) {
     Card(
@@ -894,65 +1171,296 @@ fun LabVariableDock(
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             when (category) {
                 LabCategory.Proporcion -> {
-                    Text("CONTROL DE PROPORCIÓN", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecundario, letterSpacing = 1.sp)
-                    
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Dosis de Café", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                            Text("${String.format("%.1f", state.labCoffee)} g", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
-                        }
-                        Slider(
-                            value = state.labCoffee,
-                            onValueChange = { viewModel.updateLabVariables(coffee = it) },
-                            valueRange = 10f..35f,
-                            colors = SliderDefaults.colors(thumbColor = AcentoPrincipal, activeTrackColor = AcentoPrincipal)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "RATIO & TIEMPO DE EXTRACCIÓN",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecundario,
+                            letterSpacing = 1.sp
                         )
-                    }
-
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Ratio de Extracción", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                            Text("1:${String.format("%.1f", state.labRatio)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(AcentoSuave)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "EQUILIBRIO SENSORIAL",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AcentoPrincipal
+                            )
                         }
-                        Slider(
+                    }
+                    
+                    // Slider 1: Ratio de Extracción (Proporción)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Ratio de Proporción", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                            Text(
+                                text = "1:${String.format(java.util.Locale.US, "%.1f", state.labRatio)}",
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AcentoPrincipal
+                            )
+                        }
+                        LabCalibratedSlider(
                             value = state.labRatio,
                             onValueChange = { viewModel.updateLabVariables(ratio = it) },
-                            valueRange = 8f..22f,
-                            colors = SliderDefaults.colors(thumbColor = AcentoPrincipal, activeTrackColor = AcentoPrincipal)
+                            range = 8f..22f,
+                            recommendedRange = 15f..17f,
+                            step = 0.5f,
+                            activeColor = AcentoPrincipal
                         )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("1:8 (Intenso / Denso)", fontSize = 10.sp, color = TextSecundario)
+                            Text("1:16 (Áureo)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                            Text("1:22 (Ligero / Claridad)", fontSize = 10.sp, color = TextSecundario)
+                        }
+                    }
+
+                    // Slider 2: Tiempo de Extracción
+                    val timeSec = state.labEstTimeSeconds
+                    val minutes = timeSec / 60
+                    val seconds = timeSec % 60
+                    val formattedTime = String.format(java.util.Locale.US, "%d:%02d min", minutes, seconds)
+
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Tiempo de Extracción", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                            Text(
+                                text = formattedTime,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AcentoPrincipal
+                            )
+                        }
+                        LabCalibratedSlider(
+                            value = timeSec.toFloat(),
+                            onValueChange = { viewModel.updateLabVariables(estTimeSeconds = it.toInt()) },
+                            range = 60f..360f,
+                            recommendedRange = 135f..210f, // 2:15 - 3:30 min
+                            step = 5f,
+                            activeColor = AcentoPrincipal
+                        )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("1:00 min (Rápido)", fontSize = 10.sp, color = TextSecundario)
+                            Text("3:00 min (Estándar)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                            Text("6:00 min (Lento)", fontSize = 10.sp, color = TextSecundario)
+                        }
                     }
                 }
                 LabCategory.Extraccion -> {
-                    Text("CONTROL DE CALOR Y MOLIENDA", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecundario, letterSpacing = 1.sp)
-
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Temperatura del Agua", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                            Text("${state.labTemp} °C", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = CafeCalidoClaro)
-                        }
-                        Slider(
-                            value = state.labTemp.toFloat(),
-                            onValueChange = { viewModel.updateLabVariables(temperature = it.toInt()) },
-                            valueRange = 80f..98f,
-                            colors = SliderDefaults.colors(thumbColor = CafeCalidoClaro, activeTrackColor = CafeCalidoClaro)
+                    // Header with title and °C / °F Unit Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "CONTROL DE CALOR Y MOLIENDA",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecundario,
+                            letterSpacing = 1.sp
                         )
+
+                        // °C / °F Segmented Toggle Control
+                        Row(
+                            modifier = Modifier
+                                .height(28.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MainBackgroundAlt)
+                                .border(1.dp, BordeSuave, RoundedCornerShape(14.dp))
+                                .padding(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // °C button
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (!isFahrenheit) CafeCalidoClaro else Color.Transparent)
+                                    .clickable { onToggleFahrenheit(false) }
+                                    .padding(horizontal = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "°C",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (!isFahrenheit) Color.White else TextSecundario
+                                )
+                            }
+
+                            // °F button
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isFahrenheit) CafeCalidoClaro else Color.Transparent)
+                                    .clickable { onToggleFahrenheit(true) }
+                                    .padding(horizontal = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "°F",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isFahrenheit) Color.White else TextSecundario
+                                )
+                            }
+                        }
                     }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Clicks de Molienda", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                            Text("${state.labClicks} clicks", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = CafeCalidoClaro)
+                    // Slider 1: Temperatura del Agua
+                    val isTempInOptimum = state.labTemp in 90..96
+                    val displayTemp = if (isFahrenheit) {
+                        val fVal = Math.round(state.labTemp * 9f / 5f + 32f)
+                        "$fVal °F"
+                    } else {
+                        "${state.labTemp} °C"
+                    }
+                    val recRangeTempText = if (isFahrenheit) "194°F - 205°F" else "90°C - 96°C"
+
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Temperatura del Agua", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                                if (isTempInOptimum) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(AcentoSuave)
+                                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("ZONA ÓPTIMA", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                                    }
+                                }
+                            }
+                            Text(
+                                text = displayTemp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CafeCalidoClaro
+                            )
                         }
-                        Slider(
+
+                        LabCalibratedSlider(
+                            value = state.labTemp.toFloat(),
+                            onValueChange = { viewModel.updateLabVariables(temperature = it.toInt()) },
+                            range = 80f..98f,
+                            recommendedRange = 90f..96f,
+                            step = 1f,
+                            activeColor = CafeCalidoClaro
+                        )
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(if (isFahrenheit) "176°F" else "80°C", fontSize = 10.sp, color = TextSecundario)
+                            Text("Recomendado: $recRangeTempText", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CafeCalidoOscuro)
+                            Text(if (isFahrenheit) "208°F" else "98°C", fontSize = 10.sp, color = TextSecundario)
+                        }
+                    }
+
+                    // Slider 2: Clicks de Molienda
+                    val isClicksInOptimum = state.labClicks in 18..26
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Clicks de Molienda", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                                if (isClicksInOptimum) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(AcentoSuave)
+                                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("FILTRADOS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                                    }
+                                }
+                            }
+                            Text(
+                                text = "${state.labClicks} clicks",
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CafeCalidoClaro
+                            )
+                        }
+
+                        LabCalibratedSlider(
                             value = state.labClicks.toFloat(),
                             onValueChange = { viewModel.updateLabVariables(clicks = it.toInt()) },
-                            valueRange = 6f..36f,
-                            colors = SliderDefaults.colors(thumbColor = CafeCalidoClaro, activeTrackColor = CafeCalidoClaro)
+                            range = 6f..36f,
+                            recommendedRange = 18f..26f,
+                            step = 1f,
+                            activeColor = CafeCalidoClaro
                         )
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("6 (Espresso/Fino)", fontSize = 10.sp, color = TextSecundario)
+                            Text("Recomendado: 18 - 26", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CafeCalidoOscuro)
+                            Text("36 (Prensa/Grueso)", fontSize = 10.sp, color = TextSecundario)
+                        }
+                    }
+
+                    // Live Educational Recommendation banner (connecting state.labRecommendationText)
+                    if (state.labRecommendationText.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AcentoSuave)
+                                .border(1.dp, AcentoPrincipal.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = AcentoPrincipal,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = state.labRecommendationText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = AcentoPrincipal,
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
                     }
                 }
                 LabCategory.Grano -> {
@@ -1125,7 +1633,7 @@ fun LabInfoSheet(onDismissRequest: () -> Unit) {
                 color = TextPrincipal
             )
 
-            Divider(color = BordeSuave, thickness = 1.dp)
+            HorizontalDivider(color = BordeSuave, thickness = 1.dp)
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("⚖️ Ratio y Proporción", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = CafeCalidoOscuro)

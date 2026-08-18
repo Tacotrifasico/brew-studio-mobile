@@ -58,4 +58,4 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app
 /private/tmp/cupa-domain-verifier
 ```
 
-El verificador también cubre Calculadora → Laboratorio, Receta/Técnica/Inventario → Laboratorio, Laboratorio → Preparación, restauración desde `UserDefaults`, persistencia de referencias y conservación de snapshots después del borrado lógico del inventario.
+El verificador también cubre Calculadora → Laboratorio, Receta/Técnica/Inventario → Laboratorio, Laboratorio → Preparación, restauración desde `UserDefaults`, reapertura y borrado lógico de experimentos, persistencia de referencias y conservación de snapshots después del borrado lógico del inventario.

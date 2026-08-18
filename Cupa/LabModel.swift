@@ -271,6 +271,16 @@ final class LabModel: ObservableObject {
     func selectMethod(_ method: EquipmentRecord?) {
         update { $0.methodId = method?.id; if let method { $0.method = method.name } }
     }
+    func load(experiment: LabExperimentRecord) {
+        update {
+            $0.methodId = experiment.methodId; $0.recipeId = experiment.recipeId; $0.techniqueId = experiment.techniqueId
+            $0.beanId = experiment.beanId; $0.grinderId = experiment.grinderId; $0.recipeName = nil; $0.techniqueName = nil
+            $0.method = experiment.method; $0.coffeeGrams = Float(experiment.coffeeGrams); $0.waterMl = Int(experiment.waterMl)
+            $0.ratio = Float(experiment.ratio); $0.temperatureC = Int(experiment.temperatureC); $0.grindClicks = Int(experiment.grindClicks)
+            $0.freshness = experiment.freshness; $0.timeSeconds = Int(experiment.timeSeconds); $0.notes = experiment.notes
+            $0.altitudeMeters = Int(experiment.altitudeMeters); $0.cityName = experiment.cityName
+        }
+    }
     func reset() { state = LabState(temperatureUnit: state.temperatureUnit) }
 
     private func persist() {

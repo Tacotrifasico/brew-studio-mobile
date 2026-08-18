@@ -278,6 +278,7 @@ struct LabView: View {
     @State private var suggestion: BrewSuggestion?
     @State private var suggestionLoading = false
     @State private var showGeminiConsent = false
+    @State private var errorMessage: String?
     @AppStorage("privacy.geminiConsent.v1") private var geminiConsent = false
 
     var body: some View {
@@ -327,6 +328,9 @@ struct LabView: View {
         } message: {
             Text("Cupa enviará a Google Gemini los parámetros de esta preparación y su perfil sensorial para generar una sugerencia. No se envían tu correo, nombre ni identificador. Puedes retirar este permiso en Configuración.")
         }
+        .alert("No se pudo actualizar el experimento", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("Aceptar") {}
+        } message: { Text(errorMessage ?? "") }
     }
 
     private var baseDataCard: some View {
@@ -503,13 +507,17 @@ struct LabView: View {
                 Text("Experimentos recientes").font(.headline)
                 ForEach(Array(experiments.prefix(3))) { experiment in
                     HStack {
-                        VStack(alignment: .leading) {
-                            Text(experiment.method).font(.subheadline.bold())
-                            Text("1:\(experiment.ratio.formatted(.number.precision(.fractionLength(1)))) · \(experiment.temperatureC)°C · \(experiment.cityName)")
-                                .font(.caption).foregroundStyle(CupaTheme.secondaryText)
-                        }
+                        Button { model.load(experiment: experiment) } label: {
+                            VStack(alignment: .leading) {
+                                Text(experiment.method).font(.subheadline.bold())
+                                Text("1:\(experiment.ratio.formatted(.number.precision(.fractionLength(1)))) · \(experiment.temperatureC)°C · \(experiment.cityName)")
+                                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            }
+                        }.buttonStyle(.plain).accessibilityLabel("Cargar experimento de \(experiment.method)")
                         Spacer()
                         Text(experiment.createdAt, style: .date).font(.caption2)
+                        Button(role: .destructive) { deleteExperiment(experiment) } label: { Image(systemName: "trash") }
+                            .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Eliminar experimento")
                     }
                 }
             }
@@ -581,7 +589,13 @@ struct LabView: View {
     private func saveExperiment() {
         _ = LabExperimentRecord(context: modelContext, state: model.state, profile: model.profile)
         do { try modelContext.save(); saveConfirmation = true }
-        catch { modelContext.rollback() }
+        catch { modelContext.rollback(); errorMessage = error.localizedDescription }
+    }
+
+    private func deleteExperiment(_ experiment: LabExperimentRecord) {
+        experiment.markDeleted()
+        do { try modelContext.save() }
+        catch { modelContext.rollback(); errorMessage = error.localizedDescription }
     }
 
     private var isTemperatureCapped: Bool { Float(model.state.temperatureC) > model.boilingPointC }

@@ -107,10 +107,14 @@ struct LabGoldenVerifier {
         try! context.save()
         precondition(experiment.methodId == method.id && experiment.recipeId == recipe.id && experiment.techniqueId == technique.id)
         precondition(brew.methodId == method.id && brew.recipeNameSnapshot == "V60 floral" && brew.beanNameSnapshot == "Etiopía Guji")
+        let loadedExperiment = LabModel(defaults: defaults); loadedExperiment.reset(); loadedExperiment.load(experiment: experiment)
+        precondition(loadedExperiment.state.methodId == method.id && loadedExperiment.state.techniqueId == technique.id)
+        precondition(loadedExperiment.state.coffeeGrams == 18 && loadedExperiment.state.waterMl == 270 && loadedExperiment.state.timeSeconds == 210)
 
         recipe.markDeleted(); technique.markDeleted(); bean.markDeleted(); grinder.markDeleted(); method.markDeleted(); try! context.save()
         precondition(brew.recipeId == recipe.id && brew.methodId == method.id && brew.beanId == bean.id && brew.grinderId == grinder.id)
         precondition(brew.techniqueNameSnapshot == "Tres vertidos" && brew.methodNameSnapshot == "V60 02" && brew.grinderNameSnapshot == "C40")
+        experiment.markDeleted(); try! context.save(); precondition(experiment.syncStatus == .pendingDelete && experiment.deletedAt != nil)
     }
 
     private static func verifyLocalPersistence() {

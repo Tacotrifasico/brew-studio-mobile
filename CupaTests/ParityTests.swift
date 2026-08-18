@@ -431,9 +431,9 @@ final class SettingsTests: XCTestCase {
     @MainActor func testThemeAndUnitPreferencesRestore() throws {
         let suite = "SettingsTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let first = SettingsModel(defaults: defaults); first.theme = .dark; first.temperatureUnit = .fahrenheit; first.metricUnits = false
+        let first = SettingsModel(defaults: defaults); first.theme = .dark; first.temperatureUnit = .fahrenheit
         let restored = SettingsModel(defaults: defaults)
-        XCTAssertEqual(restored.theme, .dark); XCTAssertEqual(restored.temperatureUnit, .fahrenheit); XCTAssertFalse(restored.metricUnits)
+        XCTAssertEqual(restored.theme, .dark); XCTAssertEqual(restored.temperatureUnit, .fahrenheit)
         XCTAssertEqual(restored.preferredColorScheme, .dark)
     }
 

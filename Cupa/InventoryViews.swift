@@ -9,6 +9,7 @@ struct GrinderInventoryView: View {
     ) private var grinders: FetchedResults<GrinderRecord>
     @State private var adding = false
     @State private var editing: GrinderRecord?
+    @State private var errorMessage: String?
 
     var body: some View {
         List {
@@ -36,15 +37,21 @@ struct GrinderInventoryView: View {
         .scrollContentBackground(.hidden)
         .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar molino") }
         .sheet(isPresented: $adding) {
-            GrinderEditor(record: nil) { draft in _ = draft.insert(in: context); save() }
+            GrinderEditor(record: nil) { draft in _ = draft.insert(in: context); return save() }
         }
         .sheet(item: $editing) { record in
-            GrinderEditor(record: record) { draft in draft.apply(to: record); record.markUpdated(); save() }
+            GrinderEditor(record: record) { draft in draft.apply(to: record); record.markUpdated(); return save() }
         }
+        .alert("No se pudo guardar el molino", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("Aceptar") {}
+        } message: { Text(errorMessage ?? "") }
     }
 
     private func softDelete(_ offsets: IndexSet) { offsets.forEach { grinders[$0].markDeleted() }; save() }
-    private func save() { do { try context.save() } catch { context.rollback() } }
+    @discardableResult private func save() -> Bool {
+        do { try context.save(); return true }
+        catch { context.rollback(); errorMessage = error.localizedDescription; return false }
+    }
 }
 
 struct EquipmentInventoryView: View {
@@ -55,6 +62,7 @@ struct EquipmentInventoryView: View {
     ) private var equipment: FetchedResults<EquipmentRecord>
     @State private var adding = false
     @State private var editing: EquipmentRecord?
+    @State private var errorMessage: String?
 
     var body: some View {
         List {
@@ -83,15 +91,21 @@ struct EquipmentInventoryView: View {
         .scrollContentBackground(.hidden)
         .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar equipo") }
         .sheet(isPresented: $adding) {
-            EquipmentEditor(record: nil) { draft in _ = draft.insert(in: context); save() }
+            EquipmentEditor(record: nil) { draft in _ = draft.insert(in: context); return save() }
         }
         .sheet(item: $editing) { record in
-            EquipmentEditor(record: record) { draft in draft.apply(to: record); record.markUpdated(); save() }
+            EquipmentEditor(record: record) { draft in draft.apply(to: record); record.markUpdated(); return save() }
         }
+        .alert("No se pudo guardar el equipo", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("Aceptar") {}
+        } message: { Text(errorMessage ?? "") }
     }
 
     private func softDelete(_ offsets: IndexSet) { offsets.forEach { equipment[$0].markDeleted() }; save() }
-    private func save() { do { try context.save() } catch { context.rollback() } }
+    @discardableResult private func save() -> Bool {
+        do { try context.save(); return true }
+        catch { context.rollback(); errorMessage = error.localizedDescription; return false }
+    }
 }
 
 private struct GrinderDraft {
@@ -111,13 +125,13 @@ private struct GrinderDraft {
 private struct GrinderEditor: View {
     @Environment(\.dismiss) private var dismiss
     let record: GrinderRecord?
-    let onSave: (GrinderDraft) -> Void
+    let onSave: (GrinderDraft) -> Bool
     @State private var name: String; @State private var brand: String; @State private var model: String
     @State private var type: String; @State private var unit: String
     @State private var minimum: Int; @State private var maximum: Int
     @State private var calibration: String; @State private var notes: String
 
-    init(record: GrinderRecord?, onSave: @escaping (GrinderDraft) -> Void) {
+    init(record: GrinderRecord?, onSave: @escaping (GrinderDraft) -> Bool) {
         self.record = record; self.onSave = onSave
         _name = State(initialValue: record?.name ?? ""); _brand = State(initialValue: record?.brand ?? ""); _model = State(initialValue: record?.model ?? "")
         _type = State(initialValue: record?.grinderType ?? "MANUAL"); _unit = State(initialValue: record?.scaleUnit ?? "CLICKS")
@@ -144,7 +158,7 @@ private struct GrinderEditor: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { onSave(GrinderDraft(name: name, brand: brand, model: model, type: type, unit: unit, minimum: minimum, maximum: max(minimum, maximum), calibration: calibration, notes: notes)); dismiss() }
+                    Button("Guardar") { if onSave(GrinderDraft(name: name, brand: brand, model: model, type: type, unit: unit, minimum: minimum, maximum: max(minimum, maximum), calibration: calibration, notes: notes)) { dismiss() } }
                         .disabled(model.trimmingCharacters(in: .whitespaces).isEmpty && name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
@@ -161,12 +175,12 @@ private struct EquipmentDraft {
 
 private struct EquipmentEditor: View {
     @Environment(\.dismiss) private var dismiss
-    let record: EquipmentRecord?; let onSave: (EquipmentDraft) -> Void
+    let record: EquipmentRecord?; let onSave: (EquipmentDraft) -> Bool
     @State private var name: String; @State private var type: String; @State private var brand: String; @State private var model: String
     @State private var capacity: String; @State private var configuration: String; @State private var notes: String
     @State private var favorite: Bool; @State private var active: Bool
 
-    init(record: EquipmentRecord?, onSave: @escaping (EquipmentDraft) -> Void) {
+    init(record: EquipmentRecord?, onSave: @escaping (EquipmentDraft) -> Bool) {
         self.record = record; self.onSave = onSave
         _name = State(initialValue: record?.name ?? ""); _type = State(initialValue: record?.equipmentType ?? "BREWER_METHOD")
         _brand = State(initialValue: record?.brand ?? ""); _model = State(initialValue: record?.model ?? "")
@@ -193,7 +207,7 @@ private struct EquipmentEditor: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { onSave(EquipmentDraft(name: name, type: type, brand: brand, model: model, capacity: Int(capacity), configuration: configuration, notes: notes, favorite: favorite, active: active)); dismiss() }
+                    Button("Guardar") { if onSave(EquipmentDraft(name: name, type: type, brand: brand, model: model, capacity: Int(capacity), configuration: configuration, notes: notes, favorite: favorite, active: active)) { dismiss() } }
                         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

@@ -54,7 +54,7 @@ El cliente envía sólo entradas numéricas y de método a una Edge Function con
 
 ## D-014 — Tema adaptativo y estadísticas derivadas
 
-Los colores semánticos usan proveedores dinámicos de UIKit para responder a claro/oscuro sin duplicar vistas. La elección sistema/claro/oscuro y las unidades persisten en `UserDefaults`. Brew Hub cuenta directamente entidades Core Data no eliminadas; no guarda contadores ni inserta actividad demostrativa. El perfil es propiedad del UUID autenticado y se conserva offline con estado de sincronización.
+Los colores semánticos usan proveedores dinámicos de UIKit para responder a claro/oscuro sin duplicar vistas. La elección sistema/claro/oscuro y la unidad Celsius/Fahrenheit persisten en `UserDefaults`. Brew Hub cuenta directamente entidades Core Data no eliminadas; no guarda contadores ni inserta actividad demostrativa. El perfil es propiedad del UUID autenticado y se conserva offline con estado de sincronización.
 
 ## D-015 — Publicaciones por snapshot y moderación en profundidad
 
@@ -91,3 +91,7 @@ Los modos `GUIDED` y `AUTOMATED` terminan al alcanzar la suma exacta de sus paso
 ## D-023 — Frescura del café derivada, no persistida
 
 El estado de frescura se calcula al mostrar o editar el café a partir de las fechas persistidas de tueste y apertura; no se guarda una etiqueta que pueda quedar obsoleta. Se preservan los cortes, interpolación continua, textos y alerta de bolsa abierta de Android. La diferencia de días replica su normalización a medianoche y truncamiento de milisegundos, incluso alrededor de cambios de horario local.
+
+## D-024 — Configuración sin controles aparentes
+
+Se elimina el interruptor de unidades métricas porque sólo persistía un booleano y no alteraba ninguna medida; Android usa gramos y mililitros sin modo imperial. Celsius/Fahrenheit permanece porque sí convierte la presentación del Laboratorio. Los formularios de café, molino y equipo conservan el editor abierto y muestran el error real cuando Core Data no puede guardar, en lugar de descartarlo silenciosamente.

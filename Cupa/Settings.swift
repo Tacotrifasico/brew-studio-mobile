@@ -6,14 +6,12 @@ enum ThemePreference: String, CaseIterable, Identifiable { case system, light, d
 final class SettingsModel: ObservableObject {
     @Published var theme: ThemePreference { didSet { defaults.set(theme.rawValue, forKey: "settings.theme") } }
     @Published var temperatureUnit: TemperatureUnit { didSet { defaults.set(temperatureUnit.rawValue, forKey: "settings.temperature") } }
-    @Published var metricUnits: Bool { didSet { defaults.set(metricUnits, forKey: "settings.metric") } }
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         theme = ThemePreference(rawValue: defaults.string(forKey: "settings.theme") ?? "") ?? .system
         temperatureUnit = TemperatureUnit(rawValue: defaults.string(forKey: "settings.temperature") ?? "") ?? .celsius
-        metricUnits = defaults.object(forKey: "settings.metric") as? Bool ?? true
     }
     var preferredColorScheme: ColorScheme? { theme == .light ? .light : theme == .dark ? .dark : nil }
 }
@@ -29,7 +27,6 @@ struct SettingsView: View {
                 Section("Apariencia") {
                     Picker("Tema", selection: $model.theme) { ForEach(ThemePreference.allCases) { Text($0.label).tag($0) } }
                     Picker("Temperatura", selection: $model.temperatureUnit) { Text("Celsius").tag(TemperatureUnit.celsius); Text("Fahrenheit").tag(TemperatureUnit.fahrenheit) }
-                    Toggle("Unidades métricas", isOn: $model.metricUnits)
                 }
                 Section("Privacidad") {
                     Toggle("Permitir sugerencias con Google Gemini", isOn: $geminiConsent)

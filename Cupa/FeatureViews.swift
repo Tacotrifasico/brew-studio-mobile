@@ -746,6 +746,7 @@ private struct CoffeeInventoryView: View {
     ) private var beans: FetchedResults<CoffeeBeanRecord>
     @State private var showAddBean = false
     @State private var editingBean: CoffeeBeanRecord?
+    @State private var errorMessage: String?
 
     var body: some View {
         ZStack {
@@ -808,21 +809,29 @@ private struct CoffeeInventoryView: View {
         .sheet(isPresented: $showAddBean) {
             CoffeeBeanEditor(record: nil) { draft in
                 _ = draft.makeRecord(in: modelContext)
-                try? modelContext.save()
+                return save()
             }
         }
         .sheet(item: $editingBean) { bean in
             CoffeeBeanEditor(record: bean) { draft in
                 draft.apply(to: bean)
                 bean.markUpdated()
-                try? modelContext.save()
+                return save()
             }
         }
+        .alert("No se pudo guardar el café", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("Aceptar") {}
+        } message: { Text(errorMessage ?? "") }
     }
 
     private func softDelete(at offsets: IndexSet) {
         for index in offsets { beans[index].markDeleted() }
-        try? modelContext.save()
+        _ = save()
+    }
+
+    @discardableResult private func save() -> Bool {
+        do { try modelContext.save(); return true }
+        catch { modelContext.rollback(); errorMessage = error.localizedDescription; return false }
     }
 }
 
@@ -910,7 +919,7 @@ private struct CoffeeBeanDraft {
 private struct CoffeeBeanEditor: View {
     @Environment(\.dismiss) private var dismiss
     private let record: CoffeeBeanRecord?
-    private let onSave: (CoffeeBeanDraft) -> Void
+    private let onSave: (CoffeeBeanDraft) -> Bool
     @State private var name: String
     @State private var brand: String
     @State private var origin: String
@@ -927,7 +936,7 @@ private struct CoffeeBeanEditor: View {
     @State private var remainingQuantity: String
     @State private var notes: String
 
-    init(record: CoffeeBeanRecord?, onSave: @escaping (CoffeeBeanDraft) -> Void) {
+    init(record: CoffeeBeanRecord?, onSave: @escaping (CoffeeBeanDraft) -> Bool) {
         self.record = record
         self.onSave = onSave
         _name = State(initialValue: record?.name ?? "")
@@ -987,7 +996,7 @@ private struct CoffeeBeanEditor: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
-                        onSave(CoffeeBeanDraft(
+                        if onSave(CoffeeBeanDraft(
                             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                             brand: brand.trimmingCharacters(in: .whitespacesAndNewlines),
                             origin: origin,
@@ -1001,8 +1010,7 @@ private struct CoffeeBeanEditor: View {
                             initialQuantityGrams: parseDecimal(initialQuantity),
                             remainingQuantityGrams: parseDecimal(remainingQuantity),
                             notes: notes
-                        ))
-                        dismiss()
+                        )) { dismiss() }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }

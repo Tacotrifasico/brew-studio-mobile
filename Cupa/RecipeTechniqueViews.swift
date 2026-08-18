@@ -7,13 +7,15 @@ struct RecipeInventoryView: View {
         sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.isFavorite, ascending: false), NSSortDescriptor(keyPath: \RecipeRecord.updatedAt, ascending: false)],
         predicate: NSPredicate(format: "deletedAt == nil"), animation: .default
     ) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var ingredients: FetchedResults<RecipeIngredientRecord>
+    @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var recipeSteps: FetchedResults<RecipeStepRecord>
     @State private var search = ""; @State private var kind = "ALL"; @State private var adding = false
-    @State private var editing: RecipeRecord?; @State private var errorMessage: String?
+    @State private var editing: RecipeRecord?; @State private var importing = false; @State private var importedDraft: RecipeDraftModel?
+    @State private var errorMessage: String?
 
     private var visible: [RecipeRecord] {
         recipes.filter {
-            (kind == "ALL" || $0.recipeKind == kind) &&
-            (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.tags.localizedCaseInsensitiveContains(search))
+            (kind == "ALL" || (kind == "FAVORITES" ? $0.isFavorite : $0.recipeKind == kind)) && matchesSearch($0)
         }
     }
 
@@ -22,6 +24,7 @@ struct RecipeInventoryView: View {
             Section {
                 Picker("Tipo", selection: $kind) {
                     Text("Todas").tag("ALL")
+                    Text("Favoritas").tag("FAVORITES")
                     ForEach(recipeKinds) { Text($0.label).tag($0.code) }
                 }.pickerStyle(.menu)
             }
@@ -45,19 +48,40 @@ struct RecipeInventoryView: View {
                     .swipeActions(edge: .leading) {
                         Button { duplicate(recipe) } label: { Label("Duplicar", systemImage: "plus.square.on.square") }.tint(CupaTheme.forest)
                     }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button { toggleFavorite(recipe) } label: { Label(recipe.isFavorite ? "Quitar favorita" : "Favorita", systemImage: recipe.isFavorite ? "star.slash" : "star") }.tint(CupaTheme.gold)
+                    }
                 }.onDelete(perform: delete)
             }
         }
         .searchable(text: $search, prompt: "Buscar nombre o etiqueta")
         .scrollContentBackground(.hidden)
-        .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar receta").accessibilityIdentifier("recipes.add") }
-        .sheet(isPresented: $adding) { RecipeEditorView(recipe: nil) }
+        .toolbar {
+            Button { importedDraft = nil; importing = true } label: { Image(systemName: "wand.and.stars") }.accessibilityLabel("Importar receta desde texto").accessibilityIdentifier("recipes.import")
+            Button { importedDraft = nil; adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar receta").accessibilityIdentifier("recipes.add")
+        }
+        .sheet(isPresented: $adding) { RecipeEditorView(recipe: nil, initialDraft: importedDraft) }
         .sheet(item: $editing) { RecipeEditorView(recipe: $0) }
+        .sheet(isPresented: $importing, onDismiss: {
+            if importedDraft != nil { adding = true }
+        }) {
+            RecipeImporterView { draft in
+                importedDraft = draft; importing = false
+            }
+        }
         .alert("No se pudo guardar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "Error desconocido") }
     }
 
     private func duplicate(_ recipe: RecipeRecord) { do { _ = try RecipeTechniqueRepository(context: context).duplicateRecipe(recipe) } catch { errorMessage = error.localizedDescription } }
+    private func toggleFavorite(_ recipe: RecipeRecord) { do { try RecipeTechniqueRepository(context: context).toggleFavorite(recipe) } catch { errorMessage = error.localizedDescription } }
     private func delete(_ offsets: IndexSet) { do { for index in offsets { try RecipeTechniqueRepository(context: context).deleteRecipe(visible[index]) } } catch { errorMessage = error.localizedDescription } }
+    private func matchesSearch(_ recipe: RecipeRecord) -> Bool {
+        guard !search.isEmpty else { return true }
+        return recipe.name.localizedCaseInsensitiveContains(search) || recipe.tags.localizedCaseInsensitiveContains(search) ||
+            recipe.intention.localizedCaseInsensitiveContains(search) ||
+            ingredients.contains { $0.recipeId == recipe.id && $0.name.localizedCaseInsensitiveContains(search) } ||
+            recipeSteps.contains { $0.recipeId == recipe.id && $0.instruction.localizedCaseInsensitiveContains(search) }
+    }
 }
 
 struct TechniqueInventoryView: View {
@@ -103,6 +127,7 @@ private struct RecipeEditorView: View {
     @Environment(\.dismiss) private var dismiss; @Environment(\.managedObjectContext) private var context
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil AND equipmentType == 'BREWER_METHOD'")) private var methods: FetchedResults<EquipmentRecord>
     let recipe: RecipeRecord?
+    var initialDraft: RecipeDraftModel? = nil
     @State private var draft = RecipeDraftModel(); @State private var loaded = false; @State private var errorMessage: String?
 
     var body: some View {
@@ -153,10 +178,43 @@ private struct RecipeEditorView: View {
     }
 
     private var canSave: Bool { !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.ingredients.contains { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty } && draft.steps.contains { !$0.instruction.trimmingCharacters(in: .whitespaces).isEmpty } }
-    private func load() { guard !loaded else { return }; loaded = true; if let recipe { do { draft = try RecipeTechniqueRepository(context: context).recipeDraft(for: recipe) } catch { errorMessage = error.localizedDescription } } }
+    private func load() {
+        guard !loaded else { return }; loaded = true
+        if let recipe { do { draft = try RecipeTechniqueRepository(context: context).recipeDraft(for: recipe) } catch { errorMessage = error.localizedDescription } }
+        else if let initialDraft { draft = initialDraft }
+    }
     private func save() {
         if let selected = methods.first(where: { $0.id == draft.suggestedMethodId }) { draft.suggestedMethodName = selected.name }
         do { _ = try RecipeTechniqueRepository(context: context).saveRecipe(draft); dismiss() } catch { errorMessage = error.localizedDescription }
+    }
+}
+
+private struct RecipeImporterView: View {
+    @Environment(\.dismiss) private var dismiss
+    let onParsed: (RecipeDraftModel) -> Void
+    @State private var rawText = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Pega una receta de un blog, mensaje o nota. Cupa detectará localmente el nombre, categoría, método, ingredientes y pasos; podrás corregirlos antes de guardar.")
+                        .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                    TextEditor(text: $rawText).frame(minHeight: 220).accessibilityIdentifier("recipes.import.text")
+                } footer: {
+                    Text("Ejemplo: Receta: Espresso tonic · Ingredientes: 30 ml espresso… · Pasos: 1. Servir hielo…")
+                }
+            }
+            .navigationTitle("Importar receta")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Procesar") { onParsed(RecipeTextParser.parse(rawText)) }
+                        .disabled(rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("recipes.import.process")
+                }
+            }
+        }
     }
 }
 

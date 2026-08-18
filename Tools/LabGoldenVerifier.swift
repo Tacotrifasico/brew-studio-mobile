@@ -37,6 +37,7 @@ struct LabGoldenVerifier {
         verifyTransfersAndHistoricalSnapshots()
         verifyLocalPersistence()
         verifyRecipeTechniqueAggregates()
+        verifyRecipeTextImport()
         verifyPreparationRecovery()
         verifyTastingCoolingAndPersistence()
         verifySyncConflictAndOutbox()
@@ -45,7 +46,7 @@ struct LabGoldenVerifier {
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
-        print("4 golden tests, frescura, inventario, reapertura SQLite, agregados, preparación, cata, sincronización, IA, perfil y social aprobados")
+        print("4 golden tests, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, sincronización, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -265,6 +266,8 @@ struct LabGoldenVerifier {
         )
         let recipe = try! repository.saveRecipe(recipeDraft)
         precondition(try! repository.ingredients(recipeId: recipe.id).count == 2)
+        try! repository.toggleFavorite(recipe)
+        precondition(recipe.isFavorite)
         recipeDraft.ingredients.removeFirst(); recipeDraft.steps.swapAt(0, 1)
         _ = try! repository.saveRecipe(recipeDraft)
         precondition(try! repository.ingredients(recipeId: recipe.id).map(\.name) == ["Agua"])
@@ -283,6 +286,29 @@ struct LabGoldenVerifier {
         precondition(technique.totalTimeSeconds == 120)
         try! repository.deleteTechnique(technique)
         precondition(try! repository.techniqueSteps(techniqueId: technique.id).isEmpty)
+    }
+
+    private static func verifyRecipeTextImport() {
+        let draft = RecipeTextParser.parse("""
+        Receta: Espresso Tonic Menta
+        Ingredientes:
+        - 30 ml Espresso extraído
+        - 150 ml Agua tónica
+        - 2 unidades Hielo
+        Pasos:
+        1. Servir tónica y hielo
+        2. Verter espresso
+        Perfil:
+        Refrescante y herbal
+        """)
+        precondition(draft.name == "Espresso Tonic Menta" && draft.recipeKind == "COLD_DRINK")
+        precondition(draft.suggestedMethodName == "Espresso")
+        precondition(draft.ingredients.map(\.amount) == [30, 150, 2])
+        precondition(draft.ingredients.map(\.unit) == ["MILLILITERS", "MILLILITERS", "UNITS"])
+        precondition(draft.steps.map(\.instruction) == ["Servir tónica y hielo", "Verter espresso"])
+        precondition(draft.intention == "Refrescante y herbal")
+        let fallback = RecipeTextParser.parse("Mi bebida secreta")
+        precondition(fallback.recipeKind == "OTHER" && fallback.ingredients.count == 2 && fallback.steps.count == 1)
     }
 
     @MainActor private static func verifyPreparationRecovery() {

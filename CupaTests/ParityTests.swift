@@ -208,6 +208,36 @@ final class LocalPersistenceTests: XCTestCase {
 }
 
 final class RecipeTechniqueRepositoryTests: XCTestCase {
+    func testRecipeTextParserMatchesAndroidImporterContract() {
+        let draft = RecipeTextParser.parse("""
+        Receta: Espresso Tonic Menta
+        Ingredientes:
+        - 30 ml Espresso extraído
+        - 150 ml Agua tónica
+        - 2 unidades Hielo
+        Pasos:
+        1. Servir tónica y hielo
+        2. Verter espresso
+        Perfil:
+        Refrescante y herbal
+        """)
+        XCTAssertEqual(draft.name, "Espresso Tonic Menta")
+        XCTAssertEqual(draft.recipeKind, "COLD_DRINK")
+        XCTAssertEqual(draft.suggestedMethodName, "Espresso")
+        XCTAssertEqual(draft.ingredients.map(\.amount), [30, 150, 2])
+        XCTAssertEqual(draft.ingredients.map(\.unit), ["MILLILITERS", "MILLILITERS", "UNITS"])
+        XCTAssertEqual(draft.steps.map(\.instruction), ["Servir tónica y hielo", "Verter espresso"])
+        XCTAssertEqual(draft.intention, "Refrescante y herbal")
+    }
+
+    func testRecipeTextParserProvidesAndroidFallbacks() {
+        let draft = RecipeTextParser.parse("Mi bebida secreta")
+        XCTAssertEqual(draft.name, "Mi bebida secreta")
+        XCTAssertEqual(draft.recipeKind, "OTHER")
+        XCTAssertEqual(draft.ingredients.count, 2)
+        XCTAssertEqual(draft.steps.map(\.instruction), ["Mezclar los ingredientes y servir"])
+    }
+
     @MainActor func testRecipeAggregateCreateEditDuplicateAndDelete() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext

@@ -15,6 +15,117 @@ struct RecipeDraftModel: Equatable {
     var ingredients: [RecipeIngredientDraft] = []; var steps: [RecipeStepDraft] = []
 }
 
+enum RecipeTextParser {
+    static func parse(_ rawText: String) -> RecipeDraftModel {
+        let lines = rawText.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return RecipeDraftModel() }
+
+        var draft = RecipeDraftModel()
+        var section: Section?
+        for (index, line) in lines.enumerated() {
+            let folded = line.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            if index == 0 {
+                if folded.hasPrefix("receta:") || folded.hasPrefix("nombre:") {
+                    draft.name = String(line.drop(while: { $0 != ":" }).dropFirst()).trimmingCharacters(in: .whitespaces)
+                } else {
+                    draft.name = line.trimmingCharacters(in: CharacterSet(charactersIn: "#* "))
+                }
+                continue
+            }
+            if folded.contains("ingrediente") { section = .ingredients; continue }
+            if folded.contains("paso") || folded.contains("preparacion") || folded.contains("instruccion") { section = .steps; continue }
+            if folded.contains("nota") || folded.contains("intencion") || folded.contains("perfil") || folded.contains("descriptor") { section = .notes; continue }
+
+            switch section {
+            case .ingredients:
+                draft.ingredients.append(parseIngredient(line))
+            case .steps:
+                let instruction = stripListPrefix(line)
+                if !instruction.isEmpty { draft.steps.append(.init(instruction: instruction)) }
+            case .notes:
+                draft.intention += (draft.intention.isEmpty ? "" : " ") + line
+            case nil:
+                if isNumberedListItem(line) {
+                    draft.steps.append(.init(instruction: stripListPrefix(line)))
+                } else if looksLikeIngredient(line) {
+                    draft.ingredients.append(parseIngredient(line))
+                } else if draft.intention.isEmpty {
+                    draft.intention = line
+                }
+            }
+        }
+
+        let fullText = rawText.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        draft.recipeKind = inferredKind(fullText)
+        draft.suggestedMethodName = inferredMethod(fullText)
+        if draft.name.isEmpty { draft.name = "Receta importada" }
+        if draft.ingredients.isEmpty {
+            draft.ingredients = [.init(name: "Café de especialidad", amount: 15, unit: "GRAMS"), .init(name: "Agua filtrada", amount: 240, unit: "MILLILITERS")]
+        }
+        if draft.steps.isEmpty { draft.steps = [.init(instruction: "Mezclar los ingredientes y servir")] }
+        return draft
+    }
+
+    private enum Section { case ingredients, steps, notes }
+
+    private static func inferredKind(_ text: String) -> String {
+        if containsAny(text, ["leche", "latte", "cappuccino", "flat white", "macchiato"]) { return "MILK_DRINK" }
+        if containsAny(text, ["hielo", "cold brew", "tonic", "fresco", "fria", "frio"]) { return "COLD_DRINK" }
+        if containsAny(text, ["postre", "affogato", "helado", "dulce", "chocolate"]) { return "DESSERT" }
+        if containsAny(text, ["autor", "signature", "jarabe", "syrup", "coctel"]) { return "SIGNATURE" }
+        if containsAny(text, ["v60", "espresso", "filtrado", "aeropress", "chemex"]) { return "BLACK_COFFEE" }
+        return "OTHER"
+    }
+
+    private static func inferredMethod(_ text: String) -> String {
+        if text.contains("v60") { return "V60" }
+        if text.contains("aeropress") { return "Aeropress" }
+        if text.contains("espresso") { return "Espresso" }
+        if text.contains("prensa francesa") || text.contains("french press") { return "Prensa Francesa" }
+        if text.contains("chemex") { return "Chemex" }
+        if text.contains("kalita") { return "Kalita Wave" }
+        return ""
+    }
+
+    private static func parseIngredient(_ line: String) -> RecipeIngredientDraft {
+        let clean = line.trimmingCharacters(in: CharacterSet(charactersIn: "-*• \t"))
+        let pattern = #"^([0-9]+(?:[.,][0-9]+)?)\s*(g|gr|gramos?|ml|mililitros?|u|unidades?|cdta|cucharaditas?|cda|cucharadas?|oz|onzas?)\b\s*(.*)$"#
+        if let match = clean.firstMatch(of: try! Regex(pattern)) {
+            let amount = Double(String(match.output[1].substring!).replacingOccurrences(of: ",", with: ".")) ?? 0
+            let rawUnit = String(match.output[2].substring!).lowercased()
+            let name = String(match.output[3].substring!).trimmingCharacters(in: CharacterSet(charactersIn: " :-"))
+            return .init(name: name.isEmpty ? clean : name, amount: amount, unit: normalizedUnit(rawUnit))
+        }
+        return .init(name: clean, amount: 0, unit: "GRAMS")
+    }
+
+    private static func normalizedUnit(_ unit: String) -> String {
+        if unit == "ml" || unit.hasPrefix("mililit") { return "MILLILITERS" }
+        if unit == "u" || unit.hasPrefix("unidad") { return "UNITS" }
+        if unit == "cdta" || unit.hasPrefix("cucharadita") { return "TEASPOONS" }
+        if unit == "cda" || unit.hasPrefix("cucharada") { return "TABLESPOONS" }
+        if unit == "oz" || unit.hasPrefix("onza") { return "OUNCES" }
+        return "GRAMS"
+    }
+
+    private static func stripListPrefix(_ line: String) -> String {
+        line.replacingOccurrences(of: #"^\s*\d+[.)-]\s*"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func isNumberedListItem(_ line: String) -> Bool {
+        line.range(of: #"^\s*\d+[.)-]\s*.+"#, options: .regularExpression) != nil
+    }
+
+    private static func looksLikeIngredient(_ line: String) -> Bool {
+        line.range(of: #"^\s*[-*•]?\s*\d+(?:[.,]\d+)?\s*(?:g|gr|gramos?|ml|mililitros?|u|unidades?|cdta|cda|oz)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    private static func containsAny(_ text: String, _ values: [String]) -> Bool { values.contains(where: text.contains) }
+}
+
 struct TechniqueStepDraft: Identifiable, Equatable {
     var id = UUID(); var title = ""; var durationSeconds = 30; var waterAddedMl = 0
     var intensity = "MEDIUM"; var gesture = "CIRCULAR_POUR"; var note = ""
@@ -82,6 +193,10 @@ final class RecipeTechniqueRepository {
         try ingredients(recipeId: recipe.id).forEach { $0.markDeleted() }
         try recipeSteps(recipeId: recipe.id).forEach { $0.markDeleted() }
         try saveContext()
+    }
+
+    func toggleFavorite(_ recipe: RecipeRecord) throws {
+        recipe.isFavorite.toggle(); recipe.markUpdated(); try saveContext()
     }
 
     func techniqueDraft(for technique: TechniqueRecord) throws -> TechniqueDraftModel {

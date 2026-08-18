@@ -33,7 +33,8 @@
 - Frescura de café: cortes exactos en 7/21/35/60 días, interpolación hasta 100%, fecha futura, ausencia de fecha y alerta tras 14 días abierta: aprobados.
 - Alta, consulta y borrado lógico de café y molino; alta y actualización de equipo; alta de experimento en Core Data en memoria: aprobados.
 - Persistencia local real: café con UUID, fecha, origen y existencias guardado en SQLite, store desmontado y recuperado desde un segundo `NSPersistentContainer`: aprobado.
-- Receta: alta, edición por UUID, reordenamiento, duplicación profunda y borrado lógico de hijos: aprobados.
+- Receta: alta, edición por UUID, reordenamiento, favorita, duplicación profunda y borrado lógico de hijos: aprobados.
+- Recetario: importación local de texto libre, inferencia de categoría/método, unidades, pasos y valores de respaldo equivalentes al contrato Android: verificador ejecutado + XCTest compilado.
 - Técnica: alta, orden, duración total, agua acumulada y borrado lógico de pasos: aprobados.
 - Preparación: carga desde técnica, avance guiado tras 46 segundos, cierre en tiempo total, recuperación pendiente de guardado, prevención de duplicados, nuevo UUID y snapshot persistente de `BrewSession`: aprobados.
 - Cata: recuperación del enfriamiento a 601 segundos, transición a descenso, observación sensorial independiente, vínculo opcional con `BrewSession`, creación de `CupSession` completo y borrado lógico conjunto: aprobados.

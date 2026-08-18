@@ -111,3 +111,7 @@ Android representa cerrado, abierto y terminado; en iOS se derivan de los datos 
 ## D-028 — Perfil del molino y ajuste de la técnica separados
 
 El formulario Android vigente del molino expone marca, modelo, rango operativo y calibración; no ofrece edición de ajustes por método aunque el DTO contemple esa colección futura. iOS conserva esos datos como nombre/marca/modelo, unidad, mínimo, máximo y calibración. El valor interno y su descripción legible pertenecen a cada técnica y se congelan en la sesión ejecutada, porque “22 clicks” puede variar entre métodos y molinos y no es una propiedad única del equipo.
+
+## D-029 — Importación de recetas local y revisable
+
+El importador replica el contrato heurístico de Android en el dispositivo: reconoce encabezados, cantidades, unidades, pasos, perfil, categoría y método sin enviar el texto a Gemini ni exigir conexión. El resultado abre el editor normal antes de persistirse, de modo que una inferencia imperfecta nunca se guarda sin revisión del usuario. La búsqueda incluye también intención, ingredientes e instrucciones, y favoritas es un filtro real sobre el mismo agregado Core Data.

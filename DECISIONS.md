@@ -159,3 +159,7 @@ Un archivo `.xcconfig` sin configuración de Xcode asociada no constituye un amb
 ## D-040 — La conectividad transitoria no invalida la sesión
 
 La identidad recuperada del Keychain permanece disponible cuando falla internet, aunque un access token vencido no se reutiliza para llamadas remotas. Un rechazo definitivo del refresh (`400/401`) limpia las credenciales y solicita un nuevo acceso; un `401` inesperado en una operación autenticada fuerza una sola renovación y reintento. `NWPathMonitor` dispara recuperación y sincronización al volver la conexión, además del intento al abrir o reactivar la app. La outbox conserva operaciones fallidas con su backoff y la interfaz informa que los datos locales siguen seguros.
+
+## D-041 — Buzón directo y actividad social separados del contenido
+
+La referencia Android distingue el muro público, transferencias directas, copias, variantes y actividad. iOS conserva `brew_shares` como snapshot fuente y crea `inbox_items` sólo como estado de entrega/lectura, generado por trigger para publicaciones `DIRECT`; el destinatario únicamente puede leer sus filas y actualizar `read_at`. `activity_log` registra acciones del propietario sin convertirse en estadística inventada. Registrar copia crea UUID nuevos con `copyMode=IMPORT`; crear variante hace lo mismo con `copyMode=FORK`. Fallar al escribir la actividad no convierte una publicación ya aceptada en fracaso ni induce un envío duplicado.

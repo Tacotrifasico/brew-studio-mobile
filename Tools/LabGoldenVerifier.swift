@@ -543,6 +543,10 @@ struct LabGoldenVerifier {
         try! SocialService(configuration: .init(supabaseURL: nil, supabaseAnonKey: nil)).importShare(share, context: context)
         let imported = try! context.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord"))
         precondition(imported.first?.originalEntityId == originalId && imported.first?.copyMode == "IMPORT")
+        let forkPersistence = PersistenceController(inMemory: true); let forkContext = forkPersistence.container.viewContext
+        try! SocialService(configuration: .init(supabaseURL: nil, supabaseAnonKey: nil)).importShare(share, mode: .forked, context: forkContext)
+        let fork = try! forkContext.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord")).first!
+        precondition(fork.name == "V60 comunitaria (Variante)" && fork.copyMode == "FORK" && fork.originalEntityId == originalId)
     }
 
     private static func verifySocialContentPolicy() {

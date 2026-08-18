@@ -18,7 +18,7 @@ Antes del primer envío remoto a Gemini, la app explica qué parámetros se comp
 
 Configuración permite tema del sistema, claro u oscuro y preferencias de unidades. Brew Hub ofrece perfil editable, privacidad y estadísticas derivadas exclusivamente de los datos reales guardados.
 
-La comunidad permite publicar e importar recetas/técnicas con atribución, marcar contenido, bloquear autores y reportar publicaciones. Sin backend configurado se muestra un estado vacío real y los datos privados permanecen locales.
+La comunidad permite publicar recetas/técnicas en el muro o enviarlas a un UUID concreto, recibirlas en un buzón con estado de lectura, registrar copias, crear variantes con atribución, guardar, marcar Me gusta, bloquear autores y reportar publicaciones. El historial muestra actividad social real junto con preparaciones y catas locales. Sin backend configurado se muestra un estado vacío real y los datos privados permanecen locales.
 
 El proyecto incluye el AppIcon de la referencia Android y semántica VoiceOver para controles de icono, áreas táctiles mínimas e identificadores de automatización para los flujos principales.
 

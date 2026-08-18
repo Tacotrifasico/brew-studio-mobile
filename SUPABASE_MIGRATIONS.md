@@ -10,6 +10,8 @@ La migración `supabase/migrations/202608170003_lab_and_brew_references.sql` añ
 
 La migración `supabase/migrations/202608170004_cup_history_snapshots.sql` amplía `cup_sessions` de forma idempotente con las referencias, parámetros ejecutados, nombres congelados, vida térmica, valoración, comentario, fecha y snapshots JSON presentes en Android. Añade claves foráneas `ON DELETE SET NULL` e índices de consulta sin modificar migraciones ya desplegadas.
 
+La migración `supabase/migrations/202608180005_social_inbox_activity.sql` agrega el buzón directo y la cronología existentes en Android. Un trigger `SECURITY DEFINER` crea o retira la entrega al cambiar una publicación directa, y rellena publicaciones directas previas de forma idempotente. RLS permite al destinatario consultar su bandeja y modificar únicamente `read_at`; la actividad sólo puede insertarse y leerse con `user_id = auth.uid()`.
+
 Antes de producción se requiere:
 
 1. Comparar esta migración con el esquema ya desplegado antes de aplicarla; no modificar una migración que ya haya sido ejecutada.
@@ -18,5 +20,6 @@ Antes de producción se requiere:
 4. Validar borrado lógico, cascadas y restauración.
 5. Desplegar y validar las Edge Functions de eliminación de cuenta y Gemini con autenticación y rate limit.
 6. Probar el filtro social con texto permitido y no permitido, además del flujo humano de respuesta a reportes.
+7. Validar con dos usuarios que una entrega directa sólo aparece al destinatario y que otro usuario no puede marcarla como leída.
 
 Nunca se incluye `service_role` en iOS.

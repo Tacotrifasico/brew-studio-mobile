@@ -59,7 +59,7 @@
 - Acciones destructivas: café, taza/cata, experimento, receta, técnica y reinicios con progreso sólo se ejecutan después de una confirmación explícita; se retiraron borrados por deslizamiento que la omitían: targets UI compilados.
 - Historial por café: consulta de preparación y taza por `beanId`, conteos, calificación/comentario y conservación de ambas sesiones después del borrado lógico del café: verificador ejecutado + XCTest compilado.
 - Acciones de café: transición cerrado/abierto/terminado, fecha de apertura, separación de lotes terminados, UUID recuperable en Preparación y carga de frescura/proceso/notas al Laboratorio: verificador ejecutado + XCTest compilado.
-- Social: contrato del feed público, publicación sin correo, reporte, bloqueo, filtro preventivo e importación profunda con atribución: verificador ejecutado + XCTest compilado.
+- Social: feed público, publicación sin correo, envío directo con destinatario, buzón/lectura, actividad, Me gusta/guardados, reporte, bloqueo y filtro preventivo: contratos XCTest compilados. Copia y variante profundas con UUID nuevos, atribución y modos `IMPORT`/`FORK`: verificador ejecutado.
 - Target `CupaTests`: compilación para iOS Simulator aprobada. La ejecución XCTest queda pendiente hasta reparar CoreSimulator local.
 - Target `CupaUITests`: cinco recorridos XCTest UI compilados para arm64 y x86_64. La ejecución queda pendiente hasta reparar CoreSimulator local.
 - Build Release para iPhone genérico sin firma: aprobado.

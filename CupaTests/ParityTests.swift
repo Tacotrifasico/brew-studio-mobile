@@ -852,6 +852,11 @@ final class SocialTests: XCTestCase {
         let imported = try context.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord"))
         XCTAssertEqual(imported.first?.name, "Copia de V60 comunitaria"); XCTAssertEqual(imported.first?.originalEntityId, originalId); XCTAssertEqual(imported.first?.copyMode, "IMPORT")
         XCTAssertEqual(try RecipeTechniqueRepository(context: context).ingredients(recipeId: try XCTUnwrap(imported.first?.id)).count, 1)
+
+        let forkPersistence = PersistenceController(inMemory: true); let forkContext = forkPersistence.container.viewContext
+        try service.importShare(share, mode: .forked, context: forkContext)
+        let fork = try XCTUnwrap(forkContext.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord")).first)
+        XCTAssertEqual(fork.name, "V60 comunitaria (Variante)"); XCTAssertEqual(fork.copyMode, "FORK"); XCTAssertEqual(fork.originalEntityId, originalId)
     }
 
     func testPublishReportAndBlockContractsDoNotExposeEmail() async throws {
@@ -863,6 +868,34 @@ final class SocialTests: XCTestCase {
         try await service.report(shareId: UUID(), reason: "USER_REPORTED", accessToken: "jwt")
         try await service.block(userId: UUID(), accessToken: "jwt")
         XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/rest/v1/brew_shares", "/rest/v1/content_reports", "/rest/v1/blocked_users"])
+    }
+
+    func testDirectInboxActivityAndReadContracts() async throws {
+        let owner = UUID(); let target = UUID(); let entity = UUID(); let shareId = UUID(); let inboxId = UUID()
+        let payload = SharePayloadSnapshot(kind: "recipe", recipe: .init(name: "V60", recipeKind: "BLACK_COFFEE", intention: "Dulzor", suggestedMethodName: "V60", tags: "", ingredients: [], steps: []), technique: nil)
+        let share = SocialShare(id: shareId, ownerId: owner, entityType: "recipe", entityId: entity, fromName: "Ana", fromHandle: "ana", targetUserId: target, visibility: "DIRECT", name: "V60", subtitle: "Dulzor", message: "Para ti", payloadSnapshot: payload, originalEntityId: entity, status: "ACTIVE", createdAt: "2026-08-18T00:00:00Z", updatedAt: "2026-08-18T00:00:00Z")
+        let inboxItem = SocialInboxItem(id: inboxId, shareId: shareId, targetUserId: target, readAt: nil, createdAt: "2026-08-18T00:00:00Z", share: share)
+
+        let publishTransport = MockTransport(statusCode: 201)
+        let publishService = SocialService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: publishTransport)
+        try await publishService.publish(entityType: "recipe", entityId: entity, fromName: "Ana", fromHandle: "ana", name: "V60", subtitle: "Dulzor", message: "Para ti", payload: payload, visibility: "DIRECT", targetUserId: target, accessToken: "jwt")
+        let body = try XCTUnwrap((JSONSerialization.jsonObject(with: try XCTUnwrap(publishTransport.requests.first?.httpBody)) as? [String: Any]))
+        XCTAssertEqual(body["visibility"] as? String, "DIRECT"); XCTAssertEqual(body["target_user_id"] as? String, target.uuidString)
+
+        let inboxTransport = MockTransport(responseData: try JSONEncoder().encode([inboxItem]))
+        let inboxService = SocialService(configuration: publishService.configuration, transport: inboxTransport)
+        let receivedInbox = try await inboxService.inbox(userId: target, accessToken: "jwt")
+        XCTAssertEqual(receivedInbox, [inboxItem])
+        XCTAssertTrue(inboxTransport.requests.first?.url?.query?.contains("target_user_id=eq.\(target.uuidString)") == true)
+
+        let readTransport = MockTransport(statusCode: 204)
+        try await SocialService(configuration: publishService.configuration, transport: readTransport).markInboxRead(itemId: inboxId, accessToken: "jwt", date: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(readTransport.requests.first?.httpMethod, "PATCH"); XCTAssertTrue(readTransport.requests.first?.url?.query?.contains("id=eq.\(inboxId.uuidString)") == true)
+
+        let activity = SocialActivity(id: UUID(), userId: target, action: "import_share", entityType: "recipe", entityId: entity, shareId: shareId, note: "Registraste una copia", createdAt: "2026-08-18T00:00:00Z")
+        let activityTransport = MockTransport(responseData: try JSONEncoder().encode([activity]))
+        let receivedActivity = try await SocialService(configuration: publishService.configuration, transport: activityTransport).activity(userId: target, accessToken: "jwt")
+        XCTAssertEqual(receivedActivity, [activity])
     }
 }
 

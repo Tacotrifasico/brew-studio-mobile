@@ -95,3 +95,7 @@ El estado de frescura se calcula al mostrar o editar el café a partir de las fe
 ## D-024 — Configuración sin controles aparentes
 
 Se elimina el interruptor de unidades métricas porque sólo persistía un booleano y no alteraba ninguna medida; Android usa gramos y mililitros sin modo imperial. Celsius/Fahrenheit permanece porque sí convierte la presentación del Laboratorio. Los formularios de café, molino y equipo conservan el editor abierto y muestran el error real cuando Core Data no puede guardar, en lugar de descartarlo silenciosamente.
+
+## D-025 — Reapertura SQLite como prueba de persistencia
+
+El controlador admite inyectar una URL de almacén sólo para aislar pruebas sin tocar los datos reales. El verificador crea un SQLite temporal, guarda un café con UUID, fecha y existencias, desmonta completamente el almacén, abre un contenedor nuevo y comprueba los mismos valores. El historial persistente puede desactivarse en esa prueba aislada para desmontar el store sin notificaciones del sistema; producción lo conserva activado por defecto.

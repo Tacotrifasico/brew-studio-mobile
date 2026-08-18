@@ -30,6 +30,7 @@ struct LabGoldenVerifier {
         )
         verifyStateRestoration()
         verifyCoffeeFreshnessParity()
+        verifySQLiteReopening()
         verifyCalculatorFavorites()
         verifyCalculatorQuickPreparation()
         verifyTransfersAndHistoricalSnapshots()
@@ -43,7 +44,7 @@ struct LabGoldenVerifier {
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
-        print("4 golden tests, frescura, agregados, preparación, cata, sincronización, IA, perfil y social aprobados")
+        print("4 golden tests, frescura, reapertura SQLite, agregados, preparación, cata, sincronización, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -86,6 +87,32 @@ struct LabGoldenVerifier {
         precondition(opened.openWarning == "Abierto hace 15 días. Puede perder aroma más rápido.")
         let missing = CoffeeFreshnessEngine.evaluate(roastDate: nil, openedDate: daysAgo(20), now: now, calendar: calendar)
         precondition(missing.state == .noDate && missing.openStatusDetails == "Abierto hace 20 días" && missing.openWarning == nil)
+    }
+
+    @MainActor private static func verifySQLiteReopening() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CupaReopenVerifier-\(UUID().uuidString)", isDirectory: true)
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cupa.sqlite")
+        let beanId = UUID(); let roastDate = Date(timeIntervalSince1970: 1_775_952_000)
+        autoreleasepool {
+            let first = PersistenceController(storeURL: storeURL, enablePersistentHistory: false); let context = first.container.viewContext
+            _ = CoffeeBeanRecord(
+                context: context, id: beanId, name: "Reapertura", brand: "Tostador", origin: "Chiapas",
+                roastDate: roastDate, initialQuantityGrams: 250, remainingQuantityGrams: 232
+            )
+            try! context.save()
+            try! first.container.persistentStoreCoordinator.remove(first.container.persistentStoreCoordinator.persistentStores[0])
+        }
+        autoreleasepool {
+            let reopened = PersistenceController(storeURL: storeURL, enablePersistentHistory: false); let context = reopened.container.viewContext
+            let request = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
+            request.predicate = NSPredicate(format: "id == %@", beanId as CVarArg)
+            let bean = try! context.fetch(request).first!
+            precondition(bean.name == "Reapertura" && bean.origin == "Chiapas")
+            precondition(bean.roastDate == roastDate && bean.remainingQuantityGrams == 232)
+            try! reopened.container.persistentStoreCoordinator.remove(reopened.container.persistentStoreCoordinator.persistentStores[0])
+        }
     }
 
     @MainActor private static func verifyCalculatorFavorites() {

@@ -139,6 +139,27 @@ final class CalculatorParityTests: XCTestCase {
 }
 
 final class LocalPersistenceTests: XCTestCase {
+    @MainActor func testSQLiteStoreSurvivesContainerReopening() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CupaSQLiteTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cupa.sqlite"); let beanId = UUID()
+        try autoreleasepool {
+            let first = PersistenceController(storeURL: storeURL, enablePersistentHistory: false); let context = first.container.viewContext
+            _ = CoffeeBeanRecord(context: context, id: beanId, name: "Persistente", brand: "Local", remainingQuantityGrams: 175)
+            XCTAssertNoThrow(try context.save())
+            XCTAssertNoThrow(try first.container.persistentStoreCoordinator.remove(first.container.persistentStoreCoordinator.persistentStores[0]))
+        }
+        try autoreleasepool {
+            let reopened = PersistenceController(storeURL: storeURL, enablePersistentHistory: false); let context = reopened.container.viewContext
+            let request = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
+            request.predicate = NSPredicate(format: "id == %@", beanId as CVarArg)
+            let bean = try XCTUnwrap(context.fetch(request).first)
+            XCTAssertEqual(bean.name, "Persistente"); XCTAssertEqual(bean.remainingQuantityGrams, 175)
+            try reopened.container.persistentStoreCoordinator.remove(reopened.container.persistentStoreCoordinator.persistentStores[0])
+        }
+    }
+
     func testCoffeeFreshnessMatchesAndroidBoundariesAndOpenWarning() {
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let now = Date(timeIntervalSince1970: 1_776_643_200)

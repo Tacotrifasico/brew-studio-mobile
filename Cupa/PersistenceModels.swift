@@ -304,19 +304,21 @@ struct PersistenceController {
     private static let sharedModel = makeModel()
     let container: NSPersistentContainer
 
-    init(inMemory: Bool = false) {
+    init(inMemory: Bool = false, storeURL: URL? = nil, enablePersistentHistory: Bool = true) {
         container = NSPersistentContainer(name: "Cupa", managedObjectModel: Self.sharedModel)
         let description = NSPersistentStoreDescription()
         if inMemory {
             description.type = NSInMemoryStoreType
         } else {
             description.type = NSSQLiteStoreType
-            description.url = NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("Cupa.sqlite")
+            description.url = storeURL ?? NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("Cupa.sqlite")
         }
         description.shouldMigrateStoreAutomatically = true
         description.shouldInferMappingModelAutomatically = true
-        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        if enablePersistentHistory {
+            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        }
         container.persistentStoreDescriptions = [description]
         container.loadPersistentStores { _, error in
             if let error { fatalError("No se pudo abrir el almacenamiento local: \(error.localizedDescription)") }

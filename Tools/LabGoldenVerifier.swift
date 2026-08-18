@@ -35,7 +35,8 @@ struct LabGoldenVerifier {
         verifyTastingCoolingAndPersistence()
         verifySyncConflictAndOutbox()
         verifyLocalSuggestionFallback()
-        print("4 golden tests, agregados, preparación, cata, outbox y fallback IA aprobados")
+        verifyProfilePersistence()
+        print("4 golden tests, agregados, preparación, cata, outbox, IA y perfil aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -178,5 +179,15 @@ struct LabGoldenVerifier {
         let state = LabState(waterMl: 270, ratio: 18, temperatureC: 84, grindClicks: 32, freshness: "viejo", timeSeconds: 80)
         let suggestion = LocalSuggestionEngine.suggest(.init(state: state, profile: LabEngine.calculate(state)))
         precondition(suggestion.source == .local && suggestion.text.contains("extracción estimada es baja"))
+    }
+
+    @MainActor private static func verifyProfilePersistence() {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let repository = ProfileRepository(context: context)
+        let ownerA = UUID(); let ownerB = UUID()
+        let first = try! repository.save(ownerId: ownerA, displayName: "Emiliano", alias: "brewther", biography: "V60", avatarColor: "#3F7A63", favoriteMethods: "V60", isPrivate: true)
+        let updated = try! repository.save(ownerId: ownerA, displayName: "Emiliano N.", alias: "@brewther", biography: "Café", avatarColor: "#234E3C", favoriteMethods: "V60", isPrivate: false)
+        _ = try! repository.save(ownerId: ownerB, displayName: "Otra", alias: "otra", biography: "", avatarColor: "#000000", favoriteMethods: "", isPrivate: true)
+        precondition(first.id == updated.id && updated.alias == "brewther")
+        precondition(try! context.fetch(NSFetchRequest<UserProfileRecord>(entityName: "UserProfileRecord")).count == 2)
     }
 }

@@ -12,10 +12,11 @@ struct AppShell: View {
     @StateObject private var preparation = PreparationModel()
     @StateObject private var tasting = TastingModel()
     @StateObject private var account = AccountModel()
+    @StateObject private var settings = SettingsModel()
 
     var body: some View {
         TabView(selection: $selection) {
-            NavigationStack { HomeView(selection: $selection, account: account) }
+            NavigationStack { HomeView(selection: $selection, account: account, settings: settings) }
                 .tag(CupaTab.home)
                 .tabItem { Label("Taller", systemImage: "house") }
 
@@ -39,6 +40,8 @@ struct AppShell: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
         }
-        .task { await account.restoreAndRefreshIfNeeded() }
+        .task { lab.update { $0.temperatureUnit = settings.temperatureUnit }; await account.restoreAndRefreshIfNeeded() }
+        .onChange(of: settings.temperatureUnit) { _, unit in lab.update { $0.temperatureUnit = unit } }
+        .preferredColorScheme(settings.preferredColorScheme)
     }
 }

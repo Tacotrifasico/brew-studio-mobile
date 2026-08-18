@@ -4,7 +4,10 @@ import CoreData
 struct HomeView: View {
     @Binding var selection: CupaTab
     @ObservedObject var account: AccountModel
+    @ObservedObject var settings: SettingsModel
     @State private var showAccount = false
+    @State private var showSettings = false
+    @State private var showHub = false
 
     private let shortcuts: [(String, String, CupaTab, Color)] = [
         ("Cata", "heart.text.square", .tasting, CupaTheme.terracotta),
@@ -19,11 +22,11 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     HStack {
-                        Button { showAccount = true } label: {
+                        Button { showHub = true } label: {
                             Label(account.tokens?.email ?? "Mi perfil", systemImage: "person.crop.circle").font(.subheadline.weight(.semibold))
                         }
                         Spacer()
-                        Image(systemName: "bell")
+                        Button { showSettings = true } label: { Image(systemName: "gearshape") }
                     }
                     .foregroundStyle(CupaTheme.forest)
 
@@ -74,6 +77,8 @@ struct HomeView: View {
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showAccount) { AccountView(model: account) }
+        .sheet(isPresented: $showSettings) { SettingsView(model: settings, account: account) }
+        .sheet(isPresented: $showHub) { HubView(account: account) }
     }
 }
 

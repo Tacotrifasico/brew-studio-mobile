@@ -348,3 +348,27 @@ final class AccountAndSyncTests: XCTestCase {
         XCTAssertEqual(fallback.source, .local); XCTAssertTrue(fallback.text.contains("extracción estimada es baja"))
     }
 }
+
+final class SettingsTests: XCTestCase {
+    @MainActor func testThemeAndUnitPreferencesRestore() throws {
+        let suite = "SettingsTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let first = SettingsModel(defaults: defaults); first.theme = .dark; first.temperatureUnit = .fahrenheit; first.metricUnits = false
+        let restored = SettingsModel(defaults: defaults)
+        XCTAssertEqual(restored.theme, .dark); XCTAssertEqual(restored.temperatureUnit, .fahrenheit); XCTAssertFalse(restored.metricUnits)
+        XCTAssertEqual(restored.preferredColorScheme, .dark)
+    }
+
+    @MainActor func testProfileUpdateOwnerIsolationAndRemoteMapping() throws {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let repository = ProfileRepository(context: context)
+        let ownerA = UUID(); let ownerB = UUID()
+        let first = try repository.save(ownerId: ownerA, displayName: "Emiliano", alias: "brewther", biography: "V60", avatarColor: "#3F7A63", favoriteMethods: "V60, AeroPress", isPrivate: true)
+        let updated = try repository.save(ownerId: ownerA, displayName: "Emiliano N.", alias: "@brewther", biography: "Café", avatarColor: "#234E3C", favoriteMethods: "V60", isPrivate: false)
+        _ = try repository.save(ownerId: ownerB, displayName: "Otra persona", alias: "otra", biography: "", avatarColor: "#000000", favoriteMethods: "", isPrivate: true)
+        XCTAssertEqual(first.id, updated.id); XCTAssertEqual(updated.alias, "brewther")
+        XCTAssertEqual(try repository.profile(ownerId: ownerA)?.displayName, "Emiliano N.")
+        XCTAssertEqual(try context.fetch(NSFetchRequest<UserProfileRecord>(entityName: "UserProfileRecord")).count, 2)
+        let json = try XCTUnwrap(String(data: repository.remoteJSON(updated), encoding: .utf8))
+        XCTAssertTrue(json.contains("favorite_methods")); XCTAssertFalse(json.contains("email"))
+    }
+}

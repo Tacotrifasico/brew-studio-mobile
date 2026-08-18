@@ -14,6 +14,8 @@ La pantalla de cuenta está preparada para Supabase Auth y almacena tokens en Ke
 
 Gemini se invoca únicamente desde una Edge Function autenticada y la app conserva un fallback local. Las instrucciones de configuración, despliegue y Archive están en `DEPLOYMENT.md`.
 
+Configuración permite tema del sistema, claro u oscuro y preferencias de unidades. Brew Hub ofrece perfil editable, privacidad y estadísticas derivadas exclusivamente de los datos reales guardados.
+
 El target `CupaTests` contiene pruebas XCTest. Si CoreSimulator no inicia, `Tools/LabGoldenVerifier.swift` valida cuatro casos dorados, restauración de estado y persistencia Core Data desde macOS; el comando está en `TEST_PLAN.md`.
 
 Supabase, sincronización multiusuario, Gemini mediante backend y los demás CRUD siguen el estado documentado en `PARITY_MATRIX.md` y `BLOCKERS.md`.

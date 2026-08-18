@@ -36,4 +36,6 @@ Relaciones por UUID estables. Una sesión histórica conserva identificadores y 
 
 `Tasting` guarda familia y notas de sabor, textura, limpieza, persistencia, seis atributos sensoriales, valoración, NPS, notas libres, etapa térmica y vínculo opcional con una preparación. `TastingObservation` conserva cada lectura durante el enfriamiento por `tastingId`. `CupSession` relaciona una cata con una preparación sin impedir catas independientes y mantiene snapshots de técnica y café para proteger el historial.
 
+`UserProfile` usa el UUID de Auth como identidad y conserva nombre, alias, biografía, color de avatar, métodos favoritos y privacidad. Las estadísticas del Hub se derivan de recetas, técnicas, preparaciones y catas activas; no son campos almacenados ni valores simulados.
+
 `syncStatus`: `synced`, `pendingCreate`, `pendingUpdate`, `pendingDelete`, `conflict`, `error`.

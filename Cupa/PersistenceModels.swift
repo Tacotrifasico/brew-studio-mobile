@@ -408,10 +408,19 @@ struct PersistenceController {
         ]
         syncOperationEntity.uniquenessConstraints = [["id"], ["entityName", "entityId"]]
 
+        let profileEntity = NSEntityDescription()
+        profileEntity.name = "UserProfileRecord"; profileEntity.managedObjectClassName = NSStringFromClass(UserProfileRecord.self)
+        profileEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("displayName", .stringAttributeType, defaultValue: ""), attribute("alias", .stringAttributeType, defaultValue: ""),
+            attribute("biography", .stringAttributeType, defaultValue: ""), attribute("avatarColor", .stringAttributeType, defaultValue: "#3F7A63"),
+            attribute("favoriteMethods", .stringAttributeType, defaultValue: ""), attribute("isPrivate", .booleanAttributeType, defaultValue: true)
+        ]
+        profileEntity.uniquenessConstraints = [["id"], ["ownerId"]]
+
         model.entities = [
             coffeeEntity, experimentEntity, grinderEntity, equipmentEntity,
             recipeEntity, ingredientEntity, recipeStepEntity, techniqueEntity, techniqueStepEntity, brewSessionEntity,
-            tastingEntity, tastingObservationEntity, cupSessionEntity, syncOperationEntity
+            tastingEntity, tastingObservationEntity, cupSessionEntity, syncOperationEntity, profileEntity
         ]
         return model
     }

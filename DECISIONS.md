@@ -99,3 +99,7 @@ Se elimina el interruptor de unidades métricas porque sólo persistía un boole
 ## D-025 — Reapertura SQLite como prueba de persistencia
 
 El controlador admite inyectar una URL de almacén sólo para aislar pruebas sin tocar los datos reales. El verificador crea un SQLite temporal, guarda un café con UUID, fecha y existencias, desmonta completamente el almacén, abre un contenedor nuevo y comprueba los mismos valores. El historial persistente puede desactivarse en esa prueba aislada para desmontar el store sin notificaciones del sistema; producción lo conserva activado por defecto.
+
+## D-026 — Historial de uso del café derivado por UUID
+
+El detalle de cada café consulta `BrewSession` y `CupSession` activas por su `beanId`; no persiste una lista duplicada ni contadores que puedan desincronizarse. La pantalla muestra preparaciones, dosis, agua, proporción, fechas, tazas, valoración, etapa térmica y comentario. El borrado lógico del café lo retira del inventario, pero conserva las sesiones y sus snapshots para que el historial siga siendo legible y sincronizable.

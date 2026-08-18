@@ -46,6 +46,7 @@
 - Perfil: creación, edición con UUID estable, normalización de alias, aislamiento entre dos propietarios y DTO sin correo: verificador ejecutado.
 - Configuración: restauración de tema oscuro y Fahrenheit aprobada; eliminado el control métrico sin efecto que no existe en Android.
 - Inventario: fallos de guardado de café, molino y equipo hacen rollback, mantienen el editor abierto y muestran alerta; flujo compilado.
+- Historial por café: consulta de preparación y taza por `beanId`, conteos, calificación/comentario y conservación de ambas sesiones después del borrado lógico del café: verificador ejecutado + XCTest compilado.
 - Social: contrato del feed público, publicación sin correo, reporte, bloqueo, filtro preventivo e importación profunda con atribución: verificador ejecutado + XCTest compilado.
 - Target `CupaTests`: compilación para iOS Simulator aprobada. La ejecución XCTest queda pendiente hasta reparar CoreSimulator local.
 - Target `CupaUITests`: tres recorridos XCTest UI compilados para arm64 y x86_64. La ejecución queda pendiente hasta reparar CoreSimulator local.

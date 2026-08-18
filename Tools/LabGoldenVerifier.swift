@@ -181,6 +181,16 @@ struct LabGoldenVerifier {
         let experiment = LabExperimentRecord(context: context, state: reopenedLab.state, profile: reopenedLab.profile)
         let brew = BrewSessionRecord(context: context, state: preparation.state, recipeName: recipe.name, beanName: bean.name, grinderName: grinder.name)
         try! context.save()
+        var tastingState = TastingState(brewSessionId: brew.id)
+        tastingState.rating = 4.5; tastingState.freeNotes = "Jazmín al enfriar"
+        let tasting = try! TastingRepository(context: context).save(tastingState, brew: brew)
+        let linkedBrews = NSFetchRequest<BrewSessionRecord>(entityName: "BrewSessionRecord")
+        linkedBrews.predicate = NSPredicate(format: "beanId == %@ AND deletedAt == nil", bean.id as CVarArg)
+        let linkedCups = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")
+        linkedCups.predicate = NSPredicate(format: "beanId == %@ AND deletedAt == nil", bean.id as CVarArg)
+        precondition(try! context.count(for: linkedBrews) == 1 && (try! context.count(for: linkedCups)) == 1)
+        let linkedCup = try! context.fetch(linkedCups).first!
+        precondition(linkedCup.rating == 4.5 && linkedCup.comment == "Jazmín al enfriar")
         precondition(experiment.methodId == method.id && experiment.recipeId == recipe.id && experiment.techniqueId == technique.id)
         precondition(brew.methodId == method.id && brew.recipeNameSnapshot == "V60 floral" && brew.beanNameSnapshot == "Etiopía Guji")
         let loadedExperiment = LabModel(defaults: defaults); loadedExperiment.reset(); loadedExperiment.load(experiment: experiment)
@@ -190,6 +200,9 @@ struct LabGoldenVerifier {
         recipe.markDeleted(); technique.markDeleted(); bean.markDeleted(); grinder.markDeleted(); method.markDeleted(); try! context.save()
         precondition(brew.recipeId == recipe.id && brew.methodId == method.id && brew.beanId == bean.id && brew.grinderId == grinder.id)
         precondition(brew.techniqueNameSnapshot == "Tres vertidos" && brew.methodNameSnapshot == "V60 02" && brew.grinderNameSnapshot == "C40")
+        precondition(try! context.count(for: linkedBrews) == 1 && (try! context.count(for: linkedCups)) == 1)
+        precondition(linkedCup.beanNameSnapshot == "Etiopía Guji")
+        precondition(tasting.beanId == bean.id && tasting.evaluatorNotes == "Jazmín al enfriar")
         experiment.markDeleted(); try! context.save(); precondition(experiment.syncStatus == .pendingDelete && experiment.deletedAt != nil)
     }
 

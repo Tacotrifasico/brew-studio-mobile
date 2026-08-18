@@ -373,6 +373,41 @@ final class TastingModelTests: XCTestCase {
     }
 }
 
+final class CoffeeUsageHistoryTests: XCTestCase {
+    @MainActor func testHistoryIsDerivedFromBeanIdentifierAndSurvivesBeanDeletion() throws {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let bean = CoffeeBeanRecord(context: context, name: "Etiopía Guji", brand: "Casa", remainingQuantityGrams: 180)
+        let preparation = PreparationState(
+            techniqueName: "Tres vertidos", methodName: "V60", beanId: bean.id,
+            doseGrams: 18, waterMl: 288, ratio: 16, temperatureC: 93,
+            elapsedSeconds: 180, status: .completed
+        )
+        let brew = BrewSessionRecord(context: context, state: preparation, beanName: bean.name, grinderName: "C40")
+        try context.save()
+        var tastingState = TastingState(brewSessionId: brew.id)
+        tastingState.rating = 4.5; tastingState.freeNotes = "Jazmín al enfriar"
+        let tasting = try TastingRepository(context: context).save(tastingState, brew: brew)
+
+        let brews = NSFetchRequest<BrewSessionRecord>(entityName: "BrewSessionRecord")
+        brews.predicate = NSPredicate(format: "beanId == %@ AND deletedAt == nil", bean.id as CVarArg)
+        let cups = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")
+        cups.predicate = NSPredicate(format: "beanId == %@ AND deletedAt == nil", bean.id as CVarArg)
+        XCTAssertEqual(try context.count(for: brews), 1)
+        XCTAssertEqual(try context.count(for: cups), 1)
+        let cup = try XCTUnwrap(context.fetch(cups).first)
+        XCTAssertEqual(cup.rating, 4.5)
+        XCTAssertEqual(cup.comment, "Jazmín al enfriar")
+
+        bean.markDeleted(); try context.save()
+        XCTAssertEqual(try context.count(for: brews), 1)
+        XCTAssertEqual(try context.count(for: cups), 1)
+        XCTAssertEqual(brew.beanNameSnapshot, "Etiopía Guji")
+        XCTAssertEqual(cup.beanNameSnapshot, "Etiopía Guji")
+        XCTAssertEqual(tasting.beanId, bean.id)
+        XCTAssertEqual(tasting.evaluatorNotes, "Jazmín al enfriar")
+    }
+}
+
 private final class MemoryTokenStore: TokenStore {
     var value: AuthTokens?
     func load() throws -> AuthTokens? { value }

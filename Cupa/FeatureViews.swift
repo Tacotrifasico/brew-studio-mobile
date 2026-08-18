@@ -745,7 +745,7 @@ private struct CoffeeInventoryView: View {
         animation: .default
     ) private var beans: FetchedResults<CoffeeBeanRecord>
     @State private var showAddBean = false
-    @State private var editingBean: CoffeeBeanRecord?
+    @State private var selectedBean: CoffeeBeanRecord?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -763,7 +763,7 @@ private struct CoffeeInventoryView: View {
                     } else {
                         ForEach(beans) { bean in
                             let freshness = CoffeeFreshnessEngine.evaluate(roastDate: bean.roastDate, openedDate: bean.openedDate)
-                            Button { editingBean = bean } label: {
+                            Button { selectedBean = bean } label: {
                                 VStack(alignment: .leading, spacing: 6) {
                                     HStack {
                                         Text(bean.name).font(.headline)
@@ -812,12 +812,8 @@ private struct CoffeeInventoryView: View {
                 return save()
             }
         }
-        .sheet(item: $editingBean) { bean in
-            CoffeeBeanEditor(record: bean) { draft in
-                draft.apply(to: bean)
-                bean.markUpdated()
-                return save()
-            }
+        .sheet(item: $selectedBean) { bean in
+            CoffeeBeanDetail(record: bean)
         }
         .alert("No se pudo guardar el café", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("Aceptar") {}
@@ -826,12 +822,137 @@ private struct CoffeeInventoryView: View {
 
     private func softDelete(at offsets: IndexSet) {
         for index in offsets { beans[index].markDeleted() }
-        _ = save()
+        if let error = save() { errorMessage = error }
     }
 
-    @discardableResult private func save() -> Bool {
-        do { try modelContext.save(); return true }
-        catch { modelContext.rollback(); errorMessage = error.localizedDescription; return false }
+    @discardableResult private func save() -> String? {
+        do { try modelContext.save(); return nil }
+        catch { modelContext.rollback(); return error.localizedDescription }
+    }
+}
+
+private struct CoffeeBeanDetail: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var modelContext
+    private let record: CoffeeBeanRecord
+    @FetchRequest private var brews: FetchedResults<BrewSessionRecord>
+    @FetchRequest private var cups: FetchedResults<CupSessionRecord>
+    @State private var showEditor = false
+
+    init(record: CoffeeBeanRecord) {
+        self.record = record
+        _brews = FetchRequest(
+            sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)],
+            predicate: NSPredicate(format: "beanId == %@ AND deletedAt == nil", record.id as CVarArg),
+            animation: .default
+        )
+        _cups = FetchRequest(
+            sortDescriptors: [NSSortDescriptor(keyPath: \CupSessionRecord.brewDate, ascending: false)],
+            predicate: NSPredicate(format: "beanId == %@ AND deletedAt == nil", record.id as CVarArg),
+            animation: .default
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Café") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(record.name).font(.title3.bold())
+                            Spacer()
+                            CoffeeFreshnessBadge(state: freshness.state)
+                        }
+                        Text(record.brand.isEmpty ? "Sin tostador" : record.brand)
+                            .foregroundStyle(CupaTheme.secondaryText)
+                        if !details.isEmpty { Text(details).font(.subheadline) }
+                        CoffeeFreshnessBar(result: freshness)
+                        Label("\(record.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles", systemImage: "scalemass")
+                            .font(.subheadline).foregroundStyle(CupaTheme.forest)
+                        if !record.notes.isEmpty { Text(record.notes).font(.subheadline).foregroundStyle(CupaTheme.secondaryText) }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section("Uso") {
+                    LabeledContent("Preparaciones", value: "\(brews.count)")
+                    LabeledContent("Tazas catadas", value: "\(cups.count)")
+                }
+
+                Section("Preparaciones recientes") {
+                    if brews.isEmpty {
+                        Text("Todavía no hay preparaciones vinculadas con este café.")
+                            .foregroundStyle(CupaTheme.secondaryText)
+                    } else {
+                        ForEach(brews) { brew in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(brew.techniqueNameSnapshot.isEmpty ? (brew.methodNameSnapshot.isEmpty ? "Preparación" : brew.methodNameSnapshot) : brew.techniqueNameSnapshot)
+                                    .font(.headline)
+                                if !brew.methodNameSnapshot.isEmpty && brew.methodNameSnapshot != brew.techniqueNameSnapshot {
+                                    Text(brew.methodNameSnapshot).font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                                }
+                                Text("\(brew.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g → \(brew.waterMl) ml · 1:\(brew.ratio.formatted(.number.precision(.fractionLength(0...1))))")
+                                    .font(.subheadline)
+                                Text(brew.completedAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+
+                Section("Tazas y catas") {
+                    if cups.isEmpty {
+                        Text("Todavía no hay tazas catadas con este café.")
+                            .foregroundStyle(CupaTheme.secondaryText)
+                    } else {
+                        ForEach(cups) { cup in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(cup.techniqueNameSnapshot.isEmpty ? "Cata" : cup.techniqueNameSnapshot).font(.headline)
+                                    Spacer()
+                                    Label(cup.rating.formatted(.number.precision(.fractionLength(1))), systemImage: "star.fill")
+                                        .font(.subheadline).foregroundStyle(CupaTheme.gold)
+                                }
+                                Text(cup.cupLifeState.localizedCupLife)
+                                    .font(.subheadline).foregroundStyle(CupaTheme.forest)
+                                if !cup.comment.isEmpty { Text(cup.comment).font(.subheadline) }
+                                Text((cup.brewDate ?? cup.createdAt).formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Historial del café")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } }
+                ToolbarItem(placement: .primaryAction) { Button("Editar") { showEditor = true } }
+            }
+            .sheet(isPresented: $showEditor) {
+                CoffeeBeanEditor(record: record) { draft in
+                    draft.apply(to: record)
+                    record.markUpdated()
+                    return save()
+                }
+            }
+        }
+    }
+
+    private var freshness: CoffeeFreshnessResult {
+        CoffeeFreshnessEngine.evaluate(roastDate: record.roastDate, openedDate: record.openedDate)
+    }
+
+    private var details: String {
+        [record.origin, record.variety, record.process, "Tueste \(record.roastLevel.lowercased())"]
+            .filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    private func save() -> String? {
+        do { try modelContext.save(); return nil }
+        catch { modelContext.rollback(); return error.localizedDescription }
     }
 }
 
@@ -919,7 +1040,7 @@ private struct CoffeeBeanDraft {
 private struct CoffeeBeanEditor: View {
     @Environment(\.dismiss) private var dismiss
     private let record: CoffeeBeanRecord?
-    private let onSave: (CoffeeBeanDraft) -> Bool
+    private let onSave: (CoffeeBeanDraft) -> String?
     @State private var name: String
     @State private var brand: String
     @State private var origin: String
@@ -935,8 +1056,9 @@ private struct CoffeeBeanEditor: View {
     @State private var initialQuantity: String
     @State private var remainingQuantity: String
     @State private var notes: String
+    @State private var saveError: String?
 
-    init(record: CoffeeBeanRecord?, onSave: @escaping (CoffeeBeanDraft) -> Bool) {
+    init(record: CoffeeBeanRecord?, onSave: @escaping (CoffeeBeanDraft) -> String?) {
         self.record = record
         self.onSave = onSave
         _name = State(initialValue: record?.name ?? "")
@@ -996,7 +1118,7 @@ private struct CoffeeBeanEditor: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
-                        if onSave(CoffeeBeanDraft(
+                        let error = onSave(CoffeeBeanDraft(
                             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                             brand: brand.trimmingCharacters(in: .whitespacesAndNewlines),
                             origin: origin,
@@ -1010,11 +1132,15 @@ private struct CoffeeBeanEditor: View {
                             initialQuantityGrams: parseDecimal(initialQuantity),
                             remainingQuantityGrams: parseDecimal(remainingQuantity),
                             notes: notes
-                        )) { dismiss() }
+                        ))
+                        if let error { saveError = error } else { dismiss() }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+            .alert("No se pudo guardar el café", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+                Button("Aceptar") {}
+            } message: { Text(saveError ?? "") }
         }
     }
 

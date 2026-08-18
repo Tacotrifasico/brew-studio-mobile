@@ -28,6 +28,8 @@ Relaciones por UUID estables. Una sesión histórica conserva identificadores y 
 
 `CoffeeBean` conserva fechas de tueste y apertura; `CoffeeFreshnessEngine` deriva en tiempo real días, etapa, progreso, recomendación y advertencia de apertura con las reglas de Android. El resultado no se sincroniza porque depende de la fecha actual y se volvería obsoleto.
 
+El historial de uso de `CoffeeBean` se deriva por su UUID estable: `BrewSession.beanId` aporta las preparaciones y `CupSession.beanId` las tazas/catas. No existe una relación duplicada ni un contador persistido. El borrado lógico del café no borra esas sesiones; sus snapshots mantienen nombres y parámetros históricos.
+
 `Equipment` conserva tipo canónico, nombre, marca, modelo, capacidad, configuración, notas, favorito y estado activo. Las sesiones futuras guardarán UUID y snapshot mínimo para conservar historial tras el borrado lógico.
 
 `Recipe` → `RecipeIngredient` y `RecipeStep` por `recipeId`. La receta conserva tipo, intención, método sugerido, favorito, etiquetas, visibilidad y procedencia de copias. Ingredientes y pasos mantienen orden y UUID independientes.

@@ -17,4 +17,5 @@
 - [ ] Bundle ID, versión, cifrado, icono, launch screen y permisos revisados (bundle/versión/cifrado/launch aprobados; no se usan APIs con permiso; ícono preparado y falta validar catálogo).
 - [x] Development, Staging y Production separados y compilables; metadata expandida dentro de cada bundle validada.
 - [ ] Privacidad, accesibilidad y localización revisadas.
+- [ ] Moderación UGC operativa: normas y contacto publicados, cola de reportes atendida y bloqueo validado con dos usuarios.
 - [x] Acciones de cuenta Apple y legales documentadas.

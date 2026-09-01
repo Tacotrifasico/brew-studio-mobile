@@ -834,6 +834,20 @@ final class SettingsTests: XCTestCase {
         let json = try XCTUnwrap(String(data: repository.remoteJSON(updated), encoding: .utf8))
         XCTAssertTrue(json.contains("favorite_methods")); XCTAssertFalse(json.contains("email"))
     }
+
+    @MainActor func testProfileValidationNormalizationAndPrivacyPolicy() throws {
+        let validated = try ProfileInputValidator.validate(displayName: "  Ana Café  ", alias: " @ana.cafe ", biography: "  V60  ", avatarColor: " #3f7a63 ", favoriteMethods: " V60 ")
+        XCTAssertEqual(validated.displayName, "Ana Café"); XCTAssertEqual(validated.alias, "ana.cafe")
+        XCTAssertEqual(validated.biography, "V60"); XCTAssertEqual(validated.avatarColor, "#3F7A63"); XCTAssertEqual(validated.favoriteMethods, "V60")
+        XCTAssertThrowsError(try ProfileInputValidator.validate(displayName: "Ana", alias: "alias con espacios", biography: "", avatarColor: "#3F7A63", favoriteMethods: ""))
+        XCTAssertThrowsError(try ProfileInputValidator.validate(displayName: "Ana", alias: "ana", biography: "", avatarColor: "verde", favoriteMethods: ""))
+        XCTAssertEqual(ProfileSharingPolicy.allowedVisibilities(isPrivate: true), ["DIRECT"])
+        XCTAssertEqual(ProfileSharingPolicy.allowedVisibilities(isPrivate: false), ["PUBLIC", "DIRECT"])
+
+        let persistence = PersistenceController(inMemory: true); let repository = ProfileRepository(context: persistence.container.viewContext)
+        let record = try repository.save(ownerId: UUID(), displayName: " Ana ", alias: "@ana", biography: " Café ", avatarColor: "#3f7a63", favoriteMethods: " V60 ", isPrivate: true)
+        XCTAssertEqual(record.displayName, "Ana"); XCTAssertEqual(record.alias, "ana"); XCTAssertEqual(record.avatarColor, "#3F7A63")
+    }
 }
 
 final class SocialTests: XCTestCase {
@@ -865,9 +879,26 @@ final class SocialTests: XCTestCase {
         try await service.publish(entityType: "recipe", entityId: entityId, fromName: "Barista", fromHandle: "brew", name: "V60", subtitle: "", message: "", payload: payload, accessToken: "jwt")
         let publishBody = String(data: try XCTUnwrap(transport.requests.first?.httpBody), encoding: .utf8) ?? ""
         XCTAssertFalse(publishBody.contains("email")); XCTAssertTrue(publishBody.contains("payload_snapshot"))
-        try await service.report(shareId: UUID(), reason: "USER_REPORTED", accessToken: "jwt")
+        try await service.report(shareId: UUID(), reason: .spam, details: "Enlaces engañosos", accessToken: "jwt")
         try await service.block(userId: UUID(), accessToken: "jwt")
         XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/rest/v1/brew_shares", "/rest/v1/content_reports", "/rest/v1/blocked_users"])
+        let reportBody = try XCTUnwrap((JSONSerialization.jsonObject(with: try XCTUnwrap(transport.requests[1].httpBody)) as? [String: Any]))
+        XCTAssertEqual(reportBody["reason"] as? String, "SPAM_OR_FRAUD: Enlaces engañosos")
+    }
+
+    func testBlockListAndUnblockContracts() async throws {
+        let userId = UUID(); let blockedId = UUID()
+        let listData = try JSONSerialization.data(withJSONObject: [["blocked_user_id": blockedId.uuidString]])
+        let listTransport = MockTransport(responseData: listData)
+        let configuration = AppConfiguration(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon")
+        let ids = try await SocialService(configuration: configuration, transport: listTransport).blockedUserIds(userId: userId, accessToken: "jwt")
+        XCTAssertEqual(ids, [blockedId]); XCTAssertEqual(listTransport.requests.first?.httpMethod, "GET")
+        XCTAssertTrue(listTransport.requests.first?.url?.query?.contains("blocker_id=eq.\(userId.uuidString)") == true)
+
+        let deleteTransport = MockTransport(statusCode: 204)
+        try await SocialService(configuration: configuration, transport: deleteTransport).unblock(userId: blockedId, accessToken: "jwt")
+        XCTAssertEqual(deleteTransport.requests.first?.httpMethod, "DELETE")
+        XCTAssertTrue(deleteTransport.requests.first?.url?.query?.contains("blocked_user_id=eq.\(blockedId.uuidString)") == true)
     }
 
     func testDirectInboxActivityAndReadContracts() async throws {

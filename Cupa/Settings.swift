@@ -40,6 +40,9 @@ struct SettingsView: View {
                     if let supportURL {
                         Link("Contactar soporte y moderación", destination: supportURL)
                     }
+                    if let communityGuidelinesURL {
+                        Link("Normas de la comunidad", destination: communityGuidelinesURL)
+                    }
                 }
                 Section("Cuenta") { Button("Abrir cuenta") { showAccount = true } }
                 Section("Aplicación") { LabeledContent("Versión", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"); LabeledContent("Entorno", value: Bundle.main.object(forInfoDictionaryKey: "APP_ENVIRONMENT") as? String ?? "Development") }
@@ -55,6 +58,7 @@ struct SettingsView: View {
     }
 
     private var supportURL: URL? { configuredURL(for: "SUPPORT_URL") }
+    private var communityGuidelinesURL: URL? { configuredURL(for: "COMMUNITY_GUIDELINES_URL") }
 
     private func configuredURL(for key: String) -> URL? {
         guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,

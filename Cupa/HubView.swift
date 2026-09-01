@@ -23,7 +23,10 @@ struct HubView: View {
     @State private var inbox: [SocialInboxItem] = []; @State private var inboxLoading = false
     @State private var activity: [SocialActivity] = []; @State private var communitySection = 0
     @State private var likedShareIds: Set<UUID> = []; @State private var savedShareIds: Set<UUID> = []
+    @State private var blockedUserIds: Set<UUID> = []
     @State private var shareDraft: HubShareDraft?
+    @State private var reportShare: SocialShare?
+    @State private var blockShare: SocialShare?
 
     var body: some View {
         NavigationStack {
@@ -40,10 +43,19 @@ struct HubView: View {
             }
             .sheet(isPresented: $showAccount) { AccountView(model: account) }
             .sheet(item: $shareDraft) { draft in
-                ShareComposer(title: draft.title) { message, visibility, recipient in
+                ShareComposer(title: draft.title, allowsPublic: !isPrivate) { message, visibility, recipient in
                     publish(draft, message: message, visibility: visibility, targetUserId: recipient)
                 }
             }
+            .sheet(item: $reportShare) { share in
+                ReportComposer(shareName: share.name) { reason, details in
+                    socialAction(successMessage: "Reporte enviado para revisión.") { try await $0.report(shareId: share.id, reason: reason, details: details, accessToken: $1) }
+                }
+            }
+            .confirmationDialog("¿Bloquear a este usuario?", isPresented: Binding(get: { blockShare != nil }, set: { if !$0 { blockShare = nil } }), presenting: blockShare) { share in
+                Button("Bloquear @\(share.fromHandle)", role: .destructive) { block(share); blockShare = nil }
+                Button("Cancelar", role: .cancel) { blockShare = nil }
+            } message: { _ in Text("Sus publicaciones dejarán de aparecer. Puedes desbloquearlo desde tu perfil.") }
             .task { loadProfile(); await loadSocialData() }
             .alert("Perfil", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("Aceptar") {} } message: { Text(message ?? "") }
         }
@@ -56,12 +68,49 @@ struct HubView: View {
     private var profileTab: some View {
         Form {
             Section("Perfil público") {
-                TextField("Nombre", text: $displayName); TextField("Alias", text: $alias).textInputAutocapitalization(.never)
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle().fill(profileAvatarColor)
+                        Text(profileInitials).font(.title2.bold()).foregroundStyle(.white)
+                    }.frame(width: 64, height: 64).accessibilityLabel("Avatar con iniciales \(profileInitials)")
+                    VStack(alignment: .leading) {
+                        Text(displayName.isEmpty ? "Tu nombre" : displayName).font(.headline)
+                        Text(alias.isEmpty ? "@alias" : "@\(alias.replacingOccurrences(of: "@", with: ""))").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+                TextField("Nombre", text: $displayName)
+                Text("\(displayName.count)/80").font(.caption2).foregroundStyle(displayName.count > 80 ? .red : .secondary)
+                TextField("Alias", text: $alias).textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("Biografía", text: $biography, axis: .vertical).lineLimit(2...5)
+                Text("\(biography.count)/300").font(.caption2).foregroundStyle(biography.count > 300 ? .red : .secondary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(["#3F7A63", "#234E3C", "#8C4A32", "#315C8C", "#6C4A8C", "#8C6A24"], id: \.self) { hex in
+                            Button { avatarColor = hex } label: {
+                                Circle().fill(color(hex)).frame(width: 38, height: 38)
+                                    .overlay { if avatarColor.uppercased() == hex { Image(systemName: "checkmark").foregroundStyle(.white).fontWeight(.bold) } }
+                            }.buttonStyle(.plain).accessibilityLabel("Usar color \(hex)")
+                        }
+                    }.padding(.vertical, 2)
+                }
                 TextField("Color de avatar (#RRGGBB)", text: $avatarColor).textInputAutocapitalization(.characters)
                 TextField("Métodos favoritos", text: $favoriteMethods)
                 Toggle("Perfil privado", isOn: $isPrivate)
-                Button("Guardar perfil", action: saveProfile).disabled(displayName.trimmingCharacters(in: .whitespaces).isEmpty || alias.trimmingCharacters(in: .whitespaces).isEmpty)
+                Text(isPrivate ? "Un perfil privado sólo puede enviar fórmulas directamente; no puede publicarlas en el muro." : "Tu perfil puede publicar fórmulas en el muro público.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let profileValidationError { Text(profileValidationError).font(.caption).foregroundStyle(.red) }
+                Button("Guardar perfil", action: saveProfile).disabled(profileValidationError != nil)
+            }
+            Section("Privacidad social") {
+                if blockedUserIds.isEmpty { Text("No has bloqueado usuarios.").foregroundStyle(.secondary) }
+                else {
+                    ForEach(Array(blockedUserIds).sorted(by: { $0.uuidString < $1.uuidString }), id: \.self) { userId in
+                        HStack {
+                            VStack(alignment: .leading) { Text("Usuario bloqueado"); Text(userId.uuidString).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
+                            Spacer(); Button("Desbloquear") { unblock(userId) }
+                        }
+                    }
+                }
             }
             Section("Estadísticas reales") {
                 LabeledContent("Recetas", value: "\(recipes.count)"); LabeledContent("Técnicas", value: "\(techniques.count)")
@@ -136,8 +185,8 @@ struct HubView: View {
                 }
                 Menu {
                     Button(savedShareIds.contains(share.id) ? "Quitar de guardados" : "Guardar publicación") { toggleSaved(share) }
-                    Button("Reportar contenido", role: .destructive) { socialAction { try await $0.report(shareId: share.id, reason: "USER_REPORTED", accessToken: $1) } }
-                    Button("Bloquear usuario", role: .destructive) { block(share) }
+                    Button("Reportar contenido", role: .destructive) { reportShare = share }
+                    Button("Bloquear usuario", role: .destructive) { blockShare = share }
                 } label: { Image(systemName: "ellipsis") }
                     .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Más acciones para \(share.name)")
             }.font(.caption)
@@ -177,14 +226,19 @@ struct HubView: View {
                 async let activity = SocialService(configuration: account.configuration).activity(userId: userId, accessToken: token)
                 async let likes = SocialService(configuration: account.configuration).likedShareIds(userId: userId, accessToken: token)
                 async let saves = SocialService(configuration: account.configuration).savedShareIds(userId: userId, accessToken: token)
-                return try await (feed, inbox, activity, likes, saves)
+                async let blocks = SocialService(configuration: account.configuration).blockedUserIds(userId: userId, accessToken: token)
+                return try await (feed, inbox, activity, likes, saves, blocks)
             }
-            feed = result.0; inbox = result.1; activity = result.2; likedShareIds = result.3; savedShareIds = result.4
+            feed = result.0; inbox = result.1; activity = result.2; likedShareIds = result.3; savedShareIds = result.4; blockedUserIds = result.5
         } catch { if account.configuration.isSupabaseConfigured { message = error.localizedDescription } }
         feedLoading = false; inboxLoading = false
     }
 
     private func publish(_ draft: HubShareDraft, message: String, visibility: String, targetUserId: UUID?) {
+        guard ProfileSharingPolicy.allowedVisibilities(isPrivate: isPrivate).contains(visibility) else {
+            self.message = "Tu perfil privado sólo permite compartir directamente."
+            return
+        }
         switch draft {
         case let .recipe(recipe): publish(recipe: recipe, message: message, visibility: visibility, targetUserId: targetUserId)
         case let .technique(technique): publish(technique: technique, message: message, visibility: visibility, targetUserId: targetUserId)
@@ -226,7 +280,8 @@ struct HubView: View {
             }
         } catch { message = error.localizedDescription }
     }
-    private func block(_ share: SocialShare) { socialAction { try await $0.block(userId: share.ownerId, accessToken: $1) }; feed.removeAll { $0.ownerId == share.ownerId } }
+    private func block(_ share: SocialShare) { socialAction(successMessage: "Usuario bloqueado.") { try await $0.block(userId: share.ownerId, accessToken: $1) } }
+    private func unblock(_ userId: UUID) { socialAction(successMessage: "Usuario desbloqueado.") { try await $0.unblock(userId: userId, accessToken: $1) } }
     private func toggleLike(_ share: SocialShare) {
         let wasLiked = likedShareIds.contains(share.id)
         socialAction(successMessage: wasLiked ? "Se quitó Me gusta." : "Marcaste Me gusta.") { service, token in
@@ -286,18 +341,39 @@ struct HubView: View {
             loadProfile(); await loadSocialData()
         }
     }
+
+    private var profileValidationError: String? {
+        do { _ = try ProfileInputValidator.validate(displayName: displayName, alias: alias, biography: biography, avatarColor: avatarColor, favoriteMethods: favoriteMethods); return nil }
+        catch { return error.localizedDescription }
+    }
+    private var profileInitials: String {
+        let parts = displayName.split(whereSeparator: { $0.isWhitespace }).prefix(2)
+        let value = parts.compactMap(\.first).map(String.init).joined().uppercased()
+        return value.isEmpty ? "C" : value
+    }
+    private var profileAvatarColor: Color { color(avatarColor) }
+    private func color(_ hex: String) -> Color {
+        let normalized = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        return Color(hex: UInt(normalized, radix: 16) ?? 0x3F7A63)
+    }
 }
 
 private struct ShareComposer: View {
     let title: String
+    let allowsPublic: Bool
     let onPublish: (String, String, UUID?) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var message = ""
-    @State private var visibility = "PUBLIC"
+    @State private var visibility: String
     @State private var recipientText = ""
 
     private var recipient: UUID? { UUID(uuidString: recipientText.trimmingCharacters(in: .whitespacesAndNewlines)) }
     private var canPublish: Bool { visibility == "PUBLIC" || recipient != nil }
+
+    init(title: String, allowsPublic: Bool, onPublish: @escaping (String, String, UUID?) -> Void) {
+        self.title = title; self.allowsPublic = allowsPublic; self.onPublish = onPublish
+        _visibility = State(initialValue: allowsPublic ? "PUBLIC" : "DIRECT")
+    }
 
     var body: some View {
         NavigationStack {
@@ -305,9 +381,10 @@ private struct ShareComposer: View {
                 Section("Fórmula") { Text(title).font(.headline) }
                 Section("Destino") {
                     Picker("Compartir en", selection: $visibility) {
-                        Text("Muro público").tag("PUBLIC")
+                        if allowsPublic { Text("Muro público").tag("PUBLIC") }
                         Text("Buzón directo").tag("DIRECT")
                     }.pickerStyle(.segmented)
+                    if !allowsPublic { Text("Tu perfil privado sólo permite compartir directamente.").font(.caption).foregroundStyle(.secondary) }
                     if visibility == "DIRECT" {
                         TextField("UUID del destinatario", text: $recipientText)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -323,6 +400,7 @@ private struct ShareComposer: View {
                 Section {
                     Text(visibility == "PUBLIC" ? "Cualquier usuario autenticado podrá ver e importar esta fórmula." : "Sólo la cuenta destinataria y tú podrán verla.")
                         .font(.caption).foregroundStyle(.secondary)
+                    if let communityURL = configuredHTTPSURL(for: "COMMUNITY_GUIDELINES_URL") { Link("Consultar normas de la comunidad", destination: communityURL).font(.caption) }
                 }
             }
             .navigationTitle("Compartir fórmula")
@@ -336,4 +414,37 @@ private struct ShareComposer: View {
             }
         }
     }
+}
+
+private struct ReportComposer: View {
+    let shareName: String
+    let onSubmit: (SocialReportReason, String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var reason = SocialReportReason.harassment
+    @State private var details = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Publicación") { Text(shareName).font(.headline) }
+                Section("Motivo") { Picker("Motivo", selection: $reason) { ForEach(SocialReportReason.allCases) { Text($0.label).tag($0) } } }
+                Section("Detalles opcionales") {
+                    TextField("Explica qué ocurrió", text: $details, axis: .vertical).lineLimit(3...7)
+                    Text("\(details.count)/450").font(.caption2).foregroundStyle(details.count > 450 ? .red : .secondary)
+                }
+                Section { Text("El reporte se enviará para revisión. Si existe peligro inmediato, contacta a los servicios de emergencia locales.").font(.caption).foregroundStyle(.secondary) }
+            }
+            .navigationTitle("Reportar contenido").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Enviar") { onSubmit(reason, details); dismiss() }.disabled(details.count > 450) }
+            }
+        }
+    }
+}
+
+private func configuredHTTPSURL(for key: String) -> URL? {
+    guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+          let url = URL(string: value), url.scheme?.lowercased() == "https" else { return nil }
+    return url
 }

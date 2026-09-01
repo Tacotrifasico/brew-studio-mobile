@@ -526,9 +526,18 @@ struct LabGoldenVerifier {
         let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let repository = ProfileRepository(context: context)
         let ownerA = UUID(); let ownerB = UUID()
         let first = try! repository.save(ownerId: ownerA, displayName: "Emiliano", alias: "brewther", biography: "V60", avatarColor: "#3F7A63", favoriteMethods: "V60", isPrivate: true)
-        let updated = try! repository.save(ownerId: ownerA, displayName: "Emiliano N.", alias: "@brewther", biography: "Café", avatarColor: "#234E3C", favoriteMethods: "V60", isPrivate: false)
+        let updated = try! repository.save(ownerId: ownerA, displayName: " Emiliano N. ", alias: " @brewther ", biography: " Café ", avatarColor: "#234e3c", favoriteMethods: " V60 ", isPrivate: false)
         _ = try! repository.save(ownerId: ownerB, displayName: "Otra", alias: "otra", biography: "", avatarColor: "#000000", favoriteMethods: "", isPrivate: true)
-        precondition(first.id == updated.id && updated.alias == "brewther")
+        precondition(first.id == updated.id && updated.alias == "brewther" && updated.avatarColor == "#234E3C")
+        precondition(updated.biography == "Café" && updated.favoriteMethods == "V60")
+        do {
+            _ = try repository.save(ownerId: ownerA, displayName: "Emiliano", alias: "alias con espacios", biography: "", avatarColor: "#000000", favoriteMethods: "", isPrivate: true)
+            preconditionFailure("El perfil aceptó un alias inválido")
+        } catch ProfileInputError.invalidAlias {
+            // Resultado esperado.
+        } catch { preconditionFailure("Error inesperado de perfil: \(error)") }
+        precondition(ProfileSharingPolicy.allowedVisibilities(isPrivate: true) == ["DIRECT"])
+        precondition(ProfileSharingPolicy.allowedVisibilities(isPrivate: false) == ["PUBLIC", "DIRECT"])
         precondition(try! context.fetch(NSFetchRequest<UserProfileRecord>(entityName: "UserProfileRecord")).count == 2)
     }
 

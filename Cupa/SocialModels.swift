@@ -76,6 +76,32 @@ struct SocialActivity: Codable, Identifiable, Equatable {
 
 enum SocialCopyMode: String { case imported = "IMPORT", forked = "FORK" }
 
+enum SocialReportReason: String, CaseIterable, Identifiable {
+    case harassment = "HARASSMENT"
+    case hate = "HATE_OR_VIOLENCE"
+    case sexual = "SEXUAL_CONTENT"
+    case spam = "SPAM_OR_FRAUD"
+    case dangerous = "DANGEROUS_CONTENT"
+    case other = "OTHER"
+
+    var id: Self { self }
+    var label: String {
+        switch self {
+        case .harassment: "Acoso o intimidación"
+        case .hate: "Odio o violencia"
+        case .sexual: "Contenido sexual"
+        case .spam: "Spam o fraude"
+        case .dangerous: "Contenido peligroso"
+        case .other: "Otro motivo"
+        }
+    }
+}
+
+enum SocialReportValidationError: LocalizedError, Equatable {
+    case detailsTooLong
+    var errorDescription: String? { "Los detalles del reporte deben tener 450 caracteres o menos." }
+}
+
 struct SocialService {
     let configuration: AppConfiguration; let transport: NetworkTransport
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
@@ -91,6 +117,15 @@ struct SocialService {
     func savedShareIds(userId: UUID, accessToken: String) async throws -> Set<UUID> {
         let (data, _) = try await request(path: "rest/v1/share_saves", query: "select=share_id&user_id=eq.\(userId.uuidString)", method: "GET", body: nil, accessToken: accessToken, prefer: nil)
         return try decodeShareIds(data)
+    }
+    func blockedUserIds(userId: UUID, accessToken: String) async throws -> Set<UUID> {
+        struct Reference: Decodable {
+            let blockedUserId: UUID
+            enum CodingKeys: String, CodingKey { case blockedUserId = "blocked_user_id" }
+        }
+        let query = "select=blocked_user_id&blocker_id=eq.\(userId.uuidString)"
+        let (data, _) = try await request(path: "rest/v1/blocked_users", query: query, method: "GET", body: nil, accessToken: accessToken, prefer: nil)
+        return Set(try JSONDecoder().decode([Reference].self, from: data).map(\.blockedUserId))
     }
     func inbox(userId: UUID, accessToken: String) async throws -> [SocialInboxItem] {
         let query = "select=id,share_id,target_user_id,read_at,created_at,share:brew_shares(*)&target_user_id=eq.\(userId.uuidString)&order=created_at.desc&limit=50"
@@ -131,11 +166,17 @@ struct SocialService {
     func unsave(shareId: UUID, accessToken: String) async throws {
         _ = try await request(path: "rest/v1/share_saves", query: "share_id=eq.\(shareId.uuidString)", method: "DELETE", body: nil, accessToken: accessToken, prefer: "return=minimal")
     }
-    func report(shareId: UUID, reason: String, accessToken: String) async throws {
-        _ = try await request(path: "rest/v1/content_reports", query: nil, method: "POST", body: try JSONSerialization.data(withJSONObject: ["share_id": shareId.uuidString, "reason": reason]), accessToken: accessToken, prefer: "return=minimal")
+    func report(shareId: UUID, reason: SocialReportReason, details: String = "", accessToken: String) async throws {
+        let cleanDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleanDetails.count <= 450 else { throw SocialReportValidationError.detailsTooLong }
+        let value = cleanDetails.isEmpty ? reason.rawValue : "\(reason.rawValue): \(cleanDetails)"
+        _ = try await request(path: "rest/v1/content_reports", query: nil, method: "POST", body: try JSONSerialization.data(withJSONObject: ["share_id": shareId.uuidString, "reason": value]), accessToken: accessToken, prefer: "return=minimal")
     }
     func block(userId: UUID, accessToken: String) async throws {
         _ = try await request(path: "rest/v1/blocked_users", query: nil, method: "POST", body: try JSONSerialization.data(withJSONObject: ["blocked_user_id": userId.uuidString]), accessToken: accessToken, prefer: "resolution=ignore-duplicates,return=minimal")
+    }
+    func unblock(userId: UUID, accessToken: String) async throws {
+        _ = try await request(path: "rest/v1/blocked_users", query: "blocked_user_id=eq.\(userId.uuidString)", method: "DELETE", body: nil, accessToken: accessToken, prefer: "return=minimal")
     }
 
     @MainActor func importShare(_ share: SocialShare, mode: SocialCopyMode = .imported, context: NSManagedObjectContext) throws {

@@ -67,6 +67,7 @@
 - Privacidad: `PrivacyInfo.xcprivacy` válido con `plutil` e incluido en el bundle Release; consentimiento Gemini explícito y revocable: compilado.
 - Archive técnico Release: aprobado sin firma, excluyendo únicamente AppIcon por fallo de `CoreSimulatorService/simdiskimaged` que afecta a `actool` en esta Mac.
 - Metadatos Release: bundle `com.tacotrifasico.cupa`, versión `1.0` y `ITSAppUsesNonExemptEncryption=false` comprobados en el `Info.plist` construido; enlaces HTTPS legales aparecen sólo cuando están configurados.
+- Perfil/UGC: normalización y rechazo de entradas inválidas, política privado/directo, categorías de reporte y contratos de listar/desbloquear compilados; el verificador ejecuta persistencia, color normalizado y política de visibilidad.
 - Ambientes: Xcode detecta Debug, Staging y Release; los esquemas compartidos `Cupa` y `Cupa-Staging` están disponibles. Staging compila app, unitarias y cinco recorridos UI para ambas arquitecturas de simulador con nombre/bundle independientes; Production compila para iPhone con `APP_ENVIRONMENT=Production` dentro del bundle.
 - Configuración remota: valores vacíos e HTTP remoto se rechazan, HTTPS se normaliza y HTTP local se admite sólo para `localhost`/`127.0.0.1`: verificador ejecutado + XCTest compilado.
 - Distribución estática: launch screen nativo, español como región de desarrollo, iPhone arm64, pantalla completa y orientaciones soportadas constan en el `Info.plist`; no se importan APIs que requieran cámara, fotos, ubicación, micrófono, contactos, calendario o salud.

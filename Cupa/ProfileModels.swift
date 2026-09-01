@@ -10,6 +10,53 @@ final class UserProfileRecord: NSManagedObject, SyncTrackedRecord {
 }
 extension UserProfileRecord: Identifiable {}
 
+struct ValidatedProfileInput: Equatable {
+    let displayName: String
+    let alias: String
+    let biography: String
+    let avatarColor: String
+    let favoriteMethods: String
+}
+
+enum ProfileInputError: LocalizedError, Equatable {
+    case missingDisplayName, missingAlias, displayNameTooLong, invalidAlias, biographyTooLong, invalidAvatarColor, favoriteMethodsTooLong
+
+    var errorDescription: String? {
+        switch self {
+        case .missingDisplayName: "Escribe el nombre que quieres mostrar."
+        case .missingAlias: "Escribe un alias."
+        case .displayNameTooLong: "El nombre debe tener 80 caracteres o menos."
+        case .invalidAlias: "El alias debe tener hasta 40 caracteres y usar sólo letras, números, punto, guion o guion bajo."
+        case .biographyTooLong: "La biografía debe tener 300 caracteres o menos."
+        case .invalidAvatarColor: "El color del avatar debe tener el formato #RRGGBB."
+        case .favoriteMethodsTooLong: "Los métodos favoritos deben tener 300 caracteres o menos."
+        }
+    }
+}
+
+enum ProfileInputValidator {
+    static func validate(displayName: String, alias: String, biography: String, avatarColor: String, favoriteMethods: String) throws -> ValidatedProfileInput {
+        let cleanName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines).drop(while: { $0 == "@" })
+        let cleanBiography = biography.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanColor = avatarColor.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let cleanMethods = favoriteMethods.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty else { throw ProfileInputError.missingDisplayName }
+        guard !cleanAlias.isEmpty else { throw ProfileInputError.missingAlias }
+        guard cleanName.count <= 80 else { throw ProfileInputError.displayNameTooLong }
+        guard cleanAlias.count <= 40,
+              cleanAlias.range(of: "^[A-Za-z0-9._-]+$", options: .regularExpression) != nil else { throw ProfileInputError.invalidAlias }
+        guard cleanBiography.count <= 300 else { throw ProfileInputError.biographyTooLong }
+        guard cleanColor.range(of: "^#[0-9A-F]{6}$", options: .regularExpression) != nil else { throw ProfileInputError.invalidAvatarColor }
+        guard cleanMethods.count <= 300 else { throw ProfileInputError.favoriteMethodsTooLong }
+        return .init(displayName: cleanName, alias: String(cleanAlias), biography: cleanBiography, avatarColor: cleanColor, favoriteMethods: cleanMethods)
+    }
+}
+
+enum ProfileSharingPolicy {
+    static func allowedVisibilities(isPrivate: Bool) -> [String] { isPrivate ? ["DIRECT"] : ["PUBLIC", "DIRECT"] }
+}
+
 @MainActor
 struct ProfileRepository {
     let context: NSManagedObjectContext
@@ -19,13 +66,13 @@ struct ProfileRepository {
         return try context.fetch(request).first
     }
     @discardableResult func save(ownerId: UUID, displayName: String, alias: String, biography: String, avatarColor: String, favoriteMethods: String, isPrivate: Bool) throws -> UserProfileRecord {
+        let input = try ProfileInputValidator.validate(displayName: displayName, alias: alias, biography: biography, avatarColor: avatarColor, favoriteMethods: favoriteMethods)
         let record = try profile(ownerId: ownerId) ?? UserProfileRecord(context: context)
         if record.value(forKey: "createdAt") == nil {
             record.id = ownerId; record.ownerId = ownerId; record.createdAt = .now; record.version = 1; record.syncStatusRaw = SyncStatus.pendingCreate.rawValue; record.deletedAt = nil
         } else { record.markUpdated() }
-        record.displayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        record.alias = alias.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "@", with: "")
-        record.biography = biography; record.avatarColor = avatarColor; record.favoriteMethods = favoriteMethods; record.isPrivate = isPrivate; record.updatedAt = .now
+        record.displayName = input.displayName; record.alias = input.alias; record.biography = input.biography
+        record.avatarColor = input.avatarColor; record.favoriteMethods = input.favoriteMethods; record.isPrivate = isPrivate; record.updatedAt = .now
         try context.save(); return record
     }
     func remoteJSON(_ record: UserProfileRecord) throws -> Data {

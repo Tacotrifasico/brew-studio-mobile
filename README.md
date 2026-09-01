@@ -24,6 +24,8 @@ El proyecto incluye el AppIcon de la referencia Android y semántica VoiceOver p
 
 Al iniciar sesión, la sincronización reclama los datos creados offline, sube la outbox y descarga cambios incrementales de todos los agregados para restaurarlos en otro dispositivo. La sesión sobrevive a cortes de internet sin reutilizar tokens vencidos y la app reintenta automáticamente al recuperar red o volver al primer plano. La validación contra el proyecto Supabase real requiere las dos variables públicas descritas en `BLOCKERS.md`.
 
+El contrato remoto usa las tablas oficiales de Android (`beans`, `shares` y `user_id` en las entidades compartidas), de modo que Android y iOS no crean inventarios o comunidades paralelos. Las migraciones conservan las columnas históricas y traducen los campos necesarios; deben probarse sobre un clon Staging antes de aplicarse a producción.
+
 Los datos locales también están separados por cuenta: cerrar sesión oculta inmediatamente el contenido del propietario anterior y una cuenta distinta usa sus propias entidades, cola de sincronización, Calculadora, Laboratorio, Preparación y Cata. El trabajo creado sin cuenta permanece como invitado y puede ser reclamado por el primer usuario que sincronice.
 
 El target `CupaTests` contiene pruebas XCTest. Si CoreSimulator no inicia, `Tools/LabGoldenVerifier.swift` valida cuatro casos dorados, restauración de estado y persistencia Core Data desde macOS; el comando está en `TEST_PLAN.md`.

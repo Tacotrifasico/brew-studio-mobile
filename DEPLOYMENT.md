@@ -29,7 +29,9 @@ supabase functions deploy gemini-suggestions
 supabase functions deploy delete-account
 ```
 
-Después se debe validar con dos cuentas distintas que cada usuario sólo pueda leer y modificar sus filas. También se prueban registro, verificación de correo, recuperación, renovación, cierre, eliminación, cuota de Gemini y restauración en otro dispositivo.
+Antes de `supabase db push`, crear un respaldo y ensayar sobre un proyecto Staging clonado. El orden versionado prepara primero las tablas Android, conserva las referencias de granos y finalmente alinea `beans`/`shares` como fuentes comunes. Después del ensayo, comparar conteos y una muestra por UUID antes/después; no ejecutar la migración directamente sobre producción si aparecen violaciones de claves, propietarios nulos o duplicados de buzón.
+
+Después se debe validar con dos cuentas distintas que cada usuario sólo pueda leer y modificar sus filas. También se prueban registro, verificación de correo, recuperación, renovación, cierre, eliminación, cuota de Gemini y restauración en otro dispositivo. Con las dos aplicaciones se crea y edita al menos un café, molino, equipo, receta, técnica con pasos, experimento, perfil y publicación en cada dirección; ambos clientes deben ver el mismo UUID y el último valor.
 
 ## Xcode y TestFlight
 

@@ -2,6 +2,8 @@
 
 Todas las entidades sincronizables incluyen `id`, `ownerId`, `createdAt`, `updatedAt`, `version`, `syncStatus` y `deletedAt` cuando corresponda.
 
+En Core Data la propiedad se llama siempre `ownerId`. En Supabase, las entidades que ya existen en Android (`beans`, `grinders`, `equipment`, `recipes`, `techniques`, `technique_steps` y `lab_experiments`) usan `user_id`; los agregados exclusivos de iOS usan `owner_id`. El descriptor de sincronización hace esa traducción explícita y RLS comprueba la columna remota correspondiente.
+
 Entidades independientes:
 
 - `UserProfile`
@@ -42,7 +44,7 @@ El historial de uso de `CoffeeBean` se deriva por su UUID estable: `BrewSession.
 
 `UserProfile` usa el UUID de Auth como identidad y conserva nombre, alias, biografía, color de avatar, métodos favoritos y privacidad. Las estadísticas del Hub se derivan de recetas, técnicas, preparaciones y catas activas; no son campos almacenados ni valores simulados.
 
-`BrewShare` conserva tipo/UUID de la entidad, autor público, visibilidad, destino opcional, mensaje y snapshot tipado. `InboxItem` enlaza una publicación directa con destinatario, lectura y fecha sin duplicar el snapshot. `ActivityItem` registra acciones sociales reales del usuario. `ShareLike`, `ShareSave`, `BlockedUser` y `ContentReport` son tablas separadas con claves compuestas o unicidad para impedir duplicados. El motivo de reporte conserva una categoría estable y detalles limitados; `BlockedUser` puede eliminarse para desbloquear. Una copia o variante crea un agregado local con UUID nuevo, `IMPORT` o `FORK`, y conserva atribución; nunca adopta el UUID editable del autor. `profiles.is_private` prohíbe crear publicaciones `PUBLIC` tanto en iOS como mediante trigger de base de datos.
+`SocialShare` se almacena en la tabla Android `shares` y conserva tipo/UUID de la entidad, autor público, visibilidad, destino opcional, mensaje y snapshot plano interoperable. El modelo iOS normaliza ese snapshot a una receta o técnica tipada y también acepta el envoltorio usado por versiones iOS anteriores. `InboxItem` enlaza una publicación directa con destinatario, lectura y fecha sin duplicar el snapshot. `ActivityItem` registra acciones sociales reales del usuario. `ShareLike`, `ShareSave`, `BlockedUser` y `ContentReport` son tablas separadas con claves compuestas o unicidad para impedir duplicados. El motivo de reporte conserva una categoría estable y detalles limitados; `BlockedUser` puede eliminarse para desbloquear. Una copia o variante crea un agregado local con UUID nuevo, `IMPORT` o `FORK`, y conserva atribución; nunca adopta el UUID editable del autor. `profiles.is_private` prohíbe crear publicaciones públicas tanto en iOS como mediante trigger de base de datos.
 
 `SyncOperation` es una outbox local compactada por tabla y UUID. Conserva operación, payload, intentos, próximo reintento y último error. No se sincroniza a Supabase: coordina el envío de todas las entidades privadas y desaparece lógicamente sólo después de una respuesta remota exitosa.
 

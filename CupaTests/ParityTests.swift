@@ -858,8 +858,8 @@ final class SocialTests: XCTestCase {
         let transport = MockTransport(responseData: try JSONEncoder().encode([share]))
         let service = SocialService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
         let feed = try await service.feed(accessToken: "user-jwt")
-        XCTAssertEqual(feed, [share]); XCTAssertEqual(transport.requests.first?.url?.path, "/rest/v1/brew_shares")
-        XCTAssertTrue(transport.requests.first?.url?.query?.contains("visibility=eq.PUBLIC") == true)
+        XCTAssertEqual(feed, [share]); XCTAssertEqual(transport.requests.first?.url?.path, "/rest/v1/shares")
+        XCTAssertTrue(transport.requests.first?.url?.query?.contains("visibility=eq.public") == true)
 
         let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
         try service.importShare(share, context: context)
@@ -878,12 +878,30 @@ final class SocialTests: XCTestCase {
         let entityId = UUID(); let payload = SharePayloadSnapshot(kind: "recipe", recipe: .init(name: "V60", recipeKind: "BLACK_COFFEE", intention: "", suggestedMethodName: "V60", tags: "", ingredients: [], steps: []), technique: nil)
         try await service.publish(entityType: "recipe", entityId: entityId, fromName: "Barista", fromHandle: "brew", name: "V60", subtitle: "", message: "", payload: payload, accessToken: "jwt")
         let publishBody = String(data: try XCTUnwrap(transport.requests.first?.httpBody), encoding: .utf8) ?? ""
-        XCTAssertFalse(publishBody.contains("email")); XCTAssertTrue(publishBody.contains("payload_snapshot"))
+        XCTAssertFalse(publishBody.contains("email")); XCTAssertTrue(publishBody.contains("payload_snapshot_json"))
+        let publishJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(transport.requests.first?.httpBody)) as? [String: Any])
+        let snapshot = try XCTUnwrap(publishJSON["payload_snapshot_json"] as? [String: Any])
+        XCTAssertEqual(snapshot["name"] as? String, "V60"); XCTAssertNil(snapshot["recipe"]); XCTAssertNil(snapshot["kind"])
         try await service.report(shareId: UUID(), reason: .spam, details: "Enlaces engañosos", accessToken: "jwt")
         try await service.block(userId: UUID(), accessToken: "jwt")
-        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/rest/v1/brew_shares", "/rest/v1/content_reports", "/rest/v1/blocked_users"])
+        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/rest/v1/shares", "/rest/v1/content_reports", "/rest/v1/blocked_users"])
         let reportBody = try XCTUnwrap((JSONSerialization.jsonObject(with: try XCTUnwrap(transport.requests[1].httpBody)) as? [String: Any]))
         XCTAssertEqual(reportBody["reason"] as? String, "SPAM_OR_FRAUD: Enlaces engañosos")
+    }
+
+    func testAndroidFlatSharePayloadDecodesAndMessageLimitMatchesBackend() throws {
+        let id = UUID(); let owner = UUID()
+        let androidShare: [String: Any] = [
+            "id": id.uuidString, "from_user_id": owner.uuidString, "entity_type": "recipe", "entity_id": id.uuidString,
+            "from_name": "Ana", "from_handle": "ana", "visibility": "public", "name": "V60 Android", "subtitle": "Receta", "message": "",
+            "payload_snapshot_json": ["name": "V60 Android", "recipeKind": "BLACK_COFFEE", "intention": "Dulzor", "tags": "frutal"],
+            "original_entity_id": id.uuidString, "status": "active", "created_at": "2026-09-01T00:00:00Z", "updated_at": "2026-09-01T00:00:00Z"
+        ]
+        let share = try JSONDecoder().decode(SocialShare.self, from: JSONSerialization.data(withJSONObject: androidShare))
+        XCTAssertEqual(share.payloadSnapshot.recipe?.name, "V60 Android"); XCTAssertNil(share.payloadSnapshot.technique)
+        let payload = share.payloadSnapshot
+        XCTAssertNoThrow(try SocialContentPolicy.validate(fromName: "Ana", fromHandle: "ana", name: "V60", subtitle: "", message: String(repeating: "a", count: 280), payload: payload))
+        XCTAssertThrowsError(try SocialContentPolicy.validate(fromName: "Ana", fromHandle: "ana", name: "V60", subtitle: "", message: String(repeating: "a", count: 281), payload: payload))
     }
 
     func testBlockListAndUnblockContracts() async throws {
@@ -911,7 +929,7 @@ final class SocialTests: XCTestCase {
         let publishService = SocialService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: publishTransport)
         try await publishService.publish(entityType: "recipe", entityId: entity, fromName: "Ana", fromHandle: "ana", name: "V60", subtitle: "Dulzor", message: "Para ti", payload: payload, visibility: "DIRECT", targetUserId: target, accessToken: "jwt")
         let body = try XCTUnwrap((JSONSerialization.jsonObject(with: try XCTUnwrap(publishTransport.requests.first?.httpBody)) as? [String: Any]))
-        XCTAssertEqual(body["visibility"] as? String, "DIRECT"); XCTAssertEqual(body["target_user_id"] as? String, target.uuidString)
+        XCTAssertEqual(body["visibility"] as? String, "direct"); XCTAssertEqual(body["target_user_id"] as? String, target.uuidString)
 
         let inboxTransport = MockTransport(responseData: try JSONEncoder().encode([inboxItem]))
         let inboxService = SocialService(configuration: publishService.configuration, transport: inboxTransport)
@@ -931,6 +949,28 @@ final class SocialTests: XCTestCase {
 }
 
 final class EntitySyncTests: XCTestCase {
+    func testAndroidBackendContractUsesOfficialSharedTablesAndOwnership() throws {
+        let shared: [String: (String, String)] = [
+            "CoffeeBeanRecord": ("beans", "user_id"), "GrinderRecord": ("grinders", "user_id"),
+            "EquipmentRecord": ("equipment", "user_id"), "RecipeRecord": ("recipes", "user_id"),
+            "TechniqueRecord": ("techniques", "user_id"), "TechniqueStepRecord": ("technique_steps", "user_id"),
+            "LabExperimentRecord": ("lab_experiments", "user_id")
+        ]
+        for (entity, expected) in shared {
+            let descriptor = try XCTUnwrap(CoreSyncSchema.descriptors.first { $0.entityName == entity })
+            XCTAssertEqual(descriptor.table, expected.0); XCTAssertEqual(descriptor.ownerField, expected.1)
+        }
+        XCTAssertEqual(CoreSyncSchema.descriptors.first { $0.entityName == "RecipeIngredientRecord" }?.ownerField, "owner_id")
+
+        let base = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("supabase/migrations")
+        let files = ["202608160000_android_schema_preflight.sql", "202608170003_lab_and_brew_references.sql", "202609010007_android_backend_alignment.sql"]
+        let sql = try files.map { try String(contentsOf: base.appendingPathComponent($0), encoding: .utf8) }.joined(separator: "\n").lowercased()
+        for clause in ["create table if not exists public.beans", "from public.coffee_beans", "create table if not exists public.shares", "references public.shares(id)", "beans_align_clients", "shares_moderate_content", "beans_user_all"] {
+            XCTAssertTrue(sql.contains(clause), "Falta contrato SQL Android/iOS: \(clause)")
+        }
+        XCTAssertFalse(sql.contains("service_role")); XCTAssertFalse(sql.contains("supabase_service"))
+    }
+
     @MainActor func testLocalAccountScopeSeparatesRecordsOutboxAndActiveWork() throws {
         let ownerA = UUID(); let ownerB = UUID(); let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
         defer { LocalDataScope.activeOwnerId = nil }
@@ -993,9 +1033,11 @@ final class EntitySyncTests: XCTestCase {
         XCTAssertEqual(bean.ownerId, owner)
         let outbox = try context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord"))
         XCTAssertEqual(outbox.count, 2)
-        let coffeePayload = try XCTUnwrap(outbox.first { $0.entityName == "coffee_beans" }?.payloadJSON.data(using: .utf8))
+        let coffeePayload = try XCTUnwrap(outbox.first { $0.entityName == "beans" }?.payloadJSON.data(using: .utf8))
         var coffeeRow = try XCTUnwrap((JSONSerialization.jsonObject(with: coffeePayload) as? [[String: Any]])?.first)
-        XCTAssertEqual(coffeeRow["owner_id"] as? String, owner.uuidString)
+        XCTAssertEqual(coffeeRow["user_id"] as? String, owner.uuidString)
+        XCTAssertEqual(coffeeRow["roaster"] as? String, "Tostador"); XCTAssertEqual(coffeeRow["stock_grams"] as? Double, 200)
+        XCTAssertNil(coffeeRow["owner_id"]); XCTAssertNil(coffeeRow["brand"]); XCTAssertNil(coffeeRow["remaining_quantity_grams"])
         coffeeRow["name"] = "Remoto"; coffeeRow["updated_at"] = "2099-08-17T00:00:00Z"; coffeeRow["version"] = 8
         let descriptor = try XCTUnwrap(CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" })
         try coordinator.merge(coffeeRow, descriptor: descriptor, expectedOwner: owner)
@@ -1004,7 +1046,7 @@ final class EntitySyncTests: XCTestCase {
         let brewPayload = try XCTUnwrap(outbox.first { $0.entityName == "brew_sessions" }?.payloadJSON.data(using: .utf8))
         let brewRow = try XCTUnwrap((JSONSerialization.jsonObject(with: brewPayload) as? [[String: Any]])?.first)
         XCTAssertTrue(brewRow["steps_snapshot"] is [[String: Any]])
-        var foreign = coffeeRow; foreign["owner_id"] = UUID().uuidString; foreign["name"] = "Intruso"
+        var foreign = coffeeRow; foreign["user_id"] = UUID().uuidString; foreign["name"] = "Intruso"
         try coordinator.merge(foreign, descriptor: descriptor, expectedOwner: owner); XCTAssertEqual(bean.name, "Remoto")
     }
 
@@ -1016,7 +1058,7 @@ final class EntitySyncTests: XCTestCase {
         await coordinator.sync(ownerId: owner, accessToken: "jwt")
         guard case .completed = coordinator.state else { return XCTFail("La sincronización no terminó: \(coordinator.state)") }
         XCTAssertEqual(bean.syncStatus, .synced); XCTAssertEqual(bean.ownerId, owner)
-        XCTAssertTrue(transport.requests.contains { $0.httpMethod == "POST" && $0.url?.path == "/rest/v1/coffee_beans" })
+        XCTAssertTrue(transport.requests.contains { $0.httpMethod == "POST" && $0.url?.path == "/rest/v1/beans" })
         let pulledTables = Set(transport.requests.filter { $0.httpMethod == "GET" }.compactMap { $0.url?.lastPathComponent })
         XCTAssertEqual(pulledTables, Set(CoreSyncSchema.descriptors.map(\.table)))
     }

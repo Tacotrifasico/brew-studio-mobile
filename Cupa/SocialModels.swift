@@ -17,6 +17,86 @@ struct SharedTechniqueSnapshot: Codable, Equatable {
 }
 struct SharePayloadSnapshot: Codable, Equatable { let kind: String; let recipe: SharedRecipeSnapshot?; let technique: SharedTechniqueSnapshot? }
 
+private enum SnapshotKeys: String, CodingKey {
+    case kind, recipe, technique, name, recipeKind, recipe_kind, intention, suggestedMethodName, suggested_method_name, method, methodName, method_name
+    case tags, ingredients, steps, doseG, dose_g, coffeeGrams, coffee_grams, waterMl, water_ml, ratio, temperatureC, temperature_c, temperature
+    case executionMode, execution_mode, grindValue, grind_value, grindDescription, grind_description, grindClicks, grind_clicks, grindUnit, grind_unit, notes
+    case description, techniqueDescription, ingredientsSummary, stepsSummary
+}
+
+extension SharePayloadSnapshot {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: SnapshotKeys.self)
+        if values.contains(.recipe) || values.contains(.technique) {
+            kind = try values.decodeIfPresent(String.self, forKey: .kind) ?? (values.contains(.recipe) ? "recipe" : "technique")
+            recipe = try values.decodeIfPresent(SharedRecipeSnapshot.self, forKey: .recipe)
+            technique = try values.decodeIfPresent(SharedTechniqueSnapshot.self, forKey: .technique)
+            return
+        }
+        let name = try values.decodeIfPresent(String.self, forKey: .name) ?? "Publicación"
+        let isRecipe = values.contains(.recipeKind) || values.contains(.recipe_kind) || values.contains(.intention) || values.contains(.ingredientsSummary)
+        if isRecipe {
+            kind = "recipe"
+            recipe = SharedRecipeSnapshot(
+                name: name,
+                recipeKind: try values.decodeIfPresent(String.self, forKey: .recipeKind) ?? values.decodeIfPresent(String.self, forKey: .recipe_kind) ?? "BLACK_COFFEE",
+                intention: try values.decodeIfPresent(String.self, forKey: .intention) ?? "",
+                suggestedMethodName: try values.decodeIfPresent(String.self, forKey: .suggestedMethodName) ?? values.decodeIfPresent(String.self, forKey: .suggested_method_name) ?? values.decodeIfPresent(String.self, forKey: .method) ?? "",
+                tags: try values.decodeIfPresent(String.self, forKey: .tags) ?? "",
+                ingredients: try values.decodeIfPresent([SharedRecipeIngredient].self, forKey: .ingredients) ?? [],
+                steps: try values.decodeIfPresent([SharedRecipeStep].self, forKey: .steps) ?? []
+            )
+            technique = nil
+        } else {
+            kind = "technique"; recipe = nil
+            technique = SharedTechniqueSnapshot(
+                name: name,
+                methodName: try values.decodeIfPresent(String.self, forKey: .methodName) ?? values.decodeIfPresent(String.self, forKey: .method_name) ?? values.decodeIfPresent(String.self, forKey: .method) ?? "",
+                doseGrams: try values.decodeIfPresent(Double.self, forKey: .doseG) ?? values.decodeIfPresent(Double.self, forKey: .dose_g) ?? values.decodeIfPresent(Double.self, forKey: .coffeeGrams) ?? values.decodeIfPresent(Double.self, forKey: .coffee_grams) ?? 15,
+                waterMl: try values.decodeIfPresent(Int.self, forKey: .waterMl) ?? values.decodeIfPresent(Int.self, forKey: .water_ml) ?? 240,
+                ratio: try values.decodeIfPresent(Double.self, forKey: .ratio) ?? 16,
+                temperatureC: try values.decodeIfPresent(Int.self, forKey: .temperatureC) ?? values.decodeIfPresent(Int.self, forKey: .temperature_c) ?? values.decodeIfPresent(Int.self, forKey: .temperature) ?? 93,
+                executionMode: try values.decodeIfPresent(String.self, forKey: .executionMode) ?? values.decodeIfPresent(String.self, forKey: .execution_mode) ?? "GUIDED",
+                grindValue: try values.decodeIfPresent(Double.self, forKey: .grindValue) ?? values.decodeIfPresent(Double.self, forKey: .grind_value) ?? 0,
+                grindDescription: try values.decodeIfPresent(String.self, forKey: .grindDescription) ?? values.decodeIfPresent(String.self, forKey: .grind_description) ?? values.decodeIfPresent(String.self, forKey: .grindClicks) ?? values.decodeIfPresent(String.self, forKey: .grind_clicks) ?? "",
+                grindUnit: try values.decodeIfPresent(String.self, forKey: .grindUnit) ?? values.decodeIfPresent(String.self, forKey: .grind_unit) ?? "CLICKS",
+                notes: try values.decodeIfPresent(String.self, forKey: .notes) ?? "",
+                techniqueDescription: try values.decodeIfPresent(String.self, forKey: .techniqueDescription) ?? values.decodeIfPresent(String.self, forKey: .description) ?? "",
+                steps: try values.decodeIfPresent([SharedTechniqueStep].self, forKey: .steps) ?? []
+            )
+        }
+    }
+
+    func androidJSONObject() throws -> Any {
+        if let recipe {
+            return try JSONSerialization.jsonObject(with: JSONEncoder().encode(recipe))
+        }
+        guard let technique else { throw AuthServiceError.invalidResponse }
+        var value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(technique)) as? [String: Any] ?? [:]
+        value["doseG"] = technique.doseGrams; value["coffeeGrams"] = technique.doseGrams
+        value["temperature"] = technique.temperatureC; value["grindClicks"] = technique.grindDescription
+        value["method"] = technique.methodName
+        value["steps"] = technique.steps.enumerated().map { index, step in
+            ["step_order": index + 1, "title": step.title, "duration_sec": step.durationSeconds, "water_add_ml": step.waterAddedMl,
+             "target_water_ml": 0, "gesture": step.gesture, "intensity": step.intensity, "note": step.note] as [String: Any]
+        }
+        return value
+    }
+}
+
+extension SharedTechniqueStep {
+    private enum Keys: String, CodingKey { case title, durationSeconds, duration_sec, waterAddedMl, water_add_ml, intensity, gesture, note, stepNote, step_note }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: Keys.self)
+        title = try values.decodeIfPresent(String.self, forKey: .title) ?? "Paso"
+        durationSeconds = try values.decodeIfPresent(Int.self, forKey: .durationSeconds) ?? values.decodeIfPresent(Int.self, forKey: .duration_sec) ?? 0
+        waterAddedMl = try values.decodeIfPresent(Int.self, forKey: .waterAddedMl) ?? values.decodeIfPresent(Int.self, forKey: .water_add_ml) ?? 0
+        intensity = try values.decodeIfPresent(String.self, forKey: .intensity) ?? "MEDIUM"
+        gesture = try values.decodeIfPresent(String.self, forKey: .gesture) ?? "CIRCULAR_POUR"
+        note = try values.decodeIfPresent(String.self, forKey: .note) ?? values.decodeIfPresent(String.self, forKey: .stepNote) ?? values.decodeIfPresent(String.self, forKey: .step_note) ?? ""
+    }
+}
+
 enum SocialValidationError: LocalizedError, Equatable {
     case emptyIdentity, tooLong, objectionableContent
     var errorDescription: String? {
@@ -37,7 +117,7 @@ enum SocialContentPolicy {
     static func validate(fromName: String, fromHandle: String, name: String, subtitle: String, message: String, payload: SharePayloadSnapshot) throws {
         guard !fromName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !fromHandle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SocialValidationError.emptyIdentity }
-        guard fromName.count <= 80, fromHandle.count <= 40, name.count <= 160, subtitle.count <= 300, message.count <= 1_000 else { throw SocialValidationError.tooLong }
+        guard fromName.count <= 80, fromHandle.count <= 40, name.count <= 160, subtitle.count <= 300, message.count <= 280 else { throw SocialValidationError.tooLong }
         let payloadText = (try? String(data: JSONEncoder().encode(payload), encoding: .utf8)) ?? ""
         let combined = [fromName, fromHandle, name, subtitle, message, payloadText].joined(separator: " ")
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "es_MX"))
@@ -52,8 +132,8 @@ struct SocialShare: Codable, Identifiable, Equatable {
     let payloadSnapshot: SharePayloadSnapshot; let originalEntityId: UUID?; let status: String; let createdAt: String; let updatedAt: String
     enum CodingKeys: String, CodingKey {
         case id, visibility, name, subtitle, message, status
-        case ownerId = "owner_id", entityType = "entity_type", entityId = "entity_id", fromName = "from_name", fromHandle = "from_handle"
-        case targetUserId = "target_user_id", payloadSnapshot = "payload_snapshot", originalEntityId = "original_entity_id"
+        case ownerId = "from_user_id", entityType = "entity_type", entityId = "entity_id", fromName = "from_name", fromHandle = "from_handle"
+        case targetUserId = "target_user_id", payloadSnapshot = "payload_snapshot_json", originalEntityId = "original_entity_id"
         case createdAt = "created_at", updatedAt = "updated_at"
     }
 }
@@ -107,7 +187,7 @@ struct SocialService {
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
 
     func feed(accessToken: String) async throws -> [SocialShare] {
-        let (data, _) = try await request(path: "rest/v1/brew_shares", query: "select=*&visibility=eq.PUBLIC&status=eq.ACTIVE&order=created_at.desc&limit=50", method: "GET", body: nil, accessToken: accessToken, prefer: nil)
+        let (data, _) = try await request(path: "rest/v1/shares", query: "select=*&visibility=eq.public&status=eq.active&order=created_at.desc&limit=50", method: "GET", body: nil, accessToken: accessToken, prefer: nil)
         return try JSONDecoder().decode([SocialShare].self, from: data)
     }
     func likedShareIds(userId: UUID, accessToken: String) async throws -> Set<UUID> {
@@ -128,7 +208,7 @@ struct SocialService {
         return Set(try JSONDecoder().decode([Reference].self, from: data).map(\.blockedUserId))
     }
     func inbox(userId: UUID, accessToken: String) async throws -> [SocialInboxItem] {
-        let query = "select=id,share_id,target_user_id,read_at,created_at,share:brew_shares(*)&target_user_id=eq.\(userId.uuidString)&order=created_at.desc&limit=50"
+        let query = "select=id,share_id,target_user_id,read_at,created_at,share:shares(*)&target_user_id=eq.\(userId.uuidString)&order=created_at.desc&limit=50"
         let (data, _) = try await request(path: "rest/v1/inbox_items", query: query, method: "GET", body: nil, accessToken: accessToken, prefer: nil)
         return try JSONDecoder().decode([SocialInboxItem].self, from: data)
     }
@@ -150,9 +230,10 @@ struct SocialService {
     func publish(entityType: String, entityId: UUID, fromName: String, fromHandle: String, name: String, subtitle: String, message: String, payload: SharePayloadSnapshot, visibility: String = "PUBLIC", targetUserId: UUID? = nil, accessToken: String) async throws {
         try SocialContentPolicy.validate(fromName: fromName, fromHandle: fromHandle, name: name, subtitle: subtitle, message: message, payload: payload)
         guard visibility == "PUBLIC" || (visibility == "DIRECT" && targetUserId != nil) else { throw AuthServiceError.invalidResponse }
-        var body: [String: Any] = ["entity_type": entityType, "entity_id": entityId.uuidString, "from_name": fromName, "from_handle": fromHandle, "visibility": visibility, "name": name, "subtitle": subtitle, "message": message, "payload_snapshot": try jsonObject(payload), "original_entity_id": entityId.uuidString]
+        let remoteVisibility = visibility == "DIRECT" ? "direct" : "public"
+        var body: [String: Any] = ["entity_type": entityType, "entity_id": entityId.uuidString, "from_name": fromName, "from_handle": fromHandle, "visibility": remoteVisibility, "name": name, "subtitle": subtitle, "message": message, "payload_snapshot_json": try payload.androidJSONObject(), "original_entity_id": entityId.uuidString]
         if let targetUserId { body["target_user_id"] = targetUserId.uuidString }
-        _ = try await request(path: "rest/v1/brew_shares", query: nil, method: "POST", body: try JSONSerialization.data(withJSONObject: body), accessToken: accessToken, prefer: "return=minimal")
+        _ = try await request(path: "rest/v1/shares", query: nil, method: "POST", body: try JSONSerialization.data(withJSONObject: body), accessToken: accessToken, prefer: "return=minimal")
     }
     func like(shareId: UUID, accessToken: String) async throws {
         _ = try await request(path: "rest/v1/share_likes", query: nil, method: "POST", body: try JSONSerialization.data(withJSONObject: ["share_id": shareId.uuidString]), accessToken: accessToken, prefer: "resolution=ignore-duplicates,return=minimal")

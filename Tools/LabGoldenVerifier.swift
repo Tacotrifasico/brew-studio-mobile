@@ -50,6 +50,7 @@ struct LabGoldenVerifier {
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
+        verifyAndroidBackendContract()
         verifyLocalDataIsolation()
         await verifySessionRecovery()
         print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, ambientes, sesión offline, sincronización multiusuario, IA, perfil y social aprobados")
@@ -584,11 +585,51 @@ struct LabGoldenVerifier {
         try! coordinator.enqueuePending(ownerId: owner); precondition(bean.ownerId == owner)
         let outbox = try! context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")); precondition(outbox.count == 1)
         let data = outbox[0].payloadJSON.data(using: .utf8)!; var row = (try! JSONSerialization.jsonObject(with: data) as! [[String: Any]])[0]
-        precondition(row["owner_id"] as? String == owner.uuidString)
+        precondition(row["user_id"] as? String == owner.uuidString)
+        precondition(row["roaster"] as? String == "Tostador" && row["stock_grams"] as? Double == 200)
+        precondition(row["owner_id"] == nil && row["brand"] == nil && row["remaining_quantity_grams"] == nil)
         row["name"] = "Remoto"; row["updated_at"] = "2099-08-17T00:00:00Z"; row["version"] = 8
         let descriptor = CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" }!
         try! coordinator.merge(row, descriptor: descriptor, expectedOwner: owner)
         precondition(bean.name == "Remoto" && bean.syncStatus == .synced && bean.version == 8)
+    }
+
+    @MainActor private static func verifyAndroidBackendContract() {
+        let shared: [String: (String, String)] = [
+            "CoffeeBeanRecord": ("beans", "user_id"), "GrinderRecord": ("grinders", "user_id"),
+            "EquipmentRecord": ("equipment", "user_id"), "RecipeRecord": ("recipes", "user_id"),
+            "TechniqueRecord": ("techniques", "user_id"), "TechniqueStepRecord": ("technique_steps", "user_id"),
+            "LabExperimentRecord": ("lab_experiments", "user_id")
+        ]
+        for (entity, expected) in shared {
+            let descriptor = CoreSyncSchema.descriptors.first { $0.entityName == entity }
+            precondition(descriptor?.table == expected.0 && descriptor?.ownerField == expected.1)
+        }
+        let persistence = PersistenceController(inMemory: true)
+        let profile = UserProfileRecord(context: persistence.container.viewContext)
+        profile.id = UUID(); profile.ownerId = profile.id; profile.displayName = "Ana"; profile.alias = "ana"; profile.biography = ""; profile.avatarColor = "#3F7A63"; profile.favoriteMethods = ""; profile.isPrivate = true; profile.createdAt = .now; profile.updatedAt = .now; profile.version = 1; profile.syncStatusRaw = SyncStatus.pendingCreate.rawValue
+        let data = try! ProfileRepository(context: persistence.container.viewContext).remoteJSON(profile)
+        let json = (try! JSONSerialization.jsonObject(with: data) as! [[String: Any]])[0]
+        precondition(json["handle"] as? String == "ana" && json["alias"] == nil && json["email"] == nil)
+
+        let base = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("supabase/migrations")
+        let files = ["202608160000_android_schema_preflight.sql", "202608170003_lab_and_brew_references.sql", "202609010007_android_backend_alignment.sql"]
+        let sql = files.compactMap { try? String(contentsOf: base.appendingPathComponent($0), encoding: .utf8) }.joined(separator: "\n").lowercased()
+        precondition(files.allSatisfy { FileManager.default.fileExists(atPath: base.appendingPathComponent($0).path) })
+        for clause in ["create table if not exists public.beans", "from public.coffee_beans", "create table if not exists public.shares", "references public.shares(id)", "beans_align_clients", "shares_moderate_content", "beans_user_all", "drop policy if exists \"public profiles are readable by everyone\""] {
+            precondition(sql.contains(clause), "Falta contrato SQL Android/iOS: \(clause)")
+        }
+        precondition(!sql.contains("service_role") && !sql.contains("supabase_service"))
+
+        let id = UUID(); let owner = UUID()
+        let androidShare: [String: Any] = [
+            "id": id.uuidString, "from_user_id": owner.uuidString, "entity_type": "recipe", "entity_id": id.uuidString,
+            "from_name": "Ana", "from_handle": "ana", "visibility": "public", "name": "V60 Android", "subtitle": "Receta", "message": "",
+            "payload_snapshot_json": ["name": "V60 Android", "recipeKind": "BLACK_COFFEE", "intention": "Dulzor", "tags": "frutal"],
+            "original_entity_id": id.uuidString, "status": "active", "created_at": "2026-09-01T00:00:00Z", "updated_at": "2026-09-01T00:00:00Z"
+        ]
+        let decoded = try! JSONDecoder().decode(SocialShare.self, from: JSONSerialization.data(withJSONObject: androidShare))
+        precondition(decoded.payloadSnapshot.recipe?.name == "V60 Android" && decoded.payloadSnapshot.technique == nil)
     }
 
     @MainActor private static func verifyLocalDataIsolation() {

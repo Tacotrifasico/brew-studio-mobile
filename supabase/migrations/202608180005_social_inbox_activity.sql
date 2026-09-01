@@ -30,10 +30,11 @@ set search_path = public, pg_temp
 as $$
 begin
   if new.visibility = 'DIRECT' and new.target_user_id is not null and new.status = 'ACTIVE' and new.deleted_at is null then
-    insert into public.inbox_items (share_id, target_user_id, created_at)
-    values (new.id, new.target_user_id, new.created_at)
-    on conflict (share_id) do update
-      set target_user_id = excluded.target_user_id;
+    update public.inbox_items set target_user_id = new.target_user_id where share_id = new.id;
+    if not found then
+      insert into public.inbox_items (share_id, target_user_id, created_at)
+      values (new.id, new.target_user_id, new.created_at);
+    end if;
   else
     delete from public.inbox_items where share_id = new.id;
   end if;
@@ -47,11 +48,14 @@ after insert or update of visibility, target_user_id, status, deleted_at
 on public.brew_shares
 for each row execute function public.sync_direct_share_inbox();
 
+update public.inbox_items i set target_user_id = s.target_user_id
+from public.brew_shares s
+where i.share_id = s.id and s.visibility = 'DIRECT' and s.target_user_id is not null and s.status = 'ACTIVE' and s.deleted_at is null;
 insert into public.inbox_items (share_id, target_user_id, created_at)
-select id, target_user_id, created_at
-from public.brew_shares
-where visibility = 'DIRECT' and target_user_id is not null and status = 'ACTIVE' and deleted_at is null
-on conflict (share_id) do update set target_user_id = excluded.target_user_id;
+select s.id, s.target_user_id, s.created_at
+from public.brew_shares s
+where s.visibility = 'DIRECT' and s.target_user_id is not null and s.status = 'ACTIVE' and s.deleted_at is null
+  and not exists (select 1 from public.inbox_items i where i.share_id = s.id);
 
 alter table public.inbox_items enable row level security;
 alter table public.activity_log enable row level security;

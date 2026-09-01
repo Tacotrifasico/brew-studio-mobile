@@ -46,4 +46,6 @@ El historial de uso de `CoffeeBean` se deriva por su UUID estable: `BrewSession.
 
 `SyncOperation` es una outbox local compactada por tabla y UUID. Conserva operación, payload, intentos, próximo reintento y último error. No se sincroniza a Supabase: coordina el envío de todas las entidades privadas y desaparece lógicamente sólo después de una respuesta remota exitosa.
 
+El almacén físico puede contener la caché de varias cuentas, pero ninguna consulta funcional es global: el ámbito activo acepta sólo `ownerId` coincidente y, durante adopción inicial, filas sin propietario. Las filas nuevas reciben propietario desde el contexto. Outbox y checkpoints se particionan por UUID; Calculadora, Laboratorio, Preparación, Cata y preferencias de trabajo se particionan en `UserDefaults`. Al salir, las filas permanecen como caché cifrada por la protección de archivos de iOS, pero dejan de ser visibles para la aplicación.
+
 `syncStatus`: `synced`, `pendingCreate`, `pendingUpdate`, `pendingDelete`, `conflict`, `error`.

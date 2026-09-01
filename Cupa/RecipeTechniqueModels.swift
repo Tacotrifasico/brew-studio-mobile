@@ -28,7 +28,7 @@ final class RecipeRecord: NSManagedObject, SyncTrackedRecord {
     @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
 
     convenience init(context: NSManagedObjectContext, id: UUID = UUID(), name: String, recipeKind: String, intention: String, suggestedMethodId: UUID?, suggestedMethodName: String, isFavorite: Bool, tags: String, originalEntityId: UUID? = nil, rootEntityId: UUID? = nil, copyMode: String = "ORIGINAL") {
-        self.init(context: context); self.id = id; ownerId = nil; self.name = name; self.recipeKind = recipeKind
+        self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.name = name; self.recipeKind = recipeKind
         self.intention = intention; self.suggestedMethodId = suggestedMethodId; self.suggestedMethodName = suggestedMethodName
         self.isFavorite = isFavorite; self.tags = tags; visibility = "PRIVATE"
         self.originalEntityId = originalEntityId; self.rootEntityId = rootEntityId; self.copyMode = copyMode
@@ -49,7 +49,7 @@ final class RecipeIngredientRecord: NSManagedObject, SyncTrackedRecord {
     @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
     @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
     convenience init(context: NSManagedObjectContext, id: UUID = UUID(), recipeId: UUID, name: String, amount: Double, unit: String, orderIndex: Int) {
-        self.init(context: context); self.id = id; ownerId = nil; self.recipeId = recipeId; self.name = name
+        self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.recipeId = recipeId; self.name = name
         self.amount = amount; self.unit = unit; self.orderIndex = Int64(orderIndex)
         createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
     }
@@ -68,7 +68,7 @@ final class RecipeStepRecord: NSManagedObject, SyncTrackedRecord {
         set { durationSecondsValue = newValue.map(NSNumber.init(value:)) }
     }
     convenience init(context: NSManagedObjectContext, id: UUID = UUID(), recipeId: UUID, instruction: String, stepNumber: Int, durationSeconds: Int?) {
-        self.init(context: context); self.id = id; ownerId = nil; self.recipeId = recipeId; self.instruction = instruction
+        self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.recipeId = recipeId; self.instruction = instruction
         self.stepNumber = Int64(stepNumber); self.durationSeconds = durationSeconds
         createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
     }
@@ -89,7 +89,7 @@ final class TechniqueRecord: NSManagedObject, SyncTrackedRecord {
     @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
 
     convenience init(context: NSManagedObjectContext, id: UUID = UUID(), name: String, methodId: UUID?, methodName: String, recipeId: UUID?, beanId: UUID?, grinderId: UUID?, doseGrams: Double, waterMl: Int, ratio: Double, temperatureC: Int, executionMode: String, grindValue: Double, grindDescription: String, grindUnit: String, notes: String, techniqueDescription: String, totalTimeSeconds: Int) {
-        self.init(context: context); self.id = id; ownerId = nil; self.name = name; self.methodId = methodId; self.methodName = methodName
+        self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.name = name; self.methodId = methodId; self.methodName = methodName
         self.recipeId = recipeId; self.beanId = beanId; self.grinderId = grinderId
         self.doseGrams = doseGrams; self.waterMl = Int64(waterMl); self.ratio = ratio; self.temperatureC = Int64(temperatureC)
         self.executionMode = executionMode; self.grindValue = grindValue; self.grindDescription = grindDescription; self.grindUnit = grindUnit
@@ -123,7 +123,7 @@ final class TechniqueStepRecord: NSManagedObject, SyncTrackedRecord {
         set { flowValue = newValue.map(NSNumber.init(value:)) }
     }
     convenience init(context: NSManagedObjectContext, id: UUID = UUID(), techniqueId: UUID, stepNumber: Int, title: String, durationSeconds: Int, waterAddedMl: Int, waterAccumulatedMl: Int, intensity: String, gesture: String, stepNote: String, coverage: Double?, flow: Double?, secondaryAction: String?) {
-        self.init(context: context); self.id = id; ownerId = nil; self.techniqueId = techniqueId
+        self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.techniqueId = techniqueId
         self.stepNumber = Int64(stepNumber); self.title = title; self.durationSeconds = Int64(durationSeconds)
         self.waterAddedMl = Int64(waterAddedMl); self.waterAccumulatedMl = Int64(waterAccumulatedMl)
         self.intensity = intensity; self.gesture = gesture; self.stepNote = stepNote; self.coverage = coverage; self.flow = flow; self.secondaryAction = secondaryAction
@@ -143,7 +143,7 @@ final class BrewSessionRecord: NSManagedObject, SyncTrackedRecord {
     @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
     @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
     convenience init(context: NSManagedObjectContext, state: PreparationState, recipeName: String = "", beanName: String, grinderName: String) {
-        self.init(context: context); id = state.sessionId; ownerId = nil
+        self.init(context: context); id = state.sessionId; ownerId = context.activeOwnerId
         techniqueId = state.techniqueId; recipeId = state.recipeId; methodId = state.methodId; beanId = state.beanId; grinderId = state.grinderId
         techniqueNameSnapshot = state.techniqueName; recipeNameSnapshot = recipeName; methodNameSnapshot = state.methodName; beanNameSnapshot = beanName; grinderNameSnapshot = grinderName
         doseGrams = state.doseGrams; waterMl = Int64(state.waterMl); ratio = state.ratio; temperatureC = Int64(state.temperatureC)

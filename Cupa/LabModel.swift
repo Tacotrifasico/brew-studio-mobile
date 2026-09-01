@@ -195,7 +195,9 @@ enum LabEngine {
 final class LabModel: ObservableObject {
     @Published var state: LabState { didSet { persist() } }
     private let defaults: UserDefaults
-    private let storageKey = "cupa.labState.v1"
+    private var scopeOwnerId: UUID?
+    private let storageKeyBase = "cupa.labState.v1"
+    private var storageKey: String { LocalDataScope.scopedKey(storageKeyBase, ownerId: scopeOwnerId) }
     private let temperaturePreferenceKey = "settings.temperature"
 
     static let cities = [
@@ -218,14 +220,25 @@ final class LabModel: ObservableObject {
     var boilingPointC: Float { LabEngine.boilingPointC(altitudeMeters: state.altitudeMeters) }
 
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        var restored = defaults.data(forKey: storageKey).flatMap { try? JSONDecoder().decode(LabState.self, from: $0) } ?? LabState()
+        self.defaults = defaults; scopeOwnerId = LocalDataScope.activeOwnerId
+        let baseKey = "cupa.labState.v1"; let scopedKey = LocalDataScope.scopedKey(baseKey, ownerId: scopeOwnerId)
+        let stored = defaults.object(forKey: scopedKey) ?? LocalDataScope.migrateLegacyObject(in: defaults, baseKey: baseKey, ownerId: scopeOwnerId)
+        var restored = (stored as? Data).flatMap { try? JSONDecoder().decode(LabState.self, from: $0) } ?? LabState()
         if let rawUnit = defaults.string(forKey: temperaturePreferenceKey), let unit = TemperatureUnit(rawValue: rawUnit) {
             restored.temperatureUnit = unit
         } else {
             // Migra la preferencia que versiones anteriores guardaban sólo dentro del estado del Laboratorio.
             defaults.set(restored.temperatureUnit.rawValue, forKey: temperaturePreferenceKey)
         }
+        state = restored
+    }
+
+    func switchScope(to ownerId: UUID?) {
+        guard scopeOwnerId != ownerId else { return }
+        scopeOwnerId = ownerId
+        let stored = defaults.object(forKey: storageKey) ?? LocalDataScope.migrateLegacyObject(in: defaults, baseKey: storageKeyBase, ownerId: ownerId)
+        var restored = (stored as? Data).flatMap { try? JSONDecoder().decode(LabState.self, from: $0) } ?? LabState()
+        restored.temperatureUnit = TemperatureUnit(rawValue: defaults.string(forKey: temperaturePreferenceKey) ?? "") ?? .celsius
         state = restored
     }
 

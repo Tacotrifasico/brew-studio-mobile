@@ -36,12 +36,12 @@ struct AppShell: View {
     let storageWarning: String?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.managedObjectContext) private var context
+    @StateObject private var account = AccountModel()
     @StateObject private var navigation = AppNavigationModel()
     @StateObject private var calculator = CalculatorModel()
     @StateObject private var lab = LabModel()
     @StateObject private var preparation = PreparationModel()
     @StateObject private var tasting = TastingModel()
-    @StateObject private var account = AccountModel()
     @StateObject private var settings = SettingsModel()
     @StateObject private var connectivity = ConnectivityMonitor()
     @State private var syncInProgress = false
@@ -71,6 +71,7 @@ struct AppShell: View {
                 .tag(CupaTab.storage)
                 .tabItem { Label("Almacén", systemImage: "shippingbox") }
         }
+        .id(account.localScopeKey)
         .tint(CupaTheme.forest)
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
@@ -88,7 +89,11 @@ struct AppShell: View {
             if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
             if phase == .active { Task { await refreshAndSync() } }
         }
-        .task { lab.setTemperatureUnit(settings.temperatureUnit); await refreshAndSync() }
+        .task { context.activeOwnerId = account.tokens?.userId; lab.setTemperatureUnit(settings.temperatureUnit); await refreshAndSync() }
+        .onChange(of: account.localScopeKey) { _, _ in
+            let ownerId = account.tokens?.userId; context.activeOwnerId = ownerId
+            calculator.switchScope(to: ownerId); lab.switchScope(to: ownerId); preparation.switchScope(to: ownerId); tasting.switchScope(to: ownerId)
+        }
         .onChange(of: settings.temperatureUnit) { _, unit in lab.setTemperatureUnit(unit) }
         .onChange(of: lab.state.temperatureUnit) { _, unit in
             if settings.temperatureUnit != unit { settings.temperatureUnit = unit }

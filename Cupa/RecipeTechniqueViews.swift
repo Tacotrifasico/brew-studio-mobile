@@ -5,10 +5,10 @@ struct RecipeInventoryView: View {
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.isFavorite, ascending: false), NSSortDescriptor(keyPath: \RecipeRecord.updatedAt, ascending: false)],
-        predicate: NSPredicate(format: "deletedAt == nil"), animation: .default
+        predicate: LocalDataScope.visiblePredicate(), animation: .default
     ) private var recipes: FetchedResults<RecipeRecord>
-    @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var ingredients: FetchedResults<RecipeIngredientRecord>
-    @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var recipeSteps: FetchedResults<RecipeStepRecord>
+    @FetchRequest(sortDescriptors: [], predicate: LocalDataScope.visiblePredicate()) private var ingredients: FetchedResults<RecipeIngredientRecord>
+    @FetchRequest(sortDescriptors: [], predicate: LocalDataScope.visiblePredicate()) private var recipeSteps: FetchedResults<RecipeStepRecord>
     @State private var search = ""; @State private var kind = "ALL"; @State private var adding = false
     @State private var selectedRecipe: RecipeRecord?; @State private var editing: RecipeRecord?; @State private var pendingEdit: RecipeRecord?
     @State private var importing = false; @State private var importedDraft: RecipeDraftModel?
@@ -183,13 +183,13 @@ private struct RecipeDetailView: View {
 
 struct TechniqueInventoryView: View {
     @Environment(\.managedObjectContext) private var context
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.updatedAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"), animation: .default)
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate(), animation: .default)
     private var techniques: FetchedResults<TechniqueRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueStepRecord.stepNumber, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil"))
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueStepRecord.stepNumber, ascending: true)], predicate: LocalDataScope.visiblePredicate())
     private var techniqueSteps: FetchedResults<TechniqueStepRecord>
-    @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var recipes: FetchedResults<RecipeRecord>
-    @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var beans: FetchedResults<CoffeeBeanRecord>
-    @FetchRequest(sortDescriptors: [], predicate: NSPredicate(format: "deletedAt == nil")) private var grinders: FetchedResults<GrinderRecord>
+    @FetchRequest(sortDescriptors: [], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
+    @FetchRequest(sortDescriptors: [], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
     @Binding var selection: CupaTab
     @ObservedObject var preparation: PreparationModel
     @State private var search = ""; @State private var mode = "ALL"; @State private var adding = false
@@ -356,7 +356,7 @@ private struct TechniqueDetailView: View {
 
 private struct RecipeEditorView: View {
     @Environment(\.dismiss) private var dismiss; @Environment(\.managedObjectContext) private var context
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil AND equipmentType == 'BREWER_METHOD'")) private var methods: FetchedResults<EquipmentRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "equipmentType == 'BREWER_METHOD'"))) private var methods: FetchedResults<EquipmentRecord>
     let recipe: RecipeRecord?
     var initialDraft: RecipeDraftModel? = nil
     @State private var draft = RecipeDraftModel(); @State private var loaded = false; @State private var errorMessage: String?
@@ -451,10 +451,10 @@ private struct RecipeImporterView: View {
 
 private struct TechniqueEditorView: View {
     @Environment(\.dismiss) private var dismiss; @Environment(\.managedObjectContext) private var context
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var recipes: FetchedResults<RecipeRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var beans: FetchedResults<CoffeeBeanRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var grinders: FetchedResults<GrinderRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil AND equipmentType == 'BREWER_METHOD'")) private var methods: FetchedResults<EquipmentRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "equipmentType == 'BREWER_METHOD'"))) private var methods: FetchedResults<EquipmentRecord>
     let technique: TechniqueRecord?
     @State private var draft = TechniqueDraftModel(); @State private var loaded = false; @State private var errorMessage: String?
 

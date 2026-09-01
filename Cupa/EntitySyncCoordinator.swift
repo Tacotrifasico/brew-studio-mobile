@@ -33,7 +33,7 @@ final class EntitySyncCoordinator: ObservableObject {
     @Published private(set) var state: State = .idle
     @Published private(set) var authenticationRejected = false
     private let context: NSManagedObjectContext; private let configuration: AppConfiguration; private let transport: NetworkTransport
-    private let defaults: UserDefaults; private let checkpointKey = "sync.lastSuccessfulAt.v1"
+    private let defaults: UserDefaults; private let checkpointKeyPrefix = "sync.lastSuccessfulAt.v2"
     init(context: NSManagedObjectContext, configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), defaults: UserDefaults = .standard) {
         self.context = context; self.configuration = configuration; self.transport = transport; self.defaults = defaults
     }
@@ -42,9 +42,9 @@ final class EntitySyncCoordinator: ObservableObject {
         guard configuration.isSupabaseConfigured else { state = .offline; return }; state = .syncing; authenticationRejected = false
         do {
             try enqueuePending(ownerId: ownerId)
-            try await push(accessToken: accessToken)
+            try await push(ownerId: ownerId, accessToken: accessToken)
             try await pull(ownerId: ownerId, accessToken: accessToken)
-            defaults.set(Date(), forKey: checkpointKey); state = .completed(.now)
+            defaults.set(Date(), forKey: checkpointKey(ownerId)); state = .completed(.now)
         } catch {
             authenticationRejected = RemoteFailureClassifier.isUnauthorized(error)
             state = RemoteFailureClassifier.isOffline(error) ? .offline : .failed(error.localizedDescription)
@@ -55,7 +55,7 @@ final class EntitySyncCoordinator: ObservableObject {
         let outbox = SyncOutboxRepository(context: context)
         for descriptor in CoreSyncSchema.descriptors {
             let request = NSFetchRequest<NSManagedObject>(entityName: descriptor.entityName)
-            request.predicate = NSPredicate(format: "syncStatusRaw != %@", SyncStatus.synced.rawValue)
+            request.predicate = NSPredicate(format: "(ownerId == nil OR ownerId == %@) AND syncStatusRaw != %@", ownerId as CVarArg, SyncStatus.synced.rawValue)
             for record in try context.fetch(request) {
                 if descriptor.profileIdentity { record.setValue(ownerId, forKey: "id") }
                 if record.value(forKey: "ownerId") == nil { record.setValue(ownerId, forKey: "ownerId") }
@@ -67,13 +67,13 @@ final class EntitySyncCoordinator: ObservableObject {
         }
     }
 
-    private func push(accessToken: String) async throws {
+    private func push(ownerId: UUID, accessToken: String) async throws {
         let outbox = SyncOutboxRepository(context: context); let service = SupabaseDataService(configuration: configuration, transport: transport)
-        for item in try outbox.ready() {
+        for item in try outbox.ready(ownerId: ownerId) {
             guard let data = item.payloadJSON.data(using: .utf8) else { continue }
             do {
                 try await service.upsert(table: item.entityName, json: data, accessToken: accessToken)
-                if let descriptor = CoreSyncSchema.descriptors.first(where: { $0.table == item.entityName }), let local = try localObject(descriptor.entityName, id: item.entityId) { local.setValue(SyncStatus.synced.rawValue, forKey: "syncStatusRaw") }
+                if let descriptor = CoreSyncSchema.descriptors.first(where: { $0.table == item.entityName }), let local = try localObject(descriptor.entityName, id: item.entityId, expectedOwner: ownerId) { local.setValue(SyncStatus.synced.rawValue, forKey: "syncStatusRaw") }
                 try outbox.markSucceeded(item)
             } catch { try outbox.markFailed(item, message: error.localizedDescription); throw error }
         }
@@ -81,7 +81,7 @@ final class EntitySyncCoordinator: ObservableObject {
 
     private func pull(ownerId: UUID, accessToken: String) async throws {
         let service = SupabaseDataService(configuration: configuration, transport: transport)
-        let since = defaults.object(forKey: checkpointKey) as? Date ?? Date(timeIntervalSince1970: 0)
+        let since = defaults.object(forKey: checkpointKey(ownerId)) as? Date ?? Date(timeIntervalSince1970: 0)
         for descriptor in CoreSyncSchema.descriptors {
             let data = try await service.changes(table: descriptor.table, since: since, accessToken: accessToken)
             let rows = (try JSONSerialization.jsonObject(with: data)) as? [[String: Any]] ?? []
@@ -89,6 +89,7 @@ final class EntitySyncCoordinator: ObservableObject {
         }
         if context.hasChanges { try context.save() }
     }
+    private func checkpointKey(_ ownerId: UUID) -> String { "\(checkpointKeyPrefix).\(ownerId.uuidString.lowercased())" }
 
     func encode(_ record: NSManagedObject, descriptor: SyncEntityDescriptor, ownerId: UUID) throws -> Data {
         guard let id = record.value(forKey: "id") as? UUID else { throw AuthServiceError.invalidResponse }
@@ -120,7 +121,13 @@ final class EntitySyncCoordinator: ObservableObject {
         object.setValue(remoteVersion, forKey: "version"); object.setValue(parseDate(row["deleted_at"]), forKey: "deletedAt"); object.setValue(SyncStatus.synced.rawValue, forKey: "syncStatusRaw")
     }
 
-    private func localObject(_ entity: String, id: UUID) throws -> NSManagedObject? { let request = NSFetchRequest<NSManagedObject>(entityName: entity); request.predicate = NSPredicate(format: "id == %@", id as CVarArg); request.fetchLimit = 1; return try context.fetch(request).first }
+    private func localObject(_ entity: String, id: UUID, expectedOwner: UUID? = nil) throws -> NSManagedObject? {
+        let request = NSFetchRequest<NSManagedObject>(entityName: entity)
+        if let expectedOwner { request.predicate = NSPredicate(format: "id == %@ AND (ownerId == nil OR ownerId == %@)", id as CVarArg, expectedOwner as CVarArg) }
+        else { request.predicate = NSPredicate(format: "id == %@", id as CVarArg) }
+        request.fetchLimit = 1
+        return try context.fetch(request).first
+    }
     private func remoteValue(_ value: Any?, kind: RemoteFieldKind) -> Any {
         guard let value else { return NSNull() }
         switch kind {

@@ -50,8 +50,9 @@ struct LabGoldenVerifier {
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
+        verifyLocalDataIsolation()
         await verifySessionRecovery()
-        print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, ambientes, sesión offline, sincronización, IA, perfil y social aprobados")
+        print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, ambientes, sesión offline, sincronización multiusuario, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -588,6 +589,44 @@ struct LabGoldenVerifier {
         let descriptor = CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" }!
         try! coordinator.merge(row, descriptor: descriptor, expectedOwner: owner)
         precondition(bean.name == "Remoto" && bean.syncStatus == .synced && bean.version == 8)
+    }
+
+    @MainActor private static func verifyLocalDataIsolation() {
+        let ownerA = UUID(); let ownerB = UUID(); let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        context.activeOwnerId = ownerA; let beanA = CoffeeBeanRecord(context: context, name: "Cuenta A", brand: "A", remainingQuantityGrams: 100)
+        context.activeOwnerId = ownerB; let beanB = CoffeeBeanRecord(context: context, name: "Cuenta B", brand: "B", remainingQuantityGrams: 100)
+        context.activeOwnerId = nil; _ = CoffeeBeanRecord(context: context, name: "Invitado", brand: "Local", remainingQuantityGrams: 100); try! context.save()
+        func names(_ ownerId: UUID?) -> Set<String> {
+            let request = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord"); request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: ownerId)
+            return Set((try! context.fetch(request)).map(\.name))
+        }
+        precondition(beanA.ownerId == ownerA && beanB.ownerId == ownerB)
+        precondition(names(ownerA) == ["Cuenta A", "Invitado"] && names(ownerB) == ["Cuenta B", "Invitado"] && names(nil) == ["Invitado"])
+        let outbox = SyncOutboxRepository(context: context)
+        _ = try! outbox.enqueue(entityName: "coffee_beans", entityId: beanA.id, ownerId: ownerA, operation: .pendingCreate, payloadJSON: "[]")
+        _ = try! outbox.enqueue(entityName: "coffee_beans", entityId: beanB.id, ownerId: ownerB, operation: .pendingCreate, payloadJSON: "[]")
+        precondition((try! outbox.ready(ownerId: ownerA)).allSatisfy { $0.ownerId == ownerA })
+        precondition((try! outbox.ready(ownerId: ownerB)).allSatisfy { $0.ownerId == ownerB })
+
+        let suite = "CupaScopeVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite); LocalDataScope.activeOwnerId = nil }
+        LocalDataScope.activeOwnerId = ownerA
+        let calculator = CalculatorModel(defaults: defaults); calculator.changeCoffee("21")
+        let preparation = PreparationModel(defaults: defaults); preparation.load(calculator: calculator)
+        let lab = LabModel(defaults: defaults); lab.update { $0.waterMl = 333; $0.notes = "Hipótesis A" }
+        let tasting = TastingModel(defaults: defaults); tasting.state.freeNotes = "Cata A"
+        calculator.switchScope(to: ownerB); preparation.switchScope(to: ownerB); lab.switchScope(to: ownerB); tasting.switchScope(to: ownerB)
+        precondition(calculator.coffee == 15 && preparation.state.techniqueName == "Preparación libre")
+        precondition(lab.state.waterMl == 240 && tasting.state.freeNotes.isEmpty)
+        calculator.changeCoffee("18"); lab.update { $0.waterMl = 280 }; tasting.state.freeNotes = "Cata B"
+        calculator.switchScope(to: ownerA); preparation.switchScope(to: ownerA); lab.switchScope(to: ownerA); tasting.switchScope(to: ownerA)
+        precondition(calculator.coffee == 21 && preparation.state.techniqueName.contains("V60"))
+        precondition(lab.state.waterMl == 333 && lab.state.notes == "Hipótesis A" && tasting.state.freeNotes == "Cata A")
+        calculator.switchScope(to: ownerB); lab.switchScope(to: ownerB); tasting.switchScope(to: ownerB)
+        precondition(calculator.coffee == 18 && lab.state.waterMl == 280 && tasting.state.freeNotes == "Cata B")
+        defaults.set("legado", forKey: "scope.legacy")
+        precondition(LocalDataScope.migrateLegacyObject(in: defaults, baseKey: "scope.legacy", ownerId: ownerA) as? String == "legado")
+        precondition(defaults.object(forKey: "scope.legacy") == nil)
     }
 
     @MainActor private static func verifySessionRecovery() async {

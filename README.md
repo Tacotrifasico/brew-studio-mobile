@@ -24,6 +24,8 @@ El proyecto incluye el AppIcon de la referencia Android y semántica VoiceOver p
 
 Al iniciar sesión, la sincronización reclama los datos creados offline, sube la outbox y descarga cambios incrementales de todos los agregados para restaurarlos en otro dispositivo. La sesión sobrevive a cortes de internet sin reutilizar tokens vencidos y la app reintenta automáticamente al recuperar red o volver al primer plano. La validación contra el proyecto Supabase real requiere las dos variables públicas descritas en `BLOCKERS.md`.
 
+Los datos locales también están separados por cuenta: cerrar sesión oculta inmediatamente el contenido del propietario anterior y una cuenta distinta usa sus propias entidades, cola de sincronización, Calculadora, Laboratorio, Preparación y Cata. El trabajo creado sin cuenta permanece como invitado y puede ser reclamado por el primer usuario que sincronice.
+
 El target `CupaTests` contiene pruebas XCTest. Si CoreSimulator no inicia, `Tools/LabGoldenVerifier.swift` valida cuatro casos dorados, restauración de estado y persistencia Core Data desde macOS; el comando está en `TEST_PLAN.md`.
 
 El target `CupaUITests` contiene recorridos de interfaz y lanza una base Core Data en memoria mediante el argumento `-ui-testing`, sin alterar ni depender de datos personales del simulador.

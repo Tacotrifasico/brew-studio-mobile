@@ -240,13 +240,13 @@ final class RecipeTechniqueRepository {
     }
 
     func ingredients(recipeId: UUID) throws -> [RecipeIngredientRecord] {
-        try fetch(RecipeIngredientRecord.self, entity: "RecipeIngredientRecord", predicate: NSPredicate(format: "recipeId == %@ AND deletedAt == nil", recipeId as CVarArg), sortKey: "orderIndex")
+        try fetch(RecipeIngredientRecord.self, entity: "RecipeIngredientRecord", predicate: NSPredicate(format: "recipeId == %@", recipeId as CVarArg), sortKey: "orderIndex")
     }
     func recipeSteps(recipeId: UUID) throws -> [RecipeStepRecord] {
-        try fetch(RecipeStepRecord.self, entity: "RecipeStepRecord", predicate: NSPredicate(format: "recipeId == %@ AND deletedAt == nil", recipeId as CVarArg), sortKey: "stepNumber")
+        try fetch(RecipeStepRecord.self, entity: "RecipeStepRecord", predicate: NSPredicate(format: "recipeId == %@", recipeId as CVarArg), sortKey: "stepNumber")
     }
     func techniqueSteps(techniqueId: UUID) throws -> [TechniqueStepRecord] {
-        try fetch(TechniqueStepRecord.self, entity: "TechniqueStepRecord", predicate: NSPredicate(format: "techniqueId == %@ AND deletedAt == nil", techniqueId as CVarArg), sortKey: "stepNumber")
+        try fetch(TechniqueStepRecord.self, entity: "TechniqueStepRecord", predicate: NSPredicate(format: "techniqueId == %@", techniqueId as CVarArg), sortKey: "stepNumber")
     }
 
     private func recipe(id: UUID) throws -> RecipeRecord? { try object(RecipeRecord.self, entity: "RecipeRecord", id: id) }
@@ -289,11 +289,11 @@ final class RecipeTechniqueRepository {
     }
 
     private func object<T: NSManagedObject>(_ type: T.Type, entity: String, id: UUID) throws -> T? {
-        let request = NSFetchRequest<T>(entityName: entity); request.predicate = NSPredicate(format: "id == %@", id as CVarArg); request.fetchLimit = 1
+        let request = NSFetchRequest<T>(entityName: entity); request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "id == %@", id as CVarArg)); request.fetchLimit = 1
         return try context.fetch(request).first
     }
     private func fetch<T: NSManagedObject>(_ type: T.Type, entity: String, predicate: NSPredicate, sortKey: String) throws -> [T] {
-        let request = NSFetchRequest<T>(entityName: entity); request.predicate = predicate; request.sortDescriptors = [NSSortDescriptor(key: sortKey, ascending: true)]
+        let request = NSFetchRequest<T>(entityName: entity); request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: predicate); request.sortDescriptors = [NSSortDescriptor(key: sortKey, ascending: true)]
         return try context.fetch(request)
     }
     private func saveContext() throws { if context.hasChanges { try context.save() } }

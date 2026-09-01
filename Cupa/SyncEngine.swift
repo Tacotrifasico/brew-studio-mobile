@@ -34,7 +34,8 @@ struct SyncOutboxRepository {
 
     @discardableResult func enqueue(entityName: String, entityId: UUID, ownerId: UUID?, operation: SyncStatus, payloadJSON: String) throws -> SyncOperationRecord {
         let request = NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")
-        request.predicate = NSPredicate(format: "entityName == %@ AND entityId == %@ AND deletedAt == nil", entityName, entityId as CVarArg)
+        if let ownerId { request.predicate = NSPredicate(format: "entityName == %@ AND entityId == %@ AND ownerId == %@ AND deletedAt == nil", entityName, entityId as CVarArg, ownerId as CVarArg) }
+        else { request.predicate = NSPredicate(format: "entityName == %@ AND entityId == %@ AND ownerId == nil AND deletedAt == nil", entityName, entityId as CVarArg) }
         let item = try context.fetch(request).first ?? SyncOperationRecord(context: context)
         if item.value(forKey: "createdAt") == nil {
             item.id = UUID(); item.ownerId = ownerId; item.entityName = entityName; item.entityId = entityId
@@ -44,9 +45,10 @@ struct SyncOutboxRepository {
         try context.save(); return item
     }
 
-    func ready(now: Date = .now, limit: Int = 100) throws -> [SyncOperationRecord] {
+    func ready(ownerId: UUID? = nil, now: Date = .now, limit: Int = 100) throws -> [SyncOperationRecord] {
         let request = NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")
-        request.predicate = NSPredicate(format: "deletedAt == nil AND nextAttemptAt <= %@", now as NSDate)
+        if let ownerId { request.predicate = NSPredicate(format: "ownerId == %@ AND deletedAt == nil AND nextAttemptAt <= %@", ownerId as CVarArg, now as NSDate) }
+        else { request.predicate = NSPredicate(format: "deletedAt == nil AND nextAttemptAt <= %@", now as NSDate) }
         request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]; request.fetchLimit = limit
         return try context.fetch(request)
     }

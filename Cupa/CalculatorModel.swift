@@ -48,7 +48,7 @@ final class CalculatorModel: ObservableObject {
     @Published var waterInput = "240"
     @Published var microcopy = "Listo para preparar."
     @Published private(set) var savedPresets: [BrewPreset] = []
-    @Published private(set) var pinnedMethodNames: Set<String>
+    @Published private(set) var pinnedMethodNames: Set<String> = []
 
     let methods = ["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"]
     private let defaultPinnedMethods: Set<String> = ["V60", "AeroPress", "Espresso", "Prensa francesa"]
@@ -69,8 +69,13 @@ final class CalculatorModel: ObservableObject {
     ]
 
     private let userDefaults: UserDefaults
-    private let stateKey = "cupa.calculatorState.v1"
-    private let pinnedMethodsKey = "cupa.pinnedCalculatorMethods.v1"
+    private var scopeOwnerId: UUID?
+    private let stateKeyBase = "cupa.calculatorState.v1"
+    private let pinnedMethodsKeyBase = "cupa.pinnedCalculatorMethods.v1"
+    private let savedRatiosKeyBase = "cupa.savedRatios"
+    private var stateKey: String { LocalDataScope.scopedKey(stateKeyBase, ownerId: scopeOwnerId) }
+    private var pinnedMethodsKey: String { LocalDataScope.scopedKey(pinnedMethodsKeyBase, ownerId: scopeOwnerId) }
+    private var savedRatiosKey: String { LocalDataScope.scopedKey(savedRatiosKeyBase, ownerId: scopeOwnerId) }
 
     var presets: [BrewPreset] { savedPresets + builtInPresets }
 
@@ -88,17 +93,32 @@ final class CalculatorModel: ObservableObject {
     }
 
     init(defaults: UserDefaults = .standard) {
-        userDefaults = defaults
-        if let stored = defaults.array(forKey: pinnedMethodsKey) as? [String] {
+        userDefaults = defaults; scopeOwnerId = LocalDataScope.activeOwnerId
+        restoreScope()
+    }
+
+    func switchScope(to ownerId: UUID?) {
+        guard scopeOwnerId != ownerId else { return }
+        scopeOwnerId = ownerId; restoreScope()
+    }
+
+    private func restoreScope() {
+        method = "V60"; selectedMethodId = nil; coffee = 15; ratio = 16; water = 240
+        coffeeInput = "15.0"; ratioInput = "16.0"; waterInput = "240"; microcopy = "Listo para preparar."
+        savedPresets = []
+        let storedPins = userDefaults.object(forKey: pinnedMethodsKey) ?? LocalDataScope.migrateLegacyObject(in: userDefaults, baseKey: pinnedMethodsKeyBase, ownerId: scopeOwnerId)
+        if let stored = storedPins as? [String] {
             pinnedMethodNames = Set(stored)
         } else {
             pinnedMethodNames = defaultPinnedMethods
         }
-        if let data = defaults.data(forKey: "cupa.savedRatios"),
+        let storedRatios = userDefaults.object(forKey: savedRatiosKey) ?? LocalDataScope.migrateLegacyObject(in: userDefaults, baseKey: savedRatiosKeyBase, ownerId: scopeOwnerId)
+        if let data = storedRatios as? Data,
            let decoded = try? JSONDecoder().decode([BrewPreset].self, from: data) {
             savedPresets = decoded
         }
-        if let data = defaults.data(forKey: stateKey),
+        let storedState = userDefaults.object(forKey: stateKey) ?? LocalDataScope.migrateLegacyObject(in: userDefaults, baseKey: stateKeyBase, ownerId: scopeOwnerId)
+        if let data = storedState as? Data,
            let restored = try? JSONDecoder().decode(CalculatorStateSnapshot.self, from: data),
            !restored.method.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            restored.coffee >= 1, restored.ratio >= 1, restored.water >= 1 {
@@ -193,7 +213,7 @@ final class CalculatorModel: ObservableObject {
             microcopy = "Proporción guardada en favoritos."
         }
         if let data = try? JSONEncoder().encode(savedPresets) {
-            userDefaults.set(data, forKey: "cupa.savedRatios")
+            userDefaults.set(data, forKey: savedRatiosKey)
         }
     }
 

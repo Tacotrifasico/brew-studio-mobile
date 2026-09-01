@@ -19,17 +19,29 @@ struct PreparationState: Codable, Equatable {
 @MainActor
 final class PreparationModel: ObservableObject {
     @Published private(set) var state: PreparationState { didSet { persist() } }
-    private let defaults: UserDefaults; private let key = "cupa.activePreparation.v1"; private var timer: Timer?
+    private let defaults: UserDefaults; private var scopeOwnerId: UUID?; private let keyBase = "cupa.activePreparation.v1"; private var timer: Timer?
+    private var key: String { LocalDataScope.scopedKey(keyBase, ownerId: scopeOwnerId) }
 
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        if let data = defaults.data(forKey: key), let restored = try? JSONDecoder().decode(PreparationState.self, from: data), restored.status != .completed || restored.savedAt == nil {
+        self.defaults = defaults; scopeOwnerId = LocalDataScope.activeOwnerId
+        let baseKey = "cupa.activePreparation.v1"; let scopedKey = LocalDataScope.scopedKey(baseKey, ownerId: scopeOwnerId)
+        let stored = defaults.object(forKey: scopedKey) ?? LocalDataScope.migrateLegacyObject(in: defaults, baseKey: baseKey, ownerId: scopeOwnerId)
+        if let data = stored as? Data, let restored = try? JSONDecoder().decode(PreparationState.self, from: data), restored.status != .completed || restored.savedAt == nil {
             state = restored
         } else { state = PreparationState() }
         if state.status == .running { synchronizeClock(); scheduleTimer() }
     }
 
     deinit { timer?.invalidate() }
+
+    func switchScope(to ownerId: UUID?) {
+        guard scopeOwnerId != ownerId else { return }
+        synchronizeClock(); timer?.invalidate(); timer = nil; scopeOwnerId = ownerId
+        let stored = defaults.object(forKey: key) ?? LocalDataScope.migrateLegacyObject(in: defaults, baseKey: keyBase, ownerId: ownerId)
+        if let data = stored as? Data, let restored = try? JSONDecoder().decode(PreparationState.self, from: data), restored.status != .completed || restored.savedAt == nil { state = restored }
+        else { state = PreparationState() }
+        if state.status == .running { synchronizeClock(); scheduleTimer() }
+    }
 
     var activeStep: PreparationStepSnapshot? { state.steps.indices.contains(state.activeStepIndex) ? state.steps[state.activeStepIndex] : nil }
     var totalDuration: Int { state.steps.reduce(0) { $0 + $1.durationSeconds } }

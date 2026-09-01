@@ -931,6 +931,57 @@ final class SocialTests: XCTestCase {
 }
 
 final class EntitySyncTests: XCTestCase {
+    @MainActor func testLocalAccountScopeSeparatesRecordsOutboxAndActiveWork() throws {
+        let ownerA = UUID(); let ownerB = UUID(); let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        defer { LocalDataScope.activeOwnerId = nil }
+
+        context.activeOwnerId = ownerA
+        let beanA = CoffeeBeanRecord(context: context, name: "Sólo A", brand: "A", remainingQuantityGrams: 100)
+        context.activeOwnerId = ownerB
+        let beanB = CoffeeBeanRecord(context: context, name: "Sólo B", brand: "B", remainingQuantityGrams: 100)
+        context.activeOwnerId = nil
+        let guest = CoffeeBeanRecord(context: context, name: "Invitado", brand: "Local", remainingQuantityGrams: 100)
+        try context.save()
+        XCTAssertEqual(beanA.ownerId, ownerA); XCTAssertEqual(beanB.ownerId, ownerB); XCTAssertNil(guest.ownerId)
+
+        func visible(_ owner: UUID?) throws -> Set<String> {
+            let request = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
+            request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: owner)
+            return Set(try context.fetch(request).map(\.name))
+        }
+        XCTAssertEqual(try visible(ownerA), ["Sólo A", "Invitado"])
+        XCTAssertEqual(try visible(ownerB), ["Sólo B", "Invitado"])
+        XCTAssertEqual(try visible(nil), ["Invitado"])
+
+        let outbox = SyncOutboxRepository(context: context)
+        _ = try outbox.enqueue(entityName: "coffee_beans", entityId: beanA.id, ownerId: ownerA, operation: .pendingCreate, payloadJSON: "[]")
+        _ = try outbox.enqueue(entityName: "coffee_beans", entityId: beanB.id, ownerId: ownerB, operation: .pendingCreate, payloadJSON: "[]")
+        XCTAssertEqual(try outbox.ready(ownerId: ownerA).map(\.ownerId), [ownerA])
+        XCTAssertEqual(try outbox.ready(ownerId: ownerB).map(\.ownerId), [ownerB])
+
+        let suiteName = "LocalScopeTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        LocalDataScope.activeOwnerId = ownerA
+        let calculator = CalculatorModel(defaults: defaults); calculator.changeCoffee("21")
+        let preparation = PreparationModel(defaults: defaults); preparation.load(calculator: calculator)
+        let lab = LabModel(defaults: defaults); lab.update { $0.waterMl = 333; $0.notes = "Hipótesis A" }
+        let tasting = TastingModel(defaults: defaults); tasting.state.freeNotes = "Cata A"
+        calculator.switchScope(to: ownerB); preparation.switchScope(to: ownerB); lab.switchScope(to: ownerB); tasting.switchScope(to: ownerB)
+        XCTAssertEqual(calculator.coffee, 15); XCTAssertEqual(preparation.state.techniqueName, "Preparación libre")
+        XCTAssertEqual(lab.state.waterMl, 240); XCTAssertTrue(tasting.state.freeNotes.isEmpty)
+        calculator.changeCoffee("18"); lab.update { $0.waterMl = 280; $0.notes = "Hipótesis B" }; tasting.state.freeNotes = "Cata B"
+        calculator.switchScope(to: ownerA); preparation.switchScope(to: ownerA); lab.switchScope(to: ownerA); tasting.switchScope(to: ownerA)
+        XCTAssertEqual(calculator.coffee, 21); XCTAssertTrue(preparation.state.techniqueName.contains("V60"))
+        XCTAssertEqual(lab.state.waterMl, 333); XCTAssertEqual(lab.state.notes, "Hipótesis A"); XCTAssertEqual(tasting.state.freeNotes, "Cata A")
+        calculator.switchScope(to: ownerB); lab.switchScope(to: ownerB); tasting.switchScope(to: ownerB)
+        XCTAssertEqual(calculator.coffee, 18); XCTAssertEqual(lab.state.waterMl, 280); XCTAssertEqual(tasting.state.freeNotes, "Cata B")
+
+        defaults.set("legado", forKey: "scope.legacy")
+        XCTAssertEqual(LocalDataScope.migrateLegacyObject(in: defaults, baseKey: "scope.legacy", ownerId: ownerA) as? String, "legado")
+        XCTAssertNil(defaults.object(forKey: "scope.legacy"))
+        XCTAssertEqual(defaults.string(forKey: LocalDataScope.scopedKey("scope.legacy", ownerId: ownerA)), "legado")
+    }
+
     @MainActor func testPendingOwnershipEncodingRemoteMergeAndJSONSnapshots() throws {
         let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
         let bean = CoffeeBeanRecord(context: context, name: "Local", brand: "Tostador", origin: "México", remainingQuantityGrams: 200)

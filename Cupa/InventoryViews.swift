@@ -5,7 +5,7 @@ struct GrinderInventoryView: View {
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.updatedAt, ascending: false)],
-        predicate: NSPredicate(format: "deletedAt == nil"), animation: .default
+        predicate: LocalDataScope.visiblePredicate(), animation: .default
     ) private var grinders: FetchedResults<GrinderRecord>
     @State private var adding = false
     @State private var editing: GrinderRecord?
@@ -75,7 +75,7 @@ struct EquipmentInventoryView: View {
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.updatedAt, ascending: false)],
-        predicate: NSPredicate(format: "deletedAt == nil"), animation: .default
+        predicate: LocalDataScope.visiblePredicate(), animation: .default
     ) private var equipment: FetchedResults<EquipmentRecord>
     @State private var adding = false
     @State private var editing: EquipmentRecord?

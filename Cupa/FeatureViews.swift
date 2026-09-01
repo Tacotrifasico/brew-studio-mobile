@@ -91,7 +91,7 @@ struct BrewView: View {
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.createdAt, ascending: true)],
-        predicate: NSPredicate(format: "deletedAt == nil AND isActive == YES")
+        predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "isActive == YES"))
     ) private var activeEquipment: FetchedResults<EquipmentRecord>
     @Binding var selection: CupaTab
     @ObservedObject var calculator: CalculatorModel
@@ -357,14 +357,14 @@ struct LabView: View {
     @Environment(\.managedObjectContext) private var modelContext
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \LabExperimentRecord.createdAt, ascending: false)],
-        predicate: NSPredicate(format: "deletedAt == nil"),
+        predicate: LocalDataScope.visiblePredicate(),
         animation: .default
     ) private var experiments: FetchedResults<LabExperimentRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var recipes: FetchedResults<RecipeRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var techniques: FetchedResults<TechniqueRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var beans: FetchedResults<CoffeeBeanRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var grinders: FetchedResults<GrinderRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil AND equipmentType == 'BREWER_METHOD'")) private var methods: FetchedResults<EquipmentRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var techniques: FetchedResults<TechniqueRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "equipmentType == 'BREWER_METHOD'"))) private var methods: FetchedResults<EquipmentRecord>
     @ObservedObject var model: LabModel
     @ObservedObject var preparation: PreparationModel
     @ObservedObject var account: AccountModel
@@ -810,7 +810,7 @@ private struct CupHistoryView: View {
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \CupSessionRecord.brewDate, ascending: false)],
-        predicate: NSPredicate(format: "deletedAt == nil"),
+        predicate: LocalDataScope.visiblePredicate(),
         animation: .default
     ) private var cups: FetchedResults<CupSessionRecord>
     @State private var errorMessage: String?
@@ -935,7 +935,7 @@ private struct CoffeeInventoryView: View {
     @Environment(\.managedObjectContext) private var modelContext
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.updatedAt, ascending: false)],
-        predicate: NSPredicate(format: "deletedAt == nil"),
+        predicate: LocalDataScope.visiblePredicate(),
         animation: .default
     ) private var beans: FetchedResults<CoffeeBeanRecord>
     @Binding var selection: CupaTab
@@ -1056,12 +1056,12 @@ private struct CoffeeBeanDetail: View {
         self.onDelete = onDelete
         _brews = FetchRequest(
             sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)],
-            predicate: NSPredicate(format: "beanId == %@ AND deletedAt == nil", record.id as CVarArg),
+            predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "beanId == %@", record.id as CVarArg)),
             animation: .default
         )
         _cups = FetchRequest(
             sortDescriptors: [NSSortDescriptor(keyPath: \CupSessionRecord.brewDate, ascending: false)],
-            predicate: NSPredicate(format: "beanId == %@ AND deletedAt == nil", record.id as CVarArg),
+            predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "beanId == %@", record.id as CVarArg)),
             animation: .default
         )
     }

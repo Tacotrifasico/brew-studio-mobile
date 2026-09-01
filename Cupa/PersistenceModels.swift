@@ -1,6 +1,42 @@
 import CoreData
 import Foundation
 
+enum LocalDataScope {
+    static var activeOwnerId: UUID?
+
+    static func contains(recordOwnerId: UUID?, activeOwnerId: UUID?) -> Bool {
+        guard let activeOwnerId else { return recordOwnerId == nil }
+        return recordOwnerId == nil || recordOwnerId == activeOwnerId
+    }
+
+    static func visiblePredicate(activeOwnerId: UUID? = activeOwnerId, additional: NSPredicate? = nil) -> NSPredicate {
+        let ownership = activeOwnerId.map { NSPredicate(format: "ownerId == nil OR ownerId == %@", $0 as CVarArg) }
+            ?? NSPredicate(format: "ownerId == nil")
+        let notDeleted = NSPredicate(format: "deletedAt == nil")
+        return NSCompoundPredicate(andPredicateWithSubpredicates: [ownership, notDeleted] + (additional.map { [$0] } ?? []))
+    }
+
+    static func scopedKey(_ base: String, ownerId: UUID?) -> String {
+        "\(base).scope.\(ownerId?.uuidString.lowercased() ?? "guest")"
+    }
+
+    static func migrateLegacyObject(in defaults: UserDefaults, baseKey: String, ownerId: UUID?) -> Any? {
+        let key = scopedKey(baseKey, ownerId: ownerId)
+        if let value = defaults.object(forKey: key) { return value }
+        guard let legacy = defaults.object(forKey: baseKey) else { return nil }
+        defaults.set(legacy, forKey: key); defaults.removeObject(forKey: baseKey)
+        return legacy
+    }
+}
+
+extension NSManagedObjectContext {
+    private static let activeOwnerKey = "cupa.activeOwnerId"
+    var activeOwnerId: UUID? {
+        get { userInfo[Self.activeOwnerKey] as? UUID }
+        set { userInfo[Self.activeOwnerKey] = newValue }
+    }
+}
+
 enum SyncStatus: String, Codable, CaseIterable {
     case synced, pendingCreate, pendingUpdate, pendingDelete, conflict, error
 }
@@ -220,7 +256,7 @@ final class CoffeeBeanRecord: NSManagedObject {
         version: Int64 = 1, syncStatus: SyncStatus = .pendingCreate, deletedAt: Date? = nil
     ) {
         self.init(context: context)
-        self.id = id; self.ownerId = ownerId; self.name = name; self.brand = brand
+        self.id = id; self.ownerId = ownerId ?? context.activeOwnerId; self.name = name; self.brand = brand
         self.origin = origin; self.producer = producer; self.variety = variety; self.process = process
         self.altitudeMeters = altitudeMeters; self.roastLevel = roastLevel
         self.roastDate = roastDate; self.openedDate = openedDate
@@ -270,7 +306,7 @@ final class LabExperimentRecord: NSManagedObject {
 
     convenience init(context: NSManagedObjectContext, state: LabState, profile: LabFlavorProfile) {
         self.init(context: context)
-        id = UUID(); ownerId = nil; methodId = state.methodId; recipeId = state.recipeId
+        id = UUID(); ownerId = context.activeOwnerId; methodId = state.methodId; recipeId = state.recipeId
         techniqueId = state.techniqueId; beanId = state.beanId; grinderId = state.grinderId; method = state.method
         coffeeGrams = Double(state.coffeeGrams); waterMl = Int64(state.waterMl); ratio = Double(state.ratio)
         temperatureC = Int64(state.temperatureC); grindClicks = Int64(state.grindClicks)
@@ -314,7 +350,7 @@ final class GrinderRecord: NSManagedObject {
 
     convenience init(context: NSManagedObjectContext, name: String, brand: String, model: String, grinderType: String, scaleUnit: String, minimumSetting: Int, maximumSetting: Int, calibrationNotes: String, notes: String) {
         self.init(context: context)
-        id = UUID(); ownerId = nil; self.name = name; self.brand = brand; self.model = model
+        id = UUID(); ownerId = context.activeOwnerId; self.name = name; self.brand = brand; self.model = model
         self.grinderType = grinderType; self.scaleUnit = scaleUnit
         self.minimumSetting = Int64(minimumSetting); self.maximumSetting = Int64(maximumSetting)
         self.calibrationNotes = calibrationNotes; self.notes = notes
@@ -360,7 +396,7 @@ final class EquipmentRecord: NSManagedObject {
     }
     convenience init(context: NSManagedObjectContext, name: String, equipmentType: String, brand: String, model: String, capacityMl: Int?, configuration: String, notes: String, isFavorite: Bool, isActive: Bool) {
         self.init(context: context)
-        id = UUID(); ownerId = nil; self.name = name; self.equipmentType = equipmentType
+        id = UUID(); ownerId = context.activeOwnerId; self.name = name; self.equipmentType = equipmentType
         self.brand = brand; self.model = model; self.capacityMl = capacityMl
         self.configuration = configuration; self.notes = notes; self.isFavorite = isFavorite; self.isActive = isActive
         createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil

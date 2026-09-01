@@ -46,13 +46,25 @@ struct TastingState: Codable, Equatable {
 @MainActor
 final class TastingModel: ObservableObject {
     @Published var state: TastingState { didSet { persist() } }
-    private let defaults: UserDefaults; private let key = "cupa.activeTasting.v1"; private var timer: Timer?
+    private let defaults: UserDefaults; private var scopeOwnerId: UUID?; private let keyBase = "cupa.activeTasting.v1"; private var timer: Timer?
+    private var key: String { LocalDataScope.scopedKey(keyBase, ownerId: scopeOwnerId) }
 
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        if let data = defaults.data(forKey: key), let restored = try? JSONDecoder().decode(TastingState.self, from: data), restored.coolingStatus != .completed {
+        self.defaults = defaults; scopeOwnerId = LocalDataScope.activeOwnerId
+        let baseKey = "cupa.activeTasting.v1"; let scopedKey = LocalDataScope.scopedKey(baseKey, ownerId: scopeOwnerId)
+        let stored = defaults.object(forKey: scopedKey) ?? LocalDataScope.migrateLegacyObject(in: defaults, baseKey: baseKey, ownerId: scopeOwnerId)
+        if let data = stored as? Data, let restored = try? JSONDecoder().decode(TastingState.self, from: data), restored.coolingStatus != .completed {
             state = restored
         } else { state = TastingState() }
+        if state.coolingStatus == .running { synchronizeClock(); scheduleTimer() }
+    }
+
+    func switchScope(to ownerId: UUID?) {
+        guard scopeOwnerId != ownerId else { return }
+        synchronizeClock(); timer?.invalidate(); timer = nil; scopeOwnerId = ownerId
+        let stored = defaults.object(forKey: key) ?? LocalDataScope.migrateLegacyObject(in: defaults, baseKey: keyBase, ownerId: ownerId)
+        if let data = stored as? Data, let restored = try? JSONDecoder().decode(TastingState.self, from: data), restored.coolingStatus != .completed { state = restored }
+        else { state = TastingState() }
         if state.coolingStatus == .running { synchronizeClock(); scheduleTimer() }
     }
 
@@ -204,31 +216,31 @@ struct TastingRepository {
 
     func observations(tastingId: UUID) throws -> [TastingObservationRecord] {
         let request = NSFetchRequest<TastingObservationRecord>(entityName: "TastingObservationRecord")
-        request.predicate = NSPredicate(format: "tastingId == %@ AND deletedAt == nil", tastingId as CVarArg)
+        request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "tastingId == %@", tastingId as CVarArg))
         request.sortDescriptors = [NSSortDescriptor(key: "elapsedSeconds", ascending: true)]
         return try context.fetch(request)
     }
 
     @discardableResult func save(_ state: TastingState, brew: BrewSessionRecord?) throws -> TastingRecord {
-        let request = NSFetchRequest<TastingRecord>(entityName: "TastingRecord"); request.predicate = NSPredicate(format: "id == %@", state.id as CVarArg)
+        let request = NSFetchRequest<TastingRecord>(entityName: "TastingRecord"); request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "id == %@", state.id as CVarArg))
         let record = try context.fetch(request).first ?? TastingRecord(context: context)
         let isNew = record.managedObjectContext != nil && record.value(forKey: "createdAt") == nil
-        if isNew { record.id = state.id; record.ownerId = nil; record.createdAt = state.startedAt ?? .now; record.version = 1; record.syncStatusRaw = SyncStatus.pendingCreate.rawValue; record.deletedAt = nil }
+        if isNew { record.id = state.id; record.ownerId = context.activeOwnerId; record.createdAt = state.startedAt ?? .now; record.version = 1; record.syncStatusRaw = SyncStatus.pendingCreate.rawValue; record.deletedAt = nil }
         else { record.markUpdated() }
         record.apply(state, brew: brew)
 
         let existing = try observations(tastingId: state.id); let byId = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
         for item in state.observations {
             let child = byId[item.id] ?? TastingObservationRecord(context: context)
-            if byId[item.id] == nil { child.ownerId = nil; child.createdAt = .now; child.version = 1; child.syncStatusRaw = SyncStatus.pendingCreate.rawValue; child.deletedAt = nil }
+            if byId[item.id] == nil { child.ownerId = context.activeOwnerId; child.createdAt = .now; child.version = 1; child.syncStatusRaw = SyncStatus.pendingCreate.rawValue; child.deletedAt = nil }
             else { child.markUpdated() }
             child.apply(item, tastingId: state.id); child.updatedAt = .now
         }
         let retained = Set(state.observations.map(\.id)); existing.filter { !retained.contains($0.id) }.forEach { $0.markDeleted() }
 
-        let cupRequest = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"); cupRequest.predicate = NSPredicate(format: "tastingId == %@", state.id as CVarArg)
+        let cupRequest = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"); cupRequest.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "tastingId == %@", state.id as CVarArg))
         let cup = try context.fetch(cupRequest).first ?? CupSessionRecord(context: context)
-        if cup.value(forKey: "createdAt") == nil { cup.id = UUID(); cup.ownerId = nil; cup.tastingId = state.id; cup.createdAt = .now; cup.version = 1; cup.syncStatusRaw = SyncStatus.pendingCreate.rawValue; cup.deletedAt = nil }
+        if cup.value(forKey: "createdAt") == nil { cup.id = UUID(); cup.ownerId = context.activeOwnerId; cup.tastingId = state.id; cup.createdAt = .now; cup.version = 1; cup.syncStatusRaw = SyncStatus.pendingCreate.rawValue; cup.deletedAt = nil }
         else { cup.markUpdated() }
         cup.brewSessionId = state.brewSessionId; cup.recipeId = brew?.recipeId; cup.beanId = brew?.beanId; cup.techniqueId = brew?.techniqueId
         cup.methodId = brew?.methodId; cup.grinderId = brew?.grinderId
@@ -248,7 +260,7 @@ struct TastingRepository {
     func delete(_ record: TastingRecord) throws {
         record.markDeleted(); try observations(tastingId: record.id).forEach { $0.markDeleted() }
         let cupRequest = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")
-        cupRequest.predicate = NSPredicate(format: "tastingId == %@ AND deletedAt == nil", record.id as CVarArg)
+        cupRequest.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "tastingId == %@", record.id as CVarArg))
         try context.fetch(cupRequest).forEach { $0.markDeleted() }
         try context.save()
     }
@@ -256,7 +268,7 @@ struct TastingRepository {
     func delete(_ cup: CupSessionRecord) throws {
         cup.markDeleted()
         let tastingRequest = NSFetchRequest<TastingRecord>(entityName: "TastingRecord")
-        tastingRequest.predicate = NSPredicate(format: "id == %@ AND deletedAt == nil", cup.tastingId as CVarArg)
+        tastingRequest.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "id == %@", cup.tastingId as CVarArg))
         if let tasting = try context.fetch(tastingRequest).first { try delete(tasting) } else { try context.save() }
     }
 }

@@ -3,6 +3,7 @@
 - [ ] Toda la matriz está Validada o Bloqueada por una dependencia externa real.
 - [ ] Supabase y RLS validados con dos usuarios.
 - [ ] Core Data funciona offline y sincroniza al reconectar.
+- [x] Caché, outbox y trabajo recuperable quedan aislados al cambiar de cuenta localmente.
 - [ ] Sesión recuperada tras reinicio y datos tras reinstalación/login.
 - [x] Calculadora y Laboratorio pasan pruebas de paridad.
 - [ ] CRUD completo de entidades separadas.

@@ -162,18 +162,22 @@ struct SupabaseAccountService {
 @MainActor
 final class AccountModel: ObservableObject {
     enum State: Equatable { case unavailable, signedOut, loading, signedIn(AuthTokens), error(String) }
-    @Published private(set) var state: State = .signedOut
+    @Published private(set) var state: State = .signedOut {
+        didSet { LocalDataScope.activeOwnerId = tokens?.userId }
+    }
     @Published private(set) var sessionNotice: String?
     @Published private(set) var isRefreshing = false
     let configuration: AppConfiguration; private let service: SupabaseAuthService; private let store: TokenStore
 
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), store: TokenStore = KeychainTokenStore()) {
         self.configuration = configuration; self.service = SupabaseAuthService(configuration: configuration, transport: transport); self.store = store
+        LocalDataScope.activeOwnerId = nil
         guard configuration.isSupabaseConfigured else { state = .unavailable; return }
         do { state = try store.load().map(State.signedIn) ?? .signedOut } catch { state = .error(error.localizedDescription) }
     }
 
     var tokens: AuthTokens? { if case let .signedIn(tokens) = state { tokens } else { nil } }
+    var localScopeKey: String { tokens?.userId.uuidString ?? "guest" }
     func signIn(email: String, password: String) async { await perform { try await self.service.signIn(email: email, password: password) } }
     func signUp(email: String, password: String) async { await perform { try await self.service.signUp(email: email, password: password) } }
     func recover(email: String) async {

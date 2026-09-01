@@ -3,9 +3,9 @@ import SwiftUI
 
 struct TastingView: View {
     @Environment(\.managedObjectContext) private var context
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TastingRecord.evaluatedAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil"), animation: .default) private var tastings: FetchedResults<TastingRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TastingObservationRecord.elapsedSeconds, ascending: true)], predicate: NSPredicate(format: "deletedAt == nil")) private var persistedObservations: FetchedResults<TastingObservationRecord>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)], predicate: NSPredicate(format: "deletedAt == nil")) private var brews: FetchedResults<BrewSessionRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TastingRecord.evaluatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate(), animation: .default) private var tastings: FetchedResults<TastingRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TastingObservationRecord.elapsedSeconds, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var persistedObservations: FetchedResults<TastingObservationRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var brews: FetchedResults<BrewSessionRecord>
     @ObservedObject var model: TastingModel
     @ObservedObject var lab: LabModel
     @Binding var selection: CupaTab

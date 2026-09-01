@@ -48,6 +48,7 @@
 - Eliminación de cuenta: ruta autenticada, confirmación explícita y ausencia de credenciales administrativas en el request iOS: XCTest compilado.
 - Sincronización: elección por fecha/versión, rechazo de propietario distinto, compactación de outbox, reintento exponencial y finalización: verificador ejecutado.
 - Sincronización integral: asignación de propietario a datos offline, JSON/JSONB, push, pull incremental, merge, checkpoint, outbox preservada sin red y reintento automático al reconectar: XCTest compilado + mapeo ejecutado.
+- Aislamiento multiusuario local: cuenta A, cuenta B e invitado se separan en consultas Core Data, altas, outbox, checkpoints y estados recuperables de Calculadora, Laboratorio, Preparación y Cata; la migración del valor legado ocurre una sola vez: verificador ejecutado + XCTest compilado.
 - Gemini: llamada autenticada a Edge Function, validación de respuesta y fallback local determinista cuando no hay configuración: verificador ejecutado + XCTest compilado.
 - Perfil: creación, edición con UUID estable, normalización de alias, aislamiento entre dos propietarios y DTO sin correo: verificador ejecutado.
 - Configuración: restauración de tema oscuro y Fahrenheit aprobada; eliminado el control métrico sin efecto que no existe en Android.

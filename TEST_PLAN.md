@@ -18,7 +18,7 @@
 
 - Cuenta, café, receta, técnica, preparación, Laboratorio, cata y enfriamiento.
 - Reapertura, edición, eliminación, estados vacíos, errores y offline.
-- El target `CupaUITests` arranca con Core Data en memoria y cubre navegación principal, campos de calculadora, acceso a preparación, Laboratorio, Almacén, Cata, Configuración y Brew Hub.
+- El target `CupaUITests` arranca con Core Data en memoria y cubre navegación principal, Calculadora completa desde Taller y Preparar, estado real del taller, acceso a preparación, Laboratorio, Almacén, Cata, Configuración y Brew Hub.
 
 ## Distribución
 
@@ -54,6 +54,7 @@
 - Perfil: creación, edición con UUID estable, normalización de alias, aislamiento entre dos propietarios y DTO sin correo: verificador ejecutado.
 - Configuración: restauración de tema oscuro y Fahrenheit aprobada; eliminado el control métrico sin efecto que no existe en Android.
 - Navegación: las cinco secciones mantienen el orden Taller, Preparar, Cata, Laboratorio y Almacén; el modelo compartido conserva los 18 g introducidos en Calculadora al recorrerlas todas: XCTest y recorrido UI compilados.
+- Taller: la Calculadora completa reutiliza el mismo modelo y persistencia de Preparar; café, ratio, agua, presets, métodos del inventario, favoritos y acciones Lab/Preparar están disponibles desde Inicio. Los contadores y últimos recursos provienen de Core Data filtrado por propietario y desaparecen en vacío en vez de mostrar datos ficticios: target UI compilado.
 - Tema y accesibilidad: paletas clara y oscura verificadas matemáticamente con contraste WCAG AA mínimo 4.5:1 para texto, secundarios, acentos y categorías; colores sobre botones adaptativos, métricas críticas con Dynamic Type y fila de valoración refluible con valor ajustable: XCTest compilado.
 - Inventario: fallos de guardado de café, molino y equipo hacen rollback, mantienen el editor abierto y muestran alerta; flujo compilado.
 - Café: altitud fuera de rango, cantidades vacías/no numéricas/negativas, existencias mayores al lote y fechas futuras o invertidas son rechazadas antes de guardar; decimal con coma aceptado: verificador ejecutado + XCTest compilado.

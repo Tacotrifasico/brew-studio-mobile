@@ -12,6 +12,11 @@ final class CupaUITests: XCTestCase {
 
     func testMainNavigationAndCalculatorInputs() {
         XCTAssertTrue(app.staticTexts["Taller del Brewther"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["calculator.coffee"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.textFields["calculator.ratio"].exists)
+        XCTAssertTrue(app.textFields["calculator.water"].exists)
+        XCTAssertTrue(app.buttons["calculator.prepare"].exists)
+        XCTAssertTrue(app.otherElements["home.workshopStatus"].exists)
         app.tabBars.buttons["Preparar"].tap()
         XCTAssertTrue(app.textFields["calculator.coffee"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.textFields["calculator.ratio"].exists)

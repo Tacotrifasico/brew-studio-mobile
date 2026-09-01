@@ -51,7 +51,16 @@ struct AppShell: View {
 
     var body: some View {
         TabView(selection: $navigation.selection) {
-            NavigationStack { HomeView(selection: $navigation.selection, account: account, settings: settings) }
+            NavigationStack {
+                HomeView(
+                    selection: $navigation.selection,
+                    account: account,
+                    settings: settings,
+                    calculator: calculator,
+                    lab: lab,
+                    preparation: preparation
+                )
+            }
                 .tag(CupaTab.home)
                 .tabItem { Label("Taller", systemImage: "house") }
 

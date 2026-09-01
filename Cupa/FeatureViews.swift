@@ -2,9 +2,18 @@ import SwiftUI
 import CoreData
 
 struct HomeView: View {
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CupSessionRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var cups: FetchedResults<CupSessionRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var techniques: FetchedResults<TechniqueRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var equipment: FetchedResults<EquipmentRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
     @Binding var selection: CupaTab
     @ObservedObject var account: AccountModel
     @ObservedObject var settings: SettingsModel
+    @ObservedObject var calculator: CalculatorModel
+    @ObservedObject var lab: LabModel
+    @ObservedObject var preparation: PreparationModel
     @State private var showAccount = false
     @State private var showSettings = false
     @State private var showHub = false
@@ -40,19 +49,17 @@ struct HomeView: View {
                         subtitle: "Calibra, prepara y aprende de cada taza."
                     )
 
-                    CupaCard {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Label("Calculadora barista", systemImage: "dial.medium")
-                                .font(.headline)
-                            Text("Empieza con una proporción 1:16 y ajusta según tu café.")
-                                .font(.subheadline)
-                                .foregroundStyle(CupaTheme.secondaryText)
-                            Button("Calcular preparación") { selection = .brew }
-                                .buttonStyle(.borderedProminent)
-                                .tint(CupaTheme.forest)
-                                .foregroundStyle(CupaTheme.onAccent)
+                    BaristaCalculatorCard(
+                        calculator: calculator,
+                        onLab: {
+                            lab.load(calculator: calculator)
+                            selection = .lab
+                        },
+                        onPrepare: {
+                            preparation.load(calculator: calculator)
+                            selection = .brew
                         }
-                    }
+                    )
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Accesos rápidos")
@@ -76,6 +83,9 @@ struct HomeView: View {
                             }
                         }
                     }
+
+                    workshopStatusCard
+                    if !beans.isEmpty || !recipes.isEmpty { recentResourcesCard }
                 }
                 .padding()
             }
@@ -85,135 +95,100 @@ struct HomeView: View {
         .sheet(isPresented: $showSettings) { SettingsView(model: settings, account: account) }
         .sheet(isPresented: $showHub) { HubView(account: account) }
     }
+
+    private var workshopStatusCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Estado del taller").font(.headline)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        WorkshopMetric(title: "Granos", count: beans.count, icon: "leaf", color: CupaTheme.terracotta)
+                        WorkshopMetric(title: "Recetas", count: recipes.count, icon: "book.closed", color: CupaTheme.forest)
+                        WorkshopMetric(title: "Tazas", count: cups.count, icon: "mug", color: CupaTheme.gold)
+                        WorkshopMetric(title: "Técnicas", count: techniques.count, icon: "list.number", color: CupaTheme.clarity)
+                        WorkshopMetric(title: "Equipo", count: equipment.count + grinders.count, icon: "wrench.and.screwdriver", color: CupaTheme.secondaryText)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("home.workshopStatus")
+    }
+
+    private var recentResourcesCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Últimos recursos usados").font(.headline)
+                if let bean = beans.first {
+                    LabeledContent {
+                        Text("\(bean.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g")
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Último grano").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            Text(bean.name).font(.subheadline.bold())
+                            if !bean.origin.isEmpty { Text(bean.origin).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                        }
+                    }
+                }
+                if let recipe = recipes.first {
+                    LabeledContent {
+                        Text(recipe.recipeKind.replacingOccurrences(of: "_", with: " ").capitalized)
+                            .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Última receta").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            Text(recipe.name).font(.subheadline.bold())
+                            if !recipe.intention.isEmpty { Text(recipe.intention).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("home.recentResources")
+    }
+}
+
+private struct WorkshopMetric: View {
+    let title: String
+    let count: Int
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon).foregroundStyle(color).font(.title3)
+            Text(count.formatted()).font(.title2.bold().monospacedDigit())
+            Text(title).font(.caption).foregroundStyle(CupaTheme.secondaryText)
+        }
+        .frame(width: 88, alignment: .leading)
+        .padding(12)
+        .background(CupaTheme.backgroundAlt.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title): \(count)")
+    }
 }
 
 struct BrewView: View {
-    @Environment(\.managedObjectContext) private var context
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.createdAt, ascending: true)],
-        predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "isActive == YES"))
-    ) private var activeEquipment: FetchedResults<EquipmentRecord>
     @Binding var selection: CupaTab
     @ObservedObject var calculator: CalculatorModel
     @ObservedObject var lab: LabModel
     @ObservedObject var preparation: PreparationModel
-    @State private var showingMethodManager = false
-    @State private var methodError: String?
 
     var body: some View {
         ZStack {
             CupaTheme.background.ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 20) {
-                    SectionHeader(eyebrow: "Barc", title: "Calculadora barista", subtitle: "Café, proporción y agua se recalculan en ambas direcciones.")
+                    SectionHeader(eyebrow: "Barista", title: "Calculadora barista", subtitle: "Café, proporción y agua se recalculan en ambas direcciones.")
 
-                    CupaCard {
-                        VStack(spacing: 16) {
-                            HStack {
-                                Text(calculator.method).font(.headline)
-                                Spacer()
-                                Text("1:\(calculator.ratioInput)")
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(categoryColor)
-                            }
-
-                            VStack(spacing: 2) {
-                                Text("AGUA").font(.caption2.bold()).tracking(1.5)
-                                Text("\(calculator.water) ml")
-                                    .font(.system(.largeTitle, design: .rounded, weight: .black))
-                                Text("\(calculator.coffeeInput) g · 1:\(calculator.ratioInput) · \(calculator.method)")
-                                    .font(.caption)
-                            }
-                            .foregroundStyle(CupaTheme.onAccent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 22)
-                            .background(LinearGradient(colors: [CupaTheme.forest, categoryColor], startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .clipShape(RoundedRectangle(cornerRadius: 22))
-
-                            Text(calculator.category.label)
-                                .font(.caption.bold())
-                                .foregroundStyle(categoryColor)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-
-                            HStack(spacing: 8) {
-                                calculatorInput("CAFÉ (g)", identifier: "calculator.coffee", text: Binding(
-                                    get: { calculator.coffeeInput },
-                                    set: { calculator.changeCoffee($0) }
-                                ), minus: { calculator.adjustCoffee(-1) }, plus: { calculator.adjustCoffee(1) })
-
-                                calculatorInput("RATIO (1:x)", identifier: "calculator.ratio", text: Binding(
-                                    get: { calculator.ratioInput },
-                                    set: { calculator.changeRatio($0) }
-                                ), minus: { calculator.adjustRatio(-0.1) }, plus: { calculator.adjustRatio(0.1) })
-
-                                calculatorInput("AGUA (ml)", identifier: "calculator.water", text: Binding(
-                                    get: { calculator.waterInput },
-                                    set: { calculator.changeWater($0) }
-                                ), minus: { calculator.adjustWater(-10) }, plus: { calculator.adjustWater(10) })
-                            }
-
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(calculator.presets) { preset in
-                                        Button { calculator.apply(preset) } label: {
-                                            Label(preset.label, systemImage: preset.isCustom ? "star.fill" : "mug")
-                                                .font(.caption)
-                                                .padding(.horizontal, 10)
-                                                .padding(.vertical, 7)
-                                                .background(CupaTheme.backgroundAlt)
-                                                .clipShape(Capsule())
-                                        }
-                                        .foregroundStyle(CupaTheme.text)
-                                    }
-                                }
-                            }
-
-                            HStack(spacing: 8) {
-                                Button { showingMethodManager = true } label: { Image(systemName: "slider.horizontal.3") }
-                                    .frame(minWidth: 44, minHeight: 44)
-                                    .accessibilityLabel("Gestionar métodos de la calculadora")
-                                    .accessibilityIdentifier("calculator.manageMethods")
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 7) {
-                                        ForEach(quickMethodOptions) { option in
-                                            Button(option.name) { calculator.selectMethod(option.name, methodId: option.equipmentId) }
-                                            .buttonStyle(.bordered)
-                                            .tint(calculator.method.caseInsensitiveCompare(option.name) == .orderedSame ? categoryColor : CupaTheme.secondaryText)
-                                        }
-                                    }
-                                }
-                            }
-
-                            HStack {
-                                Image(systemName: "info.circle")
-                                Text(calculator.microcopy).font(.caption)
-                                Spacer()
-                                Button { calculator.resetRatio() } label: { Image(systemName: "arrow.counterclockwise") }
-                                    .frame(minWidth: 44, minHeight: 44)
-                                    .accessibilityLabel("Restablecer proporción")
-                                Button { calculator.toggleFavorite() } label: {
-                                    Image(systemName: calculator.isCurrentFavorite ? "heart.fill" : "heart")
-                                        .foregroundStyle(calculator.isCurrentFavorite ? CupaTheme.terracotta : CupaTheme.secondaryText)
-                                }
-                                .frame(minWidth: 44, minHeight: 44)
-                                .accessibilityLabel(calculator.isCurrentFavorite ? "Quitar de favoritos" : "Guardar como favorito")
-                            }
-                            .foregroundStyle(CupaTheme.secondaryText)
-
-                            HStack {
-                                Button {
-                                    lab.load(calculator: calculator)
-                                    selection = .lab
-                                } label: { Label("Laboratorio", systemImage: "flask") }
-                                    .buttonStyle(.bordered)
-                                Button("Preparar con estos datos") { preparation.load(calculator: calculator) }
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(CupaTheme.forest)
-                                    .foregroundStyle(CupaTheme.onAccent)
-                                    .accessibilityIdentifier("calculator.prepare")
-                            }
-                        }
-                    }
+                    BaristaCalculatorCard(
+                        calculator: calculator,
+                        onLab: {
+                            lab.load(calculator: calculator)
+                            selection = .lab
+                        },
+                        onPrepare: { preparation.load(calculator: calculator) }
+                    )
 
                     PreparationExecutionView(model: preparation)
                 }
@@ -222,6 +197,131 @@ struct BrewView: View {
         }
         .navigationTitle("Preparar")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct BaristaCalculatorCard: View {
+    @Environment(\.managedObjectContext) private var context
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.createdAt, ascending: true)],
+        predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "isActive == YES"))
+    ) private var activeEquipment: FetchedResults<EquipmentRecord>
+    @ObservedObject var calculator: CalculatorModel
+    let onLab: () -> Void
+    let onPrepare: () -> Void
+    @State private var showingMethodManager = false
+    @State private var methodError: String?
+
+    var body: some View {
+        CupaCard {
+            VStack(spacing: 16) {
+                HStack {
+                    Label("Calculadora barista", systemImage: "dial.medium").font(.headline)
+                    Spacer()
+                    Text("1:\(calculator.ratioInput)")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(categoryColor)
+                }
+
+                VStack(spacing: 2) {
+                    Text("AGUA").font(.caption2.bold()).tracking(1.5)
+                    Text("\(calculator.water) ml")
+                        .font(.system(.largeTitle, design: .rounded, weight: .black))
+                    Text("\(calculator.coffeeInput) g · 1:\(calculator.ratioInput) · \(calculator.method)")
+                        .font(.caption)
+                }
+                .foregroundStyle(CupaTheme.onAccent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 22)
+                .background(LinearGradient(colors: [CupaTheme.forest, categoryColor], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .clipShape(RoundedRectangle(cornerRadius: 22))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Resultado: \(calculator.water) mililitros de agua, \(calculator.coffeeInput) gramos de café, proporción uno a \(calculator.ratioInput), método \(calculator.method)")
+
+                Text(calculator.category.label)
+                    .font(.caption.bold())
+                    .foregroundStyle(categoryColor)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+
+                HStack(spacing: 8) {
+                    calculatorInput("CAFÉ (g)", identifier: "calculator.coffee", text: Binding(
+                        get: { calculator.coffeeInput },
+                        set: { calculator.changeCoffee($0) }
+                    ), minus: { calculator.adjustCoffee(-1) }, plus: { calculator.adjustCoffee(1) })
+
+                    calculatorInput("RATIO (1:x)", identifier: "calculator.ratio", text: Binding(
+                        get: { calculator.ratioInput },
+                        set: { calculator.changeRatio($0) }
+                    ), minus: { calculator.adjustRatio(-0.1) }, plus: { calculator.adjustRatio(0.1) })
+
+                    calculatorInput("AGUA (ml)", identifier: "calculator.water", text: Binding(
+                        get: { calculator.waterInput },
+                        set: { calculator.changeWater($0) }
+                    ), minus: { calculator.adjustWater(-10) }, plus: { calculator.adjustWater(10) })
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(calculator.presets) { preset in
+                            Button { calculator.apply(preset) } label: {
+                                Label(preset.label, systemImage: preset.isCustom ? "star.fill" : "mug")
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .background(CupaTheme.backgroundAlt)
+                                    .clipShape(Capsule())
+                            }
+                            .foregroundStyle(CupaTheme.text)
+                        }
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Button { showingMethodManager = true } label: { Image(systemName: "slider.horizontal.3") }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel("Gestionar métodos de la calculadora")
+                        .accessibilityIdentifier("calculator.manageMethods")
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 7) {
+                            ForEach(quickMethodOptions) { option in
+                                Button(option.name) { calculator.selectMethod(option.name, methodId: option.equipmentId) }
+                                    .buttonStyle(.bordered)
+                                    .tint(calculator.method.caseInsensitiveCompare(option.name) == .orderedSame ? categoryColor : CupaTheme.secondaryText)
+                            }
+                        }
+                    }
+                }
+
+                HStack {
+                    Image(systemName: "info.circle")
+                    Text(calculator.microcopy).font(.caption)
+                    Spacer()
+                    Button { calculator.resetRatio() } label: { Image(systemName: "arrow.counterclockwise") }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel("Restablecer proporción")
+                    Button { calculator.toggleFavorite() } label: {
+                        Image(systemName: calculator.isCurrentFavorite ? "heart.fill" : "heart")
+                            .foregroundStyle(calculator.isCurrentFavorite ? CupaTheme.terracotta : CupaTheme.secondaryText)
+                    }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel(calculator.isCurrentFavorite ? "Quitar de favoritos" : "Guardar como favorito")
+                }
+                .foregroundStyle(CupaTheme.secondaryText)
+
+                ViewThatFits(in: .horizontal) {
+                    calculatorActions
+                    VStack(alignment: .leading) {
+                        Button(action: onLab) { Label("Laboratorio", systemImage: "flask") }
+                            .buttonStyle(.bordered)
+                        Button(action: onPrepare) { Label("Preparar con estos datos", systemImage: "play.fill") }
+                            .buttonStyle(.borderedProminent)
+                            .tint(CupaTheme.forest)
+                            .foregroundStyle(CupaTheme.onAccent)
+                            .accessibilityIdentifier("calculator.prepare")
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showingMethodManager) {
             CalculatorMethodManager(
                 calculator: calculator,
@@ -232,6 +332,18 @@ struct BrewView: View {
         .alert("No se pudo actualizar el método", isPresented: Binding(get: { methodError != nil }, set: { if !$0 { methodError = nil } })) {
             Button("Aceptar") {}
         } message: { Text(methodError ?? "") }
+    }
+
+    private var calculatorActions: some View {
+        HStack {
+            Button(action: onLab) { Label("Laboratorio", systemImage: "flask") }
+                .buttonStyle(.bordered)
+            Button(action: onPrepare) { Label("Preparar con estos datos", systemImage: "play.fill") }
+                .buttonStyle(.borderedProminent)
+                .tint(CupaTheme.forest)
+                .foregroundStyle(CupaTheme.onAccent)
+                .accessibilityIdentifier("calculator.prepare")
+        }
     }
 
     private var methodEquipment: [EquipmentRecord] { activeEquipment.filter(\.isBrewingMethod) }
@@ -260,7 +372,8 @@ struct BrewView: View {
     }
 
     private func setEquipmentPinned(_ equipment: EquipmentRecord, _ pinned: Bool) {
-        equipment.isFavorite = pinned; equipment.markUpdated()
+        equipment.isFavorite = pinned
+        equipment.markUpdated()
         do { try context.save() }
         catch { context.rollback(); methodError = error.localizedDescription }
     }
@@ -299,7 +412,6 @@ struct BrewView: View {
         .background(CupaTheme.backgroundAlt.opacity(0.7))
         .clipShape(RoundedRectangle(cornerRadius: 15))
     }
-
 }
 
 private struct CalculatorMethodOption: Identifiable {

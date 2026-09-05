@@ -2,18 +2,22 @@ import Foundation
 import Security
 
 struct AppConfiguration: Equatable {
-    let supabaseURL: URL?; let supabaseAnonKey: String?
+    let supabaseURL: URL?; let supabaseAnonKey: String?; let authRedirectURL: URL?
     var isSupabaseConfigured: Bool { supabaseURL != nil && !(supabaseAnonKey ?? "").isEmpty }
 
     init(bundle: Bundle = .main, environment: [String: String] = ProcessInfo.processInfo.environment) {
         let rawURL = environment["SUPABASE_URL"] ?? bundle.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
         let rawKey = environment["SUPABASE_ANON_KEY"] ?? bundle.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String
+        let rawAuthScheme = environment["AUTH_URL_SCHEME"] ?? bundle.object(forInfoDictionaryKey: "AUTH_URL_SCHEME") as? String
         supabaseURL = Self.validatedSupabaseURL(rawURL)
         let cleanKey = rawKey?.trimmingCharacters(in: .whitespacesAndNewlines)
         supabaseAnonKey = cleanKey?.isEmpty == false ? cleanKey : nil
+        authRedirectURL = Self.authRedirectURL(for: rawAuthScheme ?? "com.tacotrifasico.cupa")
     }
 
-    init(supabaseURL: URL?, supabaseAnonKey: String?) { self.supabaseURL = supabaseURL; self.supabaseAnonKey = supabaseAnonKey }
+    init(supabaseURL: URL?, supabaseAnonKey: String?, authRedirectURL: URL? = URL(string: "com.tacotrifasico.cupa://auth/recovery")) {
+        self.supabaseURL = supabaseURL; self.supabaseAnonKey = supabaseAnonKey; self.authRedirectURL = authRedirectURL
+    }
 
     private static func validatedSupabaseURL(_ rawValue: String?) -> URL? {
         guard let value = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -23,6 +27,13 @@ struct AppConfiguration: Equatable {
               let host = url.host?.lowercased() else { return nil }
         let isLocalDevelopment = scheme == "http" && (host == "localhost" || host == "127.0.0.1")
         return scheme == "https" || isLocalDevelopment ? url : nil
+    }
+
+    private static func authRedirectURL(for rawScheme: String) -> URL? {
+        let scheme = rawScheme.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789+.-")
+        guard !scheme.isEmpty, scheme.unicodeScalars.allSatisfy(allowed.contains) else { return nil }
+        return URL(string: "\(scheme)://auth/recovery")
     }
 }
 
@@ -36,6 +47,16 @@ struct AuthTokens: Codable, Equatable {
 enum SignUpResult: Equatable {
     case signedIn(AuthTokens)
     case confirmationRequired(email: String)
+}
+
+struct PasswordRecoveryCredential: Equatable {
+    let accessToken: String
+    let expiresAt: Date
+}
+
+enum PasswordRecoveryState: Equatable {
+    case idle, ready, updating, completed, error(String)
+    var isPresented: Bool { self != .idle }
 }
 
 protocol TokenStore {
@@ -83,14 +104,50 @@ struct URLSessionTransport: NetworkTransport {
 }
 
 enum AuthServiceError: LocalizedError, Equatable {
-    case notConfigured, invalidResponse, server(Int, String)
+    case notConfigured, invalidResponse, invalidRecoveryLink(String), server(Int, String)
     var errorDescription: String? {
         switch self {
         case .notConfigured: "Supabase todavía no está configurado en este build."
         case .invalidResponse: "El servidor devolvió una respuesta inválida."
+        case let .invalidRecoveryLink(message): message
         case let .server(_, message): message
         }
     }
+}
+
+enum AuthCallbackParser {
+    static func matches(_ url: URL, expectedRedirectURL: URL) -> Bool {
+        url.scheme?.caseInsensitiveCompare(expectedRedirectURL.scheme ?? "") == .orderedSame
+            && url.host?.caseInsensitiveCompare(expectedRedirectURL.host ?? "") == .orderedSame
+            && normalizedPath(url.path) == normalizedPath(expectedRedirectURL.path)
+    }
+
+    static func passwordRecovery(from url: URL, expectedRedirectURL: URL, now: Date = .now) throws -> PasswordRecoveryCredential {
+        guard matches(url, expectedRedirectURL: expectedRedirectURL) else {
+            throw AuthServiceError.invalidRecoveryLink("Este enlace no pertenece a la recuperación de Cupa.")
+        }
+        var values: [String: String] = [:]
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.forEach { values[$0.name] = $0.value }
+        if let fragment = url.fragment {
+            var fragmentComponents = URLComponents(); fragmentComponents.query = fragment
+            fragmentComponents.queryItems?.forEach { values[$0.name] = $0.value }
+        }
+        if let message = values["error_description"] ?? values["error"] {
+            throw AuthServiceError.invalidRecoveryLink(message.replacingOccurrences(of: "+", with: " "))
+        }
+        guard values["type"]?.lowercased() == "recovery",
+              let accessToken = values["access_token"], !accessToken.isEmpty else {
+            throw AuthServiceError.invalidRecoveryLink("El enlace de recuperación está incompleto o ya no es válido.")
+        }
+        let expiresAt = values["expires_at"].flatMap(TimeInterval.init).map(Date.init(timeIntervalSince1970:))
+            ?? values["expires_in"].flatMap(TimeInterval.init).map(now.addingTimeInterval)
+        guard let expiresAt, expiresAt > now else {
+            throw AuthServiceError.invalidRecoveryLink("El enlace de recuperación venció. Solicita uno nuevo.")
+        }
+        return PasswordRecoveryCredential(accessToken: accessToken, expiresAt: expiresAt)
+    }
+
+    private static func normalizedPath(_ path: String) -> String { path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
 }
 
 enum RemoteFailureClassifier {
@@ -127,8 +184,16 @@ struct SupabaseAuthService {
         return .confirmationRequired(email: confirmedEmail)
     }
     func refresh(_ refreshToken: String) async throws -> AuthTokens { try await token(path: "/auth/v1/token?grant_type=refresh_token", payload: ["refresh_token": refreshToken]) }
-    func sendPasswordRecovery(email: String) async throws { _ = try await request(path: "/auth/v1/recover", method: "POST", payload: ["email": email], bearer: nil) }
+    func sendPasswordRecovery(email: String) async throws {
+        guard let redirectURL = configuration.authRedirectURL else { throw AuthServiceError.notConfigured }
+        var components = URLComponents(); components.path = "/auth/v1/recover"
+        components.queryItems = [URLQueryItem(name: "redirect_to", value: redirectURL.absoluteString)]
+        _ = try await request(path: components.string ?? "/auth/v1/recover", method: "POST", payload: ["email": email], bearer: nil)
+    }
     func resendSignUpConfirmation(email: String) async throws { _ = try await request(path: "/auth/v1/resend", method: "POST", payload: ["email": email, "type": "signup"], bearer: nil) }
+    func updatePassword(_ password: String, recoveryAccessToken: String) async throws {
+        _ = try await request(path: "/auth/v1/user", method: "PUT", payload: ["password": password], bearer: recoveryAccessToken)
+    }
     func signOut(accessToken: String) async throws { _ = try await request(path: "/auth/v1/logout", method: "POST", payload: nil, bearer: accessToken) }
 
     private func token(path: String, payload: [String: String]) async throws -> AuthTokens {
@@ -186,9 +251,11 @@ final class AccountModel: ObservableObject {
     }
     @Published private(set) var sessionNotice: String?
     @Published private(set) var pendingConfirmationEmail: String?
+    @Published private(set) var passwordRecoveryState: PasswordRecoveryState = .idle
     @Published private(set) var isRefreshing = false
     let configuration: AppConfiguration; private let service: SupabaseAuthService; private let store: TokenStore
     private let accountDeletionHandler: (UUID) throws -> Void
+    private var recoveryCredential: PasswordRecoveryCredential?
 
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), store: TokenStore = KeychainTokenStore(), accountDeletionHandler: @escaping (UUID) throws -> Void = { _ in }) {
         self.configuration = configuration; self.service = SupabaseAuthService(configuration: configuration, transport: transport); self.store = store
@@ -200,6 +267,7 @@ final class AccountModel: ObservableObject {
 
     var tokens: AuthTokens? { if case let .signedIn(tokens) = state { tokens } else { nil } }
     var localScopeKey: String { tokens?.userId.uuidString ?? "guest" }
+    var canRetryPasswordRecovery: Bool { recoveryCredential != nil }
     func signIn(email: String, password: String) async { await perform { try await self.service.signIn(email: email, password: password) } }
     func signUp(email: String, password: String) async {
         state = .loading; sessionNotice = nil
@@ -229,6 +297,43 @@ final class AccountModel: ObservableObject {
         }
         catch { state = .error(error.localizedDescription) }
     }
+    @discardableResult
+    func handleAuthCallback(_ url: URL, now: Date = .now) -> Bool {
+        guard let expectedURL = configuration.authRedirectURL,
+              AuthCallbackParser.matches(url, expectedRedirectURL: expectedURL) else { return false }
+        do {
+            recoveryCredential = try AuthCallbackParser.passwordRecovery(from: url, expectedRedirectURL: expectedURL, now: now)
+            passwordRecoveryState = .ready; sessionNotice = nil
+        } catch {
+            recoveryCredential = nil; passwordRecoveryState = .error(error.localizedDescription)
+        }
+        return true
+    }
+    func completePasswordRecovery(newPassword: String) async {
+        guard let credential = recoveryCredential, credential.expiresAt > .now else {
+            recoveryCredential = nil; passwordRecoveryState = .error("El enlace de recuperación venció. Solicita uno nuevo.")
+            return
+        }
+        guard newPassword.count >= 8 else {
+            passwordRecoveryState = .error("La contraseña debe tener al menos 8 caracteres.")
+            return
+        }
+        passwordRecoveryState = .updating
+        do {
+            try await service.updatePassword(newPassword, recoveryAccessToken: credential.accessToken)
+            try? await service.signOut(accessToken: credential.accessToken)
+            recoveryCredential = nil; passwordRecoveryState = .completed
+            sessionNotice = "Contraseña actualizada. Ya puedes iniciar sesión con la nueva contraseña."
+        } catch { passwordRecoveryState = .error(error.localizedDescription) }
+    }
+    func retryPasswordRecovery() {
+        guard let credential = recoveryCredential, credential.expiresAt > .now else {
+            recoveryCredential = nil; passwordRecoveryState = .error("El enlace de recuperación venció. Solicita uno nuevo.")
+            return
+        }
+        passwordRecoveryState = .ready
+    }
+    func dismissPasswordRecovery() { recoveryCredential = nil; passwordRecoveryState = .idle }
     @discardableResult
     func validTokens(forceRefresh: Bool = false, now: Date = .now) async -> AuthTokens? {
         guard let current = tokens else { return nil }

@@ -5,7 +5,7 @@
 - [ ] Core Data funciona offline y sincroniza al reconectar.
 - [x] Caché, outbox y trabajo recuperable quedan aislados al cambiar de cuenta localmente.
 - [x] Contrato remoto alineado con tablas y payloads Android; migraciones con sintaxis válida y ejecución PostgreSQL efímera aprobada en ambos historiales.
-- [ ] Sesión recuperada tras reinicio y datos tras reinstalación/login; registro con confirmación/reenvío, recuperación segura, eliminación remota y purga local selectiva ya están preparados.
+- [ ] Sesión recuperada tras reinicio y datos tras reinstalación/login; registro con confirmación/reenvío, recuperación completa por enlace profundo y cambio de contraseña, eliminación remota y purga local selectiva ya están preparados.
 - [x] Calculadora y Laboratorio pasan pruebas de paridad.
 - [ ] CRUD completo de entidades separadas.
 - [ ] Conflictos y errores de sincronización validados.

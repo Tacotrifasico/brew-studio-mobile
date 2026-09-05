@@ -88,6 +88,11 @@ struct AppShell: View {
         .background(CupaTheme.background.ignoresSafeArea())
         .toolbarBackground(CupaTheme.card, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
+        .onOpenURL { _ = account.handleAuthCallback($0) }
+        .sheet(isPresented: Binding(
+            get: { account.passwordRecoveryState.isPresented },
+            set: { if !$0 { account.dismissPasswordRecovery() } }
+        )) { PasswordResetView(model: account) }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 if let storageWarning {

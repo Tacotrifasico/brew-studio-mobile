@@ -199,3 +199,7 @@ Un UUID es una referencia interna estable, no una credencial que una persona deb
 ## D-050 — El registro no presupone una sesión inmediata
 
 Supabase devuelve tokens cuando la confirmación está desactivada, pero con confirmación de correo puede devolver únicamente el usuario pendiente. Ambos son éxitos válidos y se modelan por separado: sólo el primero se guarda en Keychain; el segundo mantiene la app desconectada, muestra instrucciones y habilita un reenvío `signup`. La recuperación siempre usa un mensaje genérico porque el backend responde igual exista o no la dirección, evitando facilitar enumeración de cuentas.
+
+## D-051 — La sesión de recuperación es temporal y no cambia de propietario
+
+Solicitar un correo sin poder consumirlo dentro de iOS no completa la recuperación. GoTrue recibe ahora un `redirect_to` registrado por ambiente y SwiftUI maneja el callback aun cuando Cuenta no esté abierta. Se valida exactamente esquema, host, ruta, tipo y expiración; un callback ajeno no se consume. El access token de recuperación sólo vive en memoria, autoriza `PUT /auth/v1/user`, se revoca de forma oportunista y nunca sustituye la sesión del Keychain ni cambia el ámbito local, evitando exponer datos si se abre un enlace mientras otra cuenta está activa. Production y Staging usan esquemas distintos. Se documenta un enlace universal como endurecimiento pendiente del dominio legal/controlado, no se finge una asociación HTTPS sin ese activo externo.

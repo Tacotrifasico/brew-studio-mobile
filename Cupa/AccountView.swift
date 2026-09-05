@@ -48,3 +48,47 @@ struct AccountView: View {
         }
     }
 }
+
+struct PasswordResetView: View {
+    @ObservedObject var model: AccountModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var password = ""
+    @State private var confirmation = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                switch model.passwordRecoveryState {
+                case .ready, .updating:
+                    Section("Nueva contraseña") {
+                        SecureField("Contraseña", text: $password).textContentType(.newPassword)
+                        SecureField("Confirmar contraseña", text: $confirmation).textContentType(.newPassword)
+                        Text("Usa al menos 8 caracteres.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Button(model.passwordRecoveryState == .updating ? "Actualizando…" : "Guardar contraseña") {
+                        Task { await model.completePasswordRecovery(newPassword: password) }
+                    }
+                    .disabled(model.passwordRecoveryState == .updating || password.count < 8 || password != confirmation)
+                case .completed:
+                    ContentUnavailableView("Contraseña actualizada", systemImage: "checkmark.shield", description: Text("Cierra esta pantalla e inicia sesión con tu nueva contraseña."))
+                case let .error(message):
+                    ContentUnavailableView("No se pudo recuperar la contraseña", systemImage: "link.badge.plus", description: Text(message))
+                    if model.canRetryPasswordRecovery {
+                        Button("Intentar de nuevo") { model.retryPasswordRecovery() }
+                    }
+                case .idle:
+                    EmptyView()
+                }
+            }
+            .brewScrollableCanvas()
+            .navigationTitle("Recuperar cuenta")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Cerrar") { model.dismissPasswordRecovery(); dismiss() }
+                        .disabled(model.passwordRecoveryState == .updating)
+                }
+            }
+            .interactiveDismissDisabled(model.passwordRecoveryState == .updating)
+        }
+    }
+}

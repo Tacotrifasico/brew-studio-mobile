@@ -1,4 +1,5 @@
 APP_DISPLAY_NAME = Cupa
+AUTH_URL_SCHEME = com.tacotrifasico.cupa
 SUPABASE_URL =
 SUPABASE_ANON_KEY =
 GEMINI_EDGE_FUNCTION = gemini-suggestions

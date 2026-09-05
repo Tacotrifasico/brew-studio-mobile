@@ -11,6 +11,7 @@ Variables esperadas:
 ```text
 SUPABASE_URL=https://PROJECT.supabase.co
 SUPABASE_ANON_KEY=sb_publishable_...
+AUTH_URL_SCHEME=com.tacotrifasico.cupa
 PRIVACY_POLICY_URL=https://ejemplo.com/privacidad
 SUPPORT_URL=https://ejemplo.com/soporte
 ```
@@ -33,7 +34,16 @@ Antes de `supabase db push`, crear un respaldo y ensayar sobre un proyecto Stagi
 
 Después se debe validar con dos cuentas distintas que cada usuario sólo pueda leer y modificar sus filas. También se prueban registro, verificación de correo, recuperación, renovación, cierre, eliminación, cuota de Gemini y restauración en otro dispositivo. Con las dos aplicaciones se crea y edita al menos un café, molino, equipo, receta, técnica con pasos, experimento, perfil y publicación en cada dirección; ambos clientes deben ver el mismo UUID y el último valor.
 
-En Authentication → Email debe configurarse un proveedor SMTP real y conservarse **Confirm email** activado para producción. La app acepta correctamente tanto el alta que devuelve sesión inmediata como el alta que devuelve sólo usuario pendiente, permite reenviar la confirmación y pide iniciar sesión después de abrir el enlace. Configurar `SITE_URL` y la lista de Redirect URLs con una página HTTPS controlada antes del ensayo; la recuperación usa una respuesta deliberadamente genérica para no revelar si una dirección tiene cuenta.
+En Authentication → Email debe configurarse un proveedor SMTP real y conservarse **Confirm email** activado para producción. La app acepta correctamente tanto el alta que devuelve sesión inmediata como el alta que devuelve sólo usuario pendiente, permite reenviar la confirmación y pide iniciar sesión después de abrir el enlace. La recuperación usa una respuesta deliberadamente genérica para no revelar si una dirección tiene cuenta.
+
+En Authentication → URL Configuration, conservar un `SITE_URL` HTTPS controlado y agregar exactamente estas Redirect URLs permitidas:
+
+```text
+com.tacotrifasico.cupa://auth/recovery
+com.tacotrifasico.cupa.staging://auth/recovery
+```
+
+Production/Development registran el primer esquema y Staging registra el segundo, evitando que el correo de pruebas abra la aplicación productiva. El callback sólo acepta host `auth`, ruta `recovery`, tipo `recovery`, un token no vacío y una expiración vigente. El token queda únicamente en memoria durante el formulario, se usa para `PUT /auth/v1/user` y se descarta al cerrar o completar. Un enlace universal HTTPS sería más resistente a que otra app reclame el esquema; incorporarlo requiere el dominio controlado y su archivo de asociación antes de habilitar Associated Domains.
 
 ## Xcode y TestFlight
 
@@ -54,4 +64,4 @@ La compilación sin firma y un Archive técnico ya están validados. El Archive 
 
 Apple exige que la política de privacidad esté disponible tanto en App Store Connect como dentro de la app, que las prácticas de datos se declaren en App Privacy y que contenido social tenga filtrado preventivo, reporte, bloqueo, contacto publicado y una respuesta oportuna. La app ya implementa filtro en cliente y SQL, reporte, bloqueo, eliminación remota y purga local de la cuenta, manifiesto de privacidad y consentimiento revocable antes de compartir parámetros con Gemini; el texto legal, URL pública, contacto y proceso humano de moderación, y respuestas de App Privacy deben ser definidos por el propietario. Para revisión se necesita además una cuenta de demostración activa y el backend accesible.
 
-Referencias oficiales: [claves Supabase](https://supabase.com/docs/guides/getting-started/api-keys), [autenticación en Edge Functions](https://supabase.com/docs/guides/functions/auth-legacy-jwt), [despliegue de funciones](https://supabase.com/docs/guides/functions/deploy), [Gemini API](https://ai.google.dev/api), [App Review](https://developer.apple.com/app-store/review/guidelines/), [eliminación de cuentas](https://developer.apple.com/support/offering-account-deletion-in-your-app/), [requisitos de envío](https://developer.apple.com/app-store/submitting/), [manifiestos de privacidad](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files), [launch screen](https://developer.apple.com/documentation/technotes/tn3208-preparing-your-apps-launch-screen-to-meet-app-store-requirements) y [subida de builds](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds).
+Referencias oficiales: [claves Supabase](https://supabase.com/docs/guides/getting-started/api-keys), [recuperación por contraseña](https://supabase.com/docs/guides/auth/passwords), [enlaces profundos móviles](https://supabase.com/docs/guides/auth/native-mobile-deep-linking), [autenticación en Edge Functions](https://supabase.com/docs/guides/functions/auth-legacy-jwt), [despliegue de funciones](https://supabase.com/docs/guides/functions/deploy), [Gemini API](https://ai.google.dev/api), [App Review](https://developer.apple.com/app-store/review/guidelines/), [eliminación de cuentas](https://developer.apple.com/support/offering-account-deletion-in-your-app/), [requisitos de envío](https://developer.apple.com/app-store/submitting/), [manifiestos de privacidad](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files), [launch screen](https://developer.apple.com/documentation/technotes/tn3208-preparing-your-apps-launch-screen-to-meet-app-store-requirements) y [subida de builds](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds).

@@ -722,7 +722,14 @@ final class AccountAndSyncTests: XCTestCase {
         let production = AppConfiguration(bundle: Bundle(for: Self.self), environment: ["SUPABASE_URL": " https://project.supabase.co ", "SUPABASE_ANON_KEY": " public-key "])
         XCTAssertEqual(production.supabaseURL?.absoluteString, "https://project.supabase.co")
         XCTAssertEqual(production.supabaseAnonKey, "public-key")
+        XCTAssertEqual(production.authRedirectURL?.absoluteString, "com.tacotrifasico.cupa://auth/recovery")
         XCTAssertTrue(production.isSupabaseConfigured)
+
+        let staging = AppConfiguration(bundle: Bundle(for: Self.self), environment: ["AUTH_URL_SCHEME": "com.tacotrifasico.cupa.staging"])
+        XCTAssertEqual(staging.authRedirectURL?.absoluteString, "com.tacotrifasico.cupa.staging://auth/recovery")
+
+        let invalidCallback = AppConfiguration(bundle: Bundle(for: Self.self), environment: ["AUTH_URL_SCHEME": "not a scheme"])
+        XCTAssertNil(invalidCallback.authRedirectURL)
 
         let local = AppConfiguration(bundle: Bundle(for: Self.self), environment: ["SUPABASE_URL": "http://127.0.0.1:54321", "SUPABASE_ANON_KEY": "local-key"])
         XCTAssertTrue(local.isSupabaseConfigured)
@@ -782,14 +789,58 @@ final class AccountAndSyncTests: XCTestCase {
         XCTAssertNil(activeModel.pendingConfirmationEmail)
     }
 
-    @MainActor func testPasswordRecoveryShowsEnumerationSafeConfirmation() async {
+    @MainActor func testPasswordRecoveryShowsEnumerationSafeConfirmation() async throws {
+        let transport = MockTransport(responseData: Data("{}".utf8))
         let model = AccountModel(
             configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
-            transport: MockTransport(responseData: Data("{}".utf8)), store: MemoryTokenStore()
+            transport: transport, store: MemoryTokenStore()
         )
         await model.recover(email: "maybe@example.com")
         XCTAssertEqual(model.state, .signedOut)
         XCTAssertTrue(model.sessionNotice?.contains("Si existe una cuenta") == true)
+        XCTAssertEqual(transport.requests.first?.url?.path, "/auth/v1/recover")
+        let redirect = URLComponents(url: try XCTUnwrap(transport.requests.first?.url), resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "redirect_to" })?.value
+        XCTAssertEqual(redirect, "com.tacotrifasico.cupa://auth/recovery")
+    }
+
+    @MainActor func testPasswordRecoveryDeepLinkUpdatesPasswordWithoutCreatingNormalSession() async throws {
+        let transport = MockTransport(responseData: Data("{}".utf8))
+        let store = MemoryTokenStore()
+        let configuration = AppConfiguration(
+            supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon",
+            authRedirectURL: URL(string: "com.tacotrifasico.cupa://auth/recovery")!
+        )
+        let model = AccountModel(configuration: configuration, transport: transport, store: store)
+        let callback = try XCTUnwrap(URL(string: "com.tacotrifasico.cupa://auth/recovery#access_token=recovery-jwt&refresh_token=recovery-refresh&expires_in=3600&type=recovery"))
+
+        XCTAssertTrue(model.handleAuthCallback(callback))
+        XCTAssertEqual(model.passwordRecoveryState, .ready)
+        await model.completePasswordRecovery(newPassword: "better-password")
+
+        XCTAssertEqual(model.passwordRecoveryState, .completed)
+        XCTAssertNil(store.value)
+        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/auth/v1/user", "/auth/v1/logout"])
+        XCTAssertEqual(transport.requests.first?.httpMethod, "PUT")
+        XCTAssertEqual(transport.requests.first?.value(forHTTPHeaderField: "Authorization"), "Bearer recovery-jwt")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(transport.requests.first?.httpBody)) as? [String: String])
+        XCTAssertEqual(body, ["password": "better-password"])
+        XCTAssertTrue(model.sessionNotice?.contains("Contraseña actualizada") == true)
+    }
+
+    @MainActor func testPasswordRecoveryRejectsForeignAndInvalidCallbacks() throws {
+        let model = AccountModel(
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: MockTransport(), store: MemoryTokenStore()
+        )
+        XCTAssertFalse(model.handleAuthCallback(try XCTUnwrap(URL(string: "other.app://auth/recovery#access_token=stolen&expires_in=3600&type=recovery"))))
+        XCTAssertEqual(model.passwordRecoveryState, .idle)
+
+        XCTAssertTrue(model.handleAuthCallback(try XCTUnwrap(URL(string: "com.tacotrifasico.cupa://auth/recovery#error=access_denied&error_description=Expired%20link"))))
+        XCTAssertEqual(model.passwordRecoveryState, .error("Expired link"))
+
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        XCTAssertTrue(model.handleAuthCallback(try XCTUnwrap(URL(string: "com.tacotrifasico.cupa://auth/recovery#access_token=expired&expires_at=1999999999&type=recovery")), now: now))
+        XCTAssertEqual(model.passwordRecoveryState, .error("El enlace de recuperación venció. Solicita uno nuevo."))
     }
 
     func testAccountDeletionUsesAuthenticatedEdgeFunction() async throws {

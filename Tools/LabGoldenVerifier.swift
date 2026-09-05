@@ -735,10 +735,20 @@ struct LabGoldenVerifier {
         await pending.resendSignUpConfirmation()
         precondition(pending.state == .signedOut && pending.sessionNotice?.contains("Enviamos de nuevo") == true)
 
-        let recovery = AccountModel(configuration: configuration, transport: VerifierTransport(responseData: Data("{}".utf8)), store: VerifierTokenStore(nil))
+        let recoveryTransport = VerifierTransport(responseData: Data("{}".utf8))
+        let recovery = AccountModel(configuration: configuration, transport: recoveryTransport, store: VerifierTokenStore(nil))
         await recovery.recover(email: "maybe@example.com")
         precondition(recovery.state == .signedOut)
         precondition(recovery.sessionNotice?.contains("Si existe una cuenta") == true)
+        precondition(URLComponents(url: recoveryTransport.requests[0].url!, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "redirect_to" && $0.value == "com.tacotrifasico.cupa://auth/recovery" }) == true)
+        let callback = URL(string: "com.tacotrifasico.cupa://auth/recovery#access_token=recovery-jwt&refresh_token=refresh&expires_in=3600&type=recovery")!
+        precondition(recovery.handleAuthCallback(callback))
+        precondition(recovery.passwordRecoveryState == .ready)
+        await recovery.completePasswordRecovery(newPassword: "better-password")
+        precondition(recovery.passwordRecoveryState == .completed)
+        precondition(recoveryTransport.requests.map { $0.url!.path } == ["/auth/v1/recover", "/auth/v1/user", "/auth/v1/logout"])
+        precondition(recoveryTransport.requests[1].value(forHTTPHeaderField: "Authorization") == "Bearer recovery-jwt")
+        precondition(!recovery.handleAuthCallback(URL(string: "other.app://auth/recovery#access_token=stolen&expires_in=3600&type=recovery")!))
     }
 }
 
@@ -752,10 +762,12 @@ private final class VerifierTokenStore: TokenStore {
 
 private final class VerifierTransport: NetworkTransport {
     let responseData: Data; let statusCode: Int; let error: Error?
+    var requests: [URLRequest] = []
     init(responseData: Data = Data("{\"message\":\"Invalid refresh token\"}".utf8), statusCode: Int = 200, error: Error? = nil) {
         self.responseData = responseData; self.statusCode = statusCode; self.error = error
     }
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        requests.append(request)
         if let error { throw error }
         return (responseData, HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!)
     }

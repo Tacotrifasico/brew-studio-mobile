@@ -534,7 +534,10 @@ struct PersistenceController {
             attribute("intention", .stringAttributeType, defaultValue: ""), attribute("suggestedMethodId", .UUIDAttributeType, optional: true),
             attribute("suggestedMethodName", .stringAttributeType, defaultValue: ""), attribute("isFavorite", .booleanAttributeType, defaultValue: false),
             attribute("tags", .stringAttributeType, defaultValue: ""), attribute("visibility", .stringAttributeType, defaultValue: "PRIVATE"),
+            attribute("isShared", .booleanAttributeType, defaultValue: false),
+            attribute("originalAuthorUserId", .UUIDAttributeType, optional: true), attribute("originalAuthorName", .stringAttributeType, optional: true),
             attribute("originalEntityId", .UUIDAttributeType, optional: true), attribute("rootEntityId", .UUIDAttributeType, optional: true),
+            attribute("importedFromShareId", .UUIDAttributeType, optional: true),
             attribute("copyMode", .stringAttributeType, defaultValue: "ORIGINAL")
         ]
         recipeEntity.uniquenessConstraints = [["id"]]
@@ -568,7 +571,10 @@ struct PersistenceController {
             attribute("grindDescription", .stringAttributeType, defaultValue: "18 Clicks"), attribute("grindUnit", .stringAttributeType, defaultValue: "CLICKS"),
             attribute("notes", .stringAttributeType, defaultValue: ""), attribute("techniqueDescription", .stringAttributeType, defaultValue: ""),
             attribute("totalTimeSeconds", .integer64AttributeType, defaultValue: 180), attribute("visibility", .stringAttributeType, defaultValue: "PRIVATE"),
+            attribute("isShared", .booleanAttributeType, defaultValue: false),
+            attribute("originalAuthorUserId", .UUIDAttributeType, optional: true), attribute("originalAuthorName", .stringAttributeType, optional: true),
             attribute("originalEntityId", .UUIDAttributeType, optional: true), attribute("rootEntityId", .UUIDAttributeType, optional: true),
+            attribute("importedFromShareId", .UUIDAttributeType, optional: true),
             attribute("copyMode", .stringAttributeType, defaultValue: "ORIGINAL")
         ]
         techniqueEntity.uniquenessConstraints = [["id"]]

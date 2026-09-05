@@ -180,9 +180,12 @@ final class RecipeTechniqueRepository {
         let copy = RecipeRecord(
             context: context, id: draft.id, name: draft.name, recipeKind: draft.recipeKind, intention: draft.intention,
             suggestedMethodId: draft.suggestedMethodId, suggestedMethodName: draft.suggestedMethodName,
-            isFavorite: draft.isFavorite, tags: draft.tags, originalEntityId: sourceId,
+            isFavorite: draft.isFavorite, tags: draft.tags, originalEntityId: source.originalEntityId ?? sourceId,
             rootEntityId: source.rootEntityId ?? sourceId, copyMode: "FORK"
         )
+        copy.originalAuthorUserId = source.originalAuthorUserId
+        copy.originalAuthorName = source.originalAuthorName
+        copy.importedFromShareId = source.importedFromShareId
         try reconcileIngredients(draft.ingredients, recipeId: copy.id)
         try reconcileRecipeSteps(draft.steps, recipeId: copy.id)
         try saveContext(); return copy

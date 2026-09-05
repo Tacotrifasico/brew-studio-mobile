@@ -107,6 +107,7 @@ final class SocialContentPolicyTests: XCTestCase {
     )
 
     func testAllowsCoffeeContent() throws {
+        XCTAssertEqual(SocialContentPolicy.messageLimit, 280)
         XCTAssertNoThrow(try SocialContentPolicy.validate(fromName: "Ana", fromHandle: "ana", name: "V60 dulce", subtitle: "Balance", message: "Notas de cacao", payload: safePayload))
     }
 
@@ -854,7 +855,7 @@ final class SocialTests: XCTestCase {
     @MainActor func testFeedContractImportAndAttribution() async throws {
         let originalId = UUID(); let ownerId = UUID()
         let recipe = SharedRecipeSnapshot(name: "V60 comunitaria", recipeKind: "BLACK_COFFEE", intention: "Dulzor", suggestedMethodName: "V60", tags: "frutal", ingredients: [.init(name: "Café", amount: 15, unit: "GRAMS")], steps: [.init(instruction: "Bloom", durationSeconds: 45)])
-        let share = SocialShare(id: UUID(), ownerId: ownerId, entityType: "recipe", entityId: originalId, fromName: "Barista", fromHandle: "barista", targetUserId: nil, visibility: "PUBLIC", name: recipe.name, subtitle: recipe.intention, message: "Prueba", payloadSnapshot: .init(kind: "recipe", recipe: recipe, technique: nil), originalEntityId: originalId, status: "ACTIVE", createdAt: "2026-08-17T00:00:00Z", updatedAt: "2026-08-17T00:00:00Z")
+        let share = SocialShare(id: UUID(), ownerId: ownerId, entityType: "recipe", entityId: originalId, fromName: "Barista", fromHandle: "barista", targetUserId: nil, visibility: "PUBLIC", name: recipe.name, subtitle: recipe.intention, message: "Prueba", payloadSnapshot: .init(kind: "recipe", recipe: recipe, technique: nil), originalAuthorUserId: ownerId, originalAuthorName: "Barista original", originalEntityId: originalId, status: "ACTIVE", createdAt: "2026-08-17T00:00:00Z", updatedAt: "2026-08-17T00:00:00Z")
         let transport = MockTransport(responseData: try JSONEncoder().encode([share]))
         let service = SocialService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
         let feed = try await service.feed(accessToken: "user-jwt")
@@ -865,6 +866,8 @@ final class SocialTests: XCTestCase {
         try service.importShare(share, context: context)
         let imported = try context.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord"))
         XCTAssertEqual(imported.first?.name, "Copia de V60 comunitaria"); XCTAssertEqual(imported.first?.originalEntityId, originalId); XCTAssertEqual(imported.first?.copyMode, "IMPORT")
+        XCTAssertEqual(imported.first?.originalAuthorUserId, ownerId); XCTAssertEqual(imported.first?.originalAuthorName, "Barista original")
+        XCTAssertEqual(imported.first?.importedFromShareId, share.id); XCTAssertTrue(imported.first?.isShared == true)
         XCTAssertEqual(try RecipeTechniqueRepository(context: context).ingredients(recipeId: try XCTUnwrap(imported.first?.id)).count, 1)
 
         let forkPersistence = PersistenceController(inMemory: true); let forkContext = forkPersistence.container.viewContext
@@ -876,12 +879,16 @@ final class SocialTests: XCTestCase {
     func testPublishReportAndBlockContractsDoNotExposeEmail() async throws {
         let transport = MockTransport(statusCode: 201); let service = SocialService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
         let entityId = UUID(); let payload = SharePayloadSnapshot(kind: "recipe", recipe: .init(name: "V60", recipeKind: "BLACK_COFFEE", intention: "", suggestedMethodName: "V60", tags: "", ingredients: [], steps: []), technique: nil)
-        try await service.publish(entityType: "recipe", entityId: entityId, fromName: "Barista", fromHandle: "brew", name: "V60", subtitle: "", message: "", payload: payload, accessToken: "jwt")
+        let originalAuthorId = UUID(); let originalEntityId = UUID()
+        try await service.publish(entityType: "recipe", entityId: entityId, fromName: "Barista", fromHandle: "brew", name: "V60", subtitle: "", message: "", payload: payload, originalAuthorUserId: originalAuthorId, originalAuthorName: "Autora original", originalEntityId: originalEntityId, accessToken: "jwt")
         let publishBody = String(data: try XCTUnwrap(transport.requests.first?.httpBody), encoding: .utf8) ?? ""
         XCTAssertFalse(publishBody.contains("email")); XCTAssertTrue(publishBody.contains("payload_snapshot_json"))
         let publishJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(transport.requests.first?.httpBody)) as? [String: Any])
         let snapshot = try XCTUnwrap(publishJSON["payload_snapshot_json"] as? [String: Any])
         XCTAssertEqual(snapshot["name"] as? String, "V60"); XCTAssertNil(snapshot["recipe"]); XCTAssertNil(snapshot["kind"])
+        XCTAssertEqual(publishJSON["original_author_user_id"] as? String, originalAuthorId.uuidString)
+        XCTAssertEqual(publishJSON["original_author_name"] as? String, "Autora original")
+        XCTAssertEqual(publishJSON["original_entity_id"] as? String, originalEntityId.uuidString)
         try await service.report(shareId: UUID(), reason: .spam, details: "Enlaces engañosos", accessToken: "jwt")
         try await service.block(userId: UUID(), accessToken: "jwt")
         XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/rest/v1/shares", "/rest/v1/content_reports", "/rest/v1/blocked_users"])
@@ -899,6 +906,7 @@ final class SocialTests: XCTestCase {
         ]
         let share = try JSONDecoder().decode(SocialShare.self, from: JSONSerialization.data(withJSONObject: androidShare))
         XCTAssertEqual(share.payloadSnapshot.recipe?.name, "V60 Android"); XCTAssertNil(share.payloadSnapshot.technique)
+        XCTAssertEqual(SocialContentPolicy.messageLimit, 280)
         let payload = share.payloadSnapshot
         XCTAssertNoThrow(try SocialContentPolicy.validate(fromName: "Ana", fromHandle: "ana", name: "V60", subtitle: "", message: String(repeating: "a", count: 280), payload: payload))
         XCTAssertThrowsError(try SocialContentPolicy.validate(fromName: "Ana", fromHandle: "ana", name: "V60", subtitle: "", message: String(repeating: "a", count: 281), payload: payload))
@@ -961,6 +969,12 @@ final class EntitySyncTests: XCTestCase {
             XCTAssertEqual(descriptor.table, expected.0); XCTAssertEqual(descriptor.ownerField, expected.1)
         }
         XCTAssertEqual(CoreSyncSchema.descriptors.first { $0.entityName == "RecipeIngredientRecord" }?.ownerField, "owner_id")
+
+        let attributionFields = ["is_shared", "original_author_user_id", "original_author_name", "original_entity_id", "root_entity_id", "imported_from_share_id", "copy_mode"]
+        for entity in ["RecipeRecord", "TechniqueRecord"] {
+            let remoteFields = Set(try XCTUnwrap(CoreSyncSchema.descriptors.first { $0.entityName == entity }).fields.map(\.remote))
+            XCTAssertTrue(Set(attributionFields).isSubset(of: remoteFields), "\(entity) no conserva toda la atribución Android")
+        }
 
         let base = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("supabase/migrations")
         let files = ["202608160000_android_schema_preflight.sql", "202608170003_lab_and_brew_references.sql", "202609010007_android_backend_alignment.sql"]
@@ -1048,6 +1062,29 @@ final class EntitySyncTests: XCTestCase {
         XCTAssertTrue(brewRow["steps_snapshot"] is [[String: Any]])
         var foreign = coffeeRow; foreign["user_id"] = UUID().uuidString; foreign["name"] = "Intruso"
         try coordinator.merge(foreign, descriptor: descriptor, expectedOwner: owner); XCTAssertEqual(bean.name, "Remoto")
+    }
+
+    @MainActor func testRecipeAttributionAndEnumsEncodeForAndroid() throws {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        let originalAuthor = UUID(); let originalEntity = UUID(); let importedShare = UUID()
+        let recipe = RecipeRecord(context: context, name: "Copia atribuida", recipeKind: "BLACK_COFFEE", intention: "Balance", suggestedMethodId: nil, suggestedMethodName: "V60", isFavorite: false, tags: "")
+        recipe.ownerId = owner; recipe.visibility = "PRIVATE"; recipe.isShared = true
+        recipe.originalAuthorUserId = originalAuthor; recipe.originalAuthorName = "Ana"
+        recipe.originalEntityId = originalEntity; recipe.rootEntityId = originalEntity
+        recipe.importedFromShareId = importedShare; recipe.copyMode = "FORK"
+        try context.save()
+
+        let coordinator = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: nil, supabaseAnonKey: nil), defaults: UserDefaults(suiteName: "AttributionSync.\(UUID().uuidString)")!)
+        let descriptor = try XCTUnwrap(CoreSyncSchema.descriptors.first { $0.entityName == "RecipeRecord" })
+        let data = try coordinator.encode(recipe, descriptor: descriptor, ownerId: owner)
+        let row = try XCTUnwrap((JSONSerialization.jsonObject(with: data) as? [[String: Any]])?.first)
+        XCTAssertEqual(row["visibility"] as? String, "private"); XCTAssertEqual(row["copy_mode"] as? String, "fork")
+        XCTAssertEqual(row["is_shared"] as? Bool, true)
+        XCTAssertEqual(row["original_author_user_id"] as? String, originalAuthor.uuidString)
+        XCTAssertEqual(row["original_author_name"] as? String, "Ana")
+        XCTAssertEqual(row["original_entity_id"] as? String, originalEntity.uuidString)
+        XCTAssertEqual(row["root_entity_id"] as? String, originalEntity.uuidString)
+        XCTAssertEqual(row["imported_from_share_id"] as? String, importedShare.uuidString)
     }
 
     @MainActor func testEndToEndSyncPushesThenPullsEveryDescriptor() async throws {

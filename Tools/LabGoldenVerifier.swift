@@ -544,23 +544,28 @@ struct LabGoldenVerifier {
     }
 
     @MainActor private static func verifySocialImportAttribution() {
-        let originalId = UUID(); let share = SocialShare(
-            id: UUID(), ownerId: UUID(), entityType: "recipe", entityId: originalId, fromName: "Barista", fromHandle: "brew",
+        let originalId = UUID(); let originalAuthorId = UUID(); let shareId = UUID(); let share = SocialShare(
+            id: shareId, ownerId: UUID(), entityType: "recipe", entityId: originalId, fromName: "Barista", fromHandle: "brew",
             targetUserId: nil, visibility: "PUBLIC", name: "V60 comunitaria", subtitle: "Dulzor", message: "",
             payloadSnapshot: .init(kind: "recipe", recipe: .init(name: "V60 comunitaria", recipeKind: "BLACK_COFFEE", intention: "Dulzor", suggestedMethodName: "V60", tags: "", ingredients: [.init(name: "Café", amount: 15, unit: "GRAMS")], steps: [.init(instruction: "Bloom", durationSeconds: 45)]), technique: nil),
-            originalEntityId: originalId, status: "ACTIVE", createdAt: "2026-08-17T00:00:00Z", updatedAt: "2026-08-17T00:00:00Z"
+            originalAuthorUserId: originalAuthorId, originalAuthorName: "Autora original", originalEntityId: originalId,
+            status: "ACTIVE", createdAt: "2026-08-17T00:00:00Z", updatedAt: "2026-08-17T00:00:00Z"
         )
         let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
         try! SocialService(configuration: .init(supabaseURL: nil, supabaseAnonKey: nil)).importShare(share, context: context)
         let imported = try! context.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord"))
         precondition(imported.first?.originalEntityId == originalId && imported.first?.copyMode == "IMPORT")
+        precondition(imported.first?.originalAuthorUserId == originalAuthorId && imported.first?.originalAuthorName == "Autora original")
+        precondition(imported.first?.importedFromShareId == shareId && imported.first?.isShared == true)
         let forkPersistence = PersistenceController(inMemory: true); let forkContext = forkPersistence.container.viewContext
         try! SocialService(configuration: .init(supabaseURL: nil, supabaseAnonKey: nil)).importShare(share, mode: .forked, context: forkContext)
         let fork = try! forkContext.fetch(NSFetchRequest<RecipeRecord>(entityName: "RecipeRecord")).first!
         precondition(fork.name == "V60 comunitaria (Variante)" && fork.copyMode == "FORK" && fork.originalEntityId == originalId)
+        precondition(fork.originalAuthorUserId == originalAuthorId && fork.importedFromShareId == shareId && fork.isShared)
     }
 
     private static func verifySocialContentPolicy() {
+        precondition(SocialContentPolicy.messageLimit == 280)
         let payload = SharePayloadSnapshot(
             kind: "recipe",
             recipe: .init(name: "V60 dulce", recipeKind: "BLACK_COFFEE", intention: "Balance", suggestedMethodName: "V60", tags: "", ingredients: [], steps: []),
@@ -604,6 +609,11 @@ struct LabGoldenVerifier {
         for (entity, expected) in shared {
             let descriptor = CoreSyncSchema.descriptors.first { $0.entityName == entity }
             precondition(descriptor?.table == expected.0 && descriptor?.ownerField == expected.1)
+        }
+        let attributionFields = Set(["is_shared", "original_author_user_id", "original_author_name", "original_entity_id", "root_entity_id", "imported_from_share_id", "copy_mode"])
+        for entity in ["RecipeRecord", "TechniqueRecord"] {
+            let fields = Set(CoreSyncSchema.descriptors.first { $0.entityName == entity }!.fields.map(\.remote))
+            precondition(attributionFields.isSubset(of: fields))
         }
         let persistence = PersistenceController(inMemory: true)
         let profile = UserProfileRecord(context: persistence.container.viewContext)

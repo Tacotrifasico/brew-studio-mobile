@@ -34,9 +34,9 @@ El historial de uso de `CoffeeBean` se deriva por su UUID estable: `BrewSession.
 
 `Equipment` conserva tipo canónico, nombre, marca, modelo, capacidad, configuración, notas, favorito y estado activo. Cuando el tipo es `BREWER_METHOD`, activo determina si pertenece al catálogo de la calculadora y favorito si está fijado en sus accesos rápidos. Su UUID viaja por Calculadora, Laboratorio, Preparación y las sesiones históricas; no existe una segunda copia del método.
 
-`Recipe` → `RecipeIngredient` y `RecipeStep` por `recipeId`. La receta conserva tipo, intención, método sugerido, favorito, etiquetas, visibilidad y procedencia de copias. Ingredientes y pasos mantienen orden y UUID independientes.
+`Recipe` → `RecipeIngredient` y `RecipeStep` por `recipeId`. La receta conserva tipo, intención, método sugerido, favorito, etiquetas, visibilidad y procedencia de copias. `isShared`, `originalAuthorUserId`, `originalAuthorName`, `originalEntityId`, `rootEntityId`, `importedFromShareId` y `copyMode` preservan la cadena de atribución Android al importar, bifurcar, sincronizar o volver a publicar. Ingredientes y pasos mantienen orden y UUID independientes.
 
-`Technique` → `TechniqueStep` por `techniqueId`; puede referenciar receta, grano, molino y método sin absorber esas entidades. Los pasos guardan duración, agua agregada y acumulada, gesto, intensidad, cobertura, flujo, acción secundaria y notas.
+`Technique` → `TechniqueStep` por `techniqueId`; puede referenciar receta, grano, molino y método sin absorber esas entidades y conserva los mismos campos de procedencia que `Recipe`. Los pasos guardan duración, agua agregada y acumulada, gesto, intensidad, cobertura, flujo, acción secundaria y notas. `visibility` y `copyMode` permanecen en mayúsculas en el modelo local y el descriptor los convierte a los valores minúsculos exigidos por PostgreSQL.
 
 `BrewSession` registra una ejecución terminada sin fusionarse con la técnica. Conserva referencias opcionales a técnica, receta, método/equipo, café y molino; snapshots de nombres de técnica, receta, método, café y molino, además de dosis, agua, ratio, temperatura, molienda, tiempo ejecutado y la secuencia completa de pasos en JSON. Incluye los mismos metadatos de propiedad, versión, sincronización y borrado lógico que el resto de entidades sincronizables.
 

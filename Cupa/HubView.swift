@@ -21,6 +21,7 @@ struct HubView: View {
     @State private var message: String?
     @State private var feed: [SocialShare] = []; @State private var feedLoading = false
     @State private var inbox: [SocialInboxItem] = []; @State private var inboxLoading = false
+    @State private var socialLoadError: String?
     @State private var activity: [SocialActivity] = []; @State private var communitySection = 0
     @State private var likedShareIds: Set<UUID> = []; @State private var savedShareIds: Set<UUID> = []
     @State private var blockedUserIds: Set<UUID> = []
@@ -57,7 +58,7 @@ struct HubView: View {
                 Button("Cancelar", role: .cancel) { blockShare = nil }
             } message: { _ in Text("Sus publicaciones dejarán de aparecer. Puedes desbloquearlo desde tu perfil.") }
             .task { loadProfile(); await loadSocialData() }
-            .alert("Perfil", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("Aceptar") {} } message: { Text(message ?? "") }
+            .alert("Brew Hub", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("Aceptar") {} } message: { Text(message ?? "") }
         }
     }
 
@@ -106,7 +107,7 @@ struct HubView: View {
                 else {
                     ForEach(Array(blockedUserIds).sorted(by: { $0.uuidString < $1.uuidString }), id: \.self) { userId in
                         HStack {
-                            VStack(alignment: .leading) { Text("Usuario bloqueado"); Text(userId.uuidString).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
+                            VStack(alignment: .leading) { Text("Usuario bloqueado"); Text("Referencia ···\(userId.uuidString.suffix(6))").font(.caption2).foregroundStyle(.secondary) }
                             Spacer(); Button("Desbloquear") { unblock(userId) }
                         }
                     }
@@ -116,6 +117,9 @@ struct HubView: View {
                 LabeledContent("Recetas", value: "\(recipes.count)"); LabeledContent("Técnicas", value: "\(techniques.count)")
                 LabeledContent("Preparaciones", value: "\(brews.count)"); LabeledContent("Catas", value: "\(tastings.count)")
             }
+            Section("Cuenta") {
+                Button("Cerrar sesión", role: .destructive) { Task { await account.signOut() } }
+            }
         }.scrollContentBackground(.hidden)
     }
 
@@ -123,11 +127,11 @@ struct HubView: View {
         List {
             Section("Recetas") {
                 if recipes.isEmpty { Text("Sin recetas guardadas") }
-                else { ForEach(recipes) { recipe in HStack { Text(recipe.name); Spacer(); Button { shareDraft = .recipe(recipe) } label: { Image(systemName: "square.and.arrow.up") }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("Compartir receta \(recipe.name)") } } }
+                else { ForEach(recipes) { recipe in HStack { VStack(alignment: .leading) { Text(recipe.name); if recipe.isShared { Label("Con atribución de comunidad", systemImage: "person.2").font(.caption2).foregroundStyle(.secondary) } }; Spacer(); Button { shareDraft = .recipe(recipe) } label: { Image(systemName: "square.and.arrow.up") }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("Compartir receta \(recipe.name)") } } }
             }
             Section("Técnicas") {
                 if techniques.isEmpty { Text("Sin técnicas guardadas") }
-                else { ForEach(techniques) { technique in HStack { VStack(alignment: .leading) { Text(technique.name); Text(technique.methodName).font(.caption).foregroundStyle(.secondary) }; Spacer(); Button { shareDraft = .technique(technique) } label: { Image(systemName: "square.and.arrow.up") }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("Compartir técnica \(technique.name)") } } }
+                else { ForEach(techniques) { technique in HStack { VStack(alignment: .leading) { Text(technique.name); Text(technique.methodName).font(.caption).foregroundStyle(.secondary); if technique.isShared { Label("Con atribución de comunidad", systemImage: "person.2").font(.caption2).foregroundStyle(.secondary) } }; Spacer(); Button { shareDraft = .technique(technique) } label: { Image(systemName: "square.and.arrow.up") }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("Compartir técnica \(technique.name)") } } }
             }
         }.scrollContentBackground(.hidden)
     }
@@ -154,27 +158,82 @@ struct HubView: View {
         VStack(spacing: 0) {
             Picker("Bandeja social", selection: $communitySection) { Text("Muro público").tag(0); Text("Recibidos").tag(1) }
                 .pickerStyle(.segmented).padding(.horizontal).padding(.bottom, 8)
+            if let socialLoadError, !(communitySection == 0 ? feed.isEmpty : inbox.isEmpty) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text(socialLoadError).font(.caption).lineLimit(3)
+                    Spacer()
+                    Button("Reintentar") { Task { await loadSocialData() } }.font(.caption.bold())
+                }
+                .foregroundStyle(CupaTheme.onAccent).padding(10).background(CupaTheme.terracotta)
+                .accessibilityIdentifier("hub.social.loadWarning")
+            }
             if communitySection == 0 {
                 if feedLoading { ProgressView("Cargando comunidad…").frame(maxWidth: .infinity, maxHeight: .infinity) }
+                else if let socialLoadError, feed.isEmpty { socialFailureView(socialLoadError) }
                 else if feed.isEmpty { ContentUnavailableView("Comunidad sin contenido", systemImage: "person.3", description: Text("Cuando haya fórmulas públicas aparecerán aquí.")) }
                 else { List(feed) { share in shareCard(share, inboxItem: nil) }.scrollContentBackground(.hidden).refreshable { await loadSocialData() } }
             } else {
                 if inboxLoading { ProgressView("Cargando recibidos…").frame(maxWidth: .infinity, maxHeight: .infinity) }
+                else if let socialLoadError, inbox.isEmpty { socialFailureView(socialLoadError) }
                 else if inbox.isEmpty { ContentUnavailableView("Bandeja vacía", systemImage: "tray", description: Text("Aquí aparecerán las fórmulas que te envíen directamente.")) }
-                else { List(inbox) { item in if let share = item.share { shareCard(share, inboxItem: item) } }.scrollContentBackground(.hidden).refreshable { await loadSocialData() } }
+                else {
+                    List(inbox) { item in
+                        if let share = item.share { shareCard(share, inboxItem: item) }
+                        else { removedInboxCard(item) }
+                    }
+                    .scrollContentBackground(.hidden).refreshable { await loadSocialData() }
+                }
             }
         }
     }
 
+    private func socialFailureView(_ error: String) -> some View {
+        ContentUnavailableView {
+            Label("No se pudo actualizar el Hub", systemImage: "wifi.exclamationmark")
+        } description: {
+            Text(error)
+        } actions: {
+            Button("Reintentar") { Task { await loadSocialData() } }
+                .buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
+        }
+        .accessibilityIdentifier("hub.social.loadError")
+    }
+
+    private func removedInboxCard(_ item: SocialInboxItem) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Contenido retirado").font(.headline)
+                Text("La fórmula ya no está disponible o fue eliminada por su autor.").font(.caption).foregroundStyle(.secondary)
+            }
+        } icon: {
+            Image(systemName: "doc.badge.ellipsis")
+        }
+        .padding(.vertical, 6)
+        .onAppear { if item.readAt == nil { markRead(item) } }
+        .accessibilityIdentifier("hub.inbox.removedContent")
+    }
+
     private func shareCard(_ share: SocialShare, inboxItem: SocialInboxItem?) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(share.name).font(.headline)
                 Spacer()
                 if inboxItem?.readAt == nil { Circle().fill(CupaTheme.terracotta).frame(width: 9, height: 9).accessibilityLabel("Sin leer") }
             }
             Text("@\(share.fromHandle) · \(share.entityType == "recipe" ? "Receta" : "Técnica")").font(.caption).foregroundStyle(.secondary)
+            if !share.subtitle.isEmpty { Text(share.subtitle).font(.subheadline.bold()).foregroundStyle(CupaTheme.forest) }
             if !share.message.isEmpty { Text(share.message).font(.subheadline) }
+            shareSnapshotSummary(share.payloadSnapshot)
+            if let originalAuthorName = share.originalAuthorName,
+               !originalAuthorName.isEmpty,
+               originalAuthorName.caseInsensitiveCompare(share.fromName) != .orderedSame {
+                Label("Original de \(originalAuthorName)", systemImage: "arrow.triangle.branch")
+                    .font(.caption).foregroundStyle(CupaTheme.terracotta)
+            }
+            if let date = socialDate(share.createdAt) {
+                Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary)
+            }
             HStack {
                 Menu {
                     Button("Registrar copia") { copyShare(share, mode: .imported) }
@@ -182,17 +241,46 @@ struct HubView: View {
                 } label: { Label("Añadir", systemImage: "square.and.arrow.down") }
                 if inboxItem == nil {
                     Button { toggleLike(share) } label: { Image(systemName: likedShareIds.contains(share.id) ? "heart.fill" : "heart").accessibilityLabel(likedShareIds.contains(share.id) ? "Quitar Me gusta" : "Me gusta") }
+                        .frame(minWidth: 44, minHeight: 44)
                 }
                 Menu {
                     Button(savedShareIds.contains(share.id) ? "Quitar de guardados" : "Guardar publicación") { toggleSaved(share) }
-                    Button("Reportar contenido", role: .destructive) { reportShare = share }
-                    Button("Bloquear usuario", role: .destructive) { blockShare = share }
+                    if share.ownerId != account.tokens?.userId {
+                        Button("Reportar contenido", role: .destructive) { reportShare = share }
+                        Button("Bloquear usuario", role: .destructive) { blockShare = share }
+                    }
                 } label: { Image(systemName: "ellipsis") }
                     .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Más acciones para \(share.name)")
             }.font(.caption)
         }
         .padding(.vertical, 5)
         .onAppear { if let inboxItem, inboxItem.readAt == nil { markRead(inboxItem) } }
+    }
+
+    @ViewBuilder private func shareSnapshotSummary(_ payload: SharePayloadSnapshot) -> some View {
+        if let recipe = payload.recipe {
+            VStack(alignment: .leading, spacing: 5) {
+                if !recipe.suggestedMethodName.isEmpty {
+                    Label(recipe.suggestedMethodName, systemImage: "mug").font(.caption.bold())
+                }
+                Text("\(recipe.ingredients.count) ingredientes · \(recipe.steps.count) pasos")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !recipe.tags.isEmpty { Text(recipe.tags).font(.caption2).foregroundStyle(CupaTheme.terracotta).lineLimit(2) }
+            }
+        } else if let technique = payload.technique {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("\(technique.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(technique.waterMl) ml · 1:\(technique.ratio.formatted(.number.precision(.fractionLength(0...1)))) · \(technique.temperatureC) °C")
+                    .font(.caption.bold()).foregroundStyle(CupaTheme.forest)
+                Text("\(technique.methodName) · \(technique.steps.count) pasos · \(technique.executionMode.replacingOccurrences(of: "_", with: " ").capitalized)")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !technique.grindDescription.isEmpty { Label(technique.grindDescription, systemImage: "dial.medium").font(.caption2).foregroundStyle(.secondary) }
+            }
+        }
+    }
+
+    private func socialDate(_ text: String) -> Date? {
+        let fractional = ISO8601DateFormatter(); fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 
     private func loadProfile() {
@@ -218,7 +306,8 @@ struct HubView: View {
     }
     private func loadSocialData() async {
         guard let userId = account.tokens?.userId else { return }
-        feedLoading = true; inboxLoading = true
+        feedLoading = true; inboxLoading = true; socialLoadError = nil
+        defer { feedLoading = false; inboxLoading = false }
         do {
             let result = try await account.authenticated { token in
                 async let feed = SocialService(configuration: account.configuration).feed(accessToken: token)
@@ -230,8 +319,11 @@ struct HubView: View {
                 return try await (feed, inbox, activity, likes, saves, blocks)
             }
             feed = result.0; inbox = result.1; activity = result.2; likedShareIds = result.3; savedShareIds = result.4; blockedUserIds = result.5
-        } catch { if account.configuration.isSupabaseConfigured { message = error.localizedDescription } }
-        feedLoading = false; inboxLoading = false
+        } catch {
+            socialLoadError = account.configuration.isSupabaseConfigured
+                ? error.localizedDescription
+                : "El Hub necesita la conexión de Supabase. Tus fórmulas locales siguen disponibles."
+        }
     }
 
     private func publish(_ draft: HubShareDraft, message: String, visibility: String, targetUserId: UUID?) {
@@ -250,7 +342,7 @@ struct HubView: View {
             let snapshot = SharedRecipeSnapshot(name: draft.name, recipeKind: draft.recipeKind, intention: draft.intention, suggestedMethodName: draft.suggestedMethodName, tags: draft.tags, ingredients: draft.ingredients.map { .init(name: $0.name, amount: $0.amount, unit: $0.unit) }, steps: draft.steps.map { .init(instruction: $0.instruction, durationSeconds: $0.durationSeconds) })
             let payload = SharePayloadSnapshot(kind: "recipe", recipe: snapshot, technique: nil)
             socialAction(successMessage: visibility == "DIRECT" ? "Fórmula enviada al buzón." : "Receta publicada.") { service, token in
-                try await service.publish(entityType: "recipe", entityId: recipe.id, fromName: displayName, fromHandle: alias, name: recipe.name, subtitle: recipe.intention, message: message, payload: payload, visibility: visibility, targetUserId: targetUserId, accessToken: token)
+                try await service.publish(entityType: "recipe", entityId: recipe.id, fromName: displayName, fromHandle: alias, name: recipe.name, subtitle: recipe.intention, message: message, payload: payload, visibility: visibility, targetUserId: targetUserId, originalAuthorUserId: recipe.originalAuthorUserId, originalAuthorName: recipe.originalAuthorName, originalEntityId: recipe.originalEntityId, accessToken: token)
                 try? await service.logActivity(action: "share_recipe", entityType: "recipe", entityId: recipe.id, note: visibility == "DIRECT" ? "Enviaste \(recipe.name) directamente" : "Publicaste \(recipe.name)", accessToken: token)
             }
         } catch { self.message = error.localizedDescription }
@@ -261,7 +353,7 @@ struct HubView: View {
             let snapshot = SharedTechniqueSnapshot(name: draft.name, methodName: draft.methodName, doseGrams: draft.doseGrams, waterMl: draft.waterMl, ratio: draft.ratio, temperatureC: draft.temperatureC, executionMode: draft.executionMode, grindValue: draft.grindValue, grindDescription: draft.grindDescription, grindUnit: draft.grindUnit, notes: draft.notes, techniqueDescription: draft.techniqueDescription, steps: draft.steps.map { .init(title: $0.title, durationSeconds: $0.durationSeconds, waterAddedMl: $0.waterAddedMl, intensity: $0.intensity, gesture: $0.gesture, note: $0.note) })
             let payload = SharePayloadSnapshot(kind: "technique", recipe: nil, technique: snapshot)
             socialAction(successMessage: visibility == "DIRECT" ? "Técnica enviada al buzón." : "Técnica publicada.") { service, token in
-                try await service.publish(entityType: "technique", entityId: technique.id, fromName: displayName, fromHandle: alias, name: technique.name, subtitle: technique.methodName, message: message, payload: payload, visibility: visibility, targetUserId: targetUserId, accessToken: token)
+                try await service.publish(entityType: "technique", entityId: technique.id, fromName: displayName, fromHandle: alias, name: technique.name, subtitle: technique.methodName, message: message, payload: payload, visibility: visibility, targetUserId: targetUserId, originalAuthorUserId: technique.originalAuthorUserId, originalAuthorName: technique.originalAuthorName, originalEntityId: technique.originalEntityId, accessToken: token)
                 try? await service.logActivity(action: "share_technique", entityType: "technique", entityId: technique.id, note: visibility == "DIRECT" ? "Enviaste \(technique.name) directamente" : "Publicaste \(technique.name)", accessToken: token)
             }
         } catch { self.message = error.localizedDescription }
@@ -395,7 +487,10 @@ private struct ShareComposer: View {
                 }
                 Section("Mensaje opcional") {
                     TextField("¿Qué debería saber quien la recibe?", text: $message, axis: .vertical).lineLimit(2...6)
-                    Text("\(message.count)/1000").font(.caption2).foregroundStyle(message.count > 1_000 ? .red : .secondary)
+                        .onChange(of: message) { _, value in
+                            if value.count > SocialContentPolicy.messageLimit { message = String(value.prefix(SocialContentPolicy.messageLimit)) }
+                        }
+                    Text("\(message.count)/\(SocialContentPolicy.messageLimit)").font(.caption2).foregroundStyle(.secondary)
                 }
                 Section {
                     Text(visibility == "PUBLIC" ? "Cualquier usuario autenticado podrá ver e importar esta fórmula." : "Sólo la cuenta destinataria y tú podrán verla.")
@@ -409,7 +504,7 @@ private struct ShareComposer: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Compartir") { onPublish(message, visibility, visibility == "DIRECT" ? recipient : nil); dismiss() }
-                        .disabled(!canPublish || message.count > 1_000)
+                        .disabled(!canPublish)
                 }
             }
         }

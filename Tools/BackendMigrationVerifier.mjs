@@ -89,6 +89,9 @@ async function androidUpgradeScenario() {
   await db.exec(`update public.recipes set method='AeroPress' where id='50000000-0000-4000-8000-000000000001'`);
   pair = (await db.query(`select suggested_method_name from public.recipes where id='50000000-0000-4000-8000-000000000001'`)).rows[0];
   if (pair.suggested_method_name !== 'AeroPress') throw new Error('Receta Android→iOS no propagó');
+  await db.exec(`update public.recipes set is_shared=true,original_author_user_id='${otherUserId}',original_author_name='Autora',original_entity_id='50000000-0000-4000-8000-000000000099',root_entity_id='50000000-0000-4000-8000-000000000099',copy_mode='fork' where id='50000000-0000-4000-8000-000000000001'`);
+  pair = (await db.query(`select is_shared,original_author_user_id,original_author_name,original_entity_id,root_entity_id,copy_mode from public.recipes where id='50000000-0000-4000-8000-000000000001'`)).rows[0];
+  if (!pair.is_shared || pair.original_author_user_id !== otherUserId || pair.original_author_name !== 'Autora' || pair.original_entity_id !== '50000000-0000-4000-8000-000000000099' || pair.root_entity_id !== '50000000-0000-4000-8000-000000000099' || pair.copy_mode !== 'fork') throw new Error('La atribución de receta no se conservó');
   await db.exec(`update public.techniques set dose_grams=18,temperature_c=94 where id='60000000-0000-4000-8000-000000000001'`);
   pair = (await db.query(`select coffee_grams,temperature from public.techniques where id='60000000-0000-4000-8000-000000000001'`)).rows[0];
   if (Number(pair.coffee_grams) !== 18 || pair.temperature !== 94) throw new Error('Técnica iOS→Android no propagó');

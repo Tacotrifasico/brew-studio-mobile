@@ -23,7 +23,8 @@ final class RecipeRecord: NSManagedObject, SyncTrackedRecord {
     @NSManaged var name: String; @NSManaged var recipeKind: String; @NSManaged var intention: String
     @NSManaged var suggestedMethodId: UUID?; @NSManaged var suggestedMethodName: String
     @NSManaged var isFavorite: Bool; @NSManaged var tags: String; @NSManaged var visibility: String
-    @NSManaged var originalEntityId: UUID?; @NSManaged var rootEntityId: UUID?; @NSManaged var copyMode: String
+    @NSManaged var isShared: Bool; @NSManaged var originalAuthorUserId: UUID?; @NSManaged var originalAuthorName: String?
+    @NSManaged var originalEntityId: UUID?; @NSManaged var rootEntityId: UUID?; @NSManaged var importedFromShareId: UUID?; @NSManaged var copyMode: String
     @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
     @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
 
@@ -31,7 +32,8 @@ final class RecipeRecord: NSManagedObject, SyncTrackedRecord {
         self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.name = name; self.recipeKind = recipeKind
         self.intention = intention; self.suggestedMethodId = suggestedMethodId; self.suggestedMethodName = suggestedMethodName
         self.isFavorite = isFavorite; self.tags = tags; visibility = "PRIVATE"
-        self.originalEntityId = originalEntityId; self.rootEntityId = rootEntityId; self.copyMode = copyMode
+        isShared = false; originalAuthorUserId = nil; originalAuthorName = nil
+        self.originalEntityId = originalEntityId; self.rootEntityId = rootEntityId; importedFromShareId = nil; self.copyMode = copyMode
         createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
     }
     var syncStatus: SyncStatus {
@@ -84,7 +86,8 @@ final class TechniqueRecord: NSManagedObject, SyncTrackedRecord {
     @NSManaged var doseGrams: Double; @NSManaged var waterMl: Int64; @NSManaged var ratio: Double; @NSManaged var temperatureC: Int64
     @NSManaged var executionMode: String; @NSManaged var grindValue: Double; @NSManaged var grindDescription: String; @NSManaged var grindUnit: String
     @NSManaged var notes: String; @NSManaged var techniqueDescription: String; @NSManaged var totalTimeSeconds: Int64
-    @NSManaged var visibility: String; @NSManaged var originalEntityId: UUID?; @NSManaged var rootEntityId: UUID?; @NSManaged var copyMode: String
+    @NSManaged var visibility: String; @NSManaged var isShared: Bool; @NSManaged var originalAuthorUserId: UUID?; @NSManaged var originalAuthorName: String?
+    @NSManaged var originalEntityId: UUID?; @NSManaged var rootEntityId: UUID?; @NSManaged var importedFromShareId: UUID?; @NSManaged var copyMode: String
     @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
     @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
 
@@ -94,7 +97,8 @@ final class TechniqueRecord: NSManagedObject, SyncTrackedRecord {
         self.doseGrams = doseGrams; self.waterMl = Int64(waterMl); self.ratio = ratio; self.temperatureC = Int64(temperatureC)
         self.executionMode = executionMode; self.grindValue = grindValue; self.grindDescription = grindDescription; self.grindUnit = grindUnit
         self.notes = notes; self.techniqueDescription = techniqueDescription; self.totalTimeSeconds = Int64(totalTimeSeconds)
-        visibility = "PRIVATE"; originalEntityId = nil; rootEntityId = nil; copyMode = "ORIGINAL"
+        visibility = "PRIVATE"; isShared = false; originalAuthorUserId = nil; originalAuthorName = nil
+        originalEntityId = nil; rootEntityId = nil; importedFromShareId = nil; copyMode = "ORIGINAL"
         createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
     }
     var syncStatus: SyncStatus {

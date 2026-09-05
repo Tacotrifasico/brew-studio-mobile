@@ -20,3 +20,5 @@ El proyecto no se considera terminado porque compile o muestre pantallas. La def
 Última referencia Android auditada: commit `392fd2bbb3c4b906d30af1799ca15612eafa34bb`, integrado y confirmado contra `origin/main` el 5 de septiembre de 2026. Incluye la continuidad Calculadora → Preparar y la selección persistente del favorito.
 
 Último avance iOS: el envío directo recibe un alias público y lo resuelve mediante una RPC autenticada, sin pedir ni mostrar UUID de cuenta. La migración conserva el contrato Android y fue ejecutada en las dos rutas de actualización sobre PostgreSQL efímero.
+
+Cuenta contempla la configuración productiva habitual de Supabase: si el alta no entrega sesión porque exige verificar correo, conserva el estado desconectado, explica el siguiente paso y permite reenviar la confirmación. Recuperar contraseña confirma la solicitud sin revelar si el correo está registrado.

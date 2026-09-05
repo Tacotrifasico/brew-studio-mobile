@@ -195,3 +195,7 @@ Guardar presets no basta para expresar cuál prefiere usar la persona. Android e
 ## D-049 — El destinatario directo se elige por alias, no por UUID
 
 Un UUID es una referencia interna estable, no una credencial que una persona deba copiar para usar el Hub. El compositor acepta el alias público con o sin `@`; una RPC autenticada realiza una coincidencia exacta sin distinguir mayúsculas, no devuelve la propia cuenta y sólo expone al cliente el UUID necesario para escribir `target_user_id`. Los alias activos se hacen únicos de forma insensible a mayúsculas. La política de lectura de perfiles continúa limitada y la pantalla de cuenta deja de mostrar su UUID técnico.
+
+## D-050 — El registro no presupone una sesión inmediata
+
+Supabase devuelve tokens cuando la confirmación está desactivada, pero con confirmación de correo puede devolver únicamente el usuario pendiente. Ambos son éxitos válidos y se modelan por separado: sólo el primero se guarda en Keychain; el segundo mantiene la app desconectada, muestra instrucciones y habilita un reenvío `signup`. La recuperación siempre usa un mensaje genérico porque el backend responde igual exista o no la dirección, evitando facilitar enumeración de cuentas.

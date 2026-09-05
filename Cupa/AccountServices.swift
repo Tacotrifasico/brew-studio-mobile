@@ -33,6 +33,11 @@ struct AuthTokens: Codable, Equatable {
     func hasValidAccessToken(at date: Date = .now) -> Bool { expiresAt > date }
 }
 
+enum SignUpResult: Equatable {
+    case signedIn(AuthTokens)
+    case confirmationRequired(email: String)
+}
+
 protocol TokenStore {
     func load() throws -> AuthTokens?
     func save(_ tokens: AuthTokens) throws
@@ -111,19 +116,33 @@ struct SupabaseAuthService {
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
 
     func signIn(email: String, password: String) async throws -> AuthTokens { try await token(path: "/auth/v1/token?grant_type=password", payload: ["email": email, "password": password]) }
-    func signUp(email: String, password: String) async throws -> AuthTokens { try await token(path: "/auth/v1/signup", payload: ["email": email, "password": password]) }
+    func signUp(email: String, password: String) async throws -> SignUpResult {
+        let payload = ["email": email, "password": password]
+        let (data, _) = try await request(path: "/auth/v1/signup", method: "POST", payload: payload, bearer: nil)
+        if let tokens = try? decodeTokens(data, fallbackEmail: email) { return .signedIn(tokens) }
+
+        struct PendingUser: Decodable { let id: UUID; let email: String? }
+        guard let user = try? JSONDecoder().decode(PendingUser.self, from: data) else { throw AuthServiceError.invalidResponse }
+        let confirmedEmail = user.email.flatMap { $0.isEmpty ? nil : $0 } ?? email
+        return .confirmationRequired(email: confirmedEmail)
+    }
     func refresh(_ refreshToken: String) async throws -> AuthTokens { try await token(path: "/auth/v1/token?grant_type=refresh_token", payload: ["refresh_token": refreshToken]) }
     func sendPasswordRecovery(email: String) async throws { _ = try await request(path: "/auth/v1/recover", method: "POST", payload: ["email": email], bearer: nil) }
+    func resendSignUpConfirmation(email: String) async throws { _ = try await request(path: "/auth/v1/resend", method: "POST", payload: ["email": email, "type": "signup"], bearer: nil) }
     func signOut(accessToken: String) async throws { _ = try await request(path: "/auth/v1/logout", method: "POST", payload: nil, bearer: accessToken) }
 
     private func token(path: String, payload: [String: String]) async throws -> AuthTokens {
         let (data, _) = try await request(path: path, method: "POST", payload: payload, bearer: nil)
+        return try decodeTokens(data, fallbackEmail: payload["email"] ?? "")
+    }
+
+    private func decodeTokens(_ data: Data, fallbackEmail: String) throws -> AuthTokens {
         struct Response: Decodable {
             struct User: Decodable { let id: UUID; let email: String? }
             let access_token: String; let refresh_token: String; let expires_in: Double; let user: User
         }
         guard let decoded = try? JSONDecoder().decode(Response.self, from: data) else { throw AuthServiceError.invalidResponse }
-        return .init(accessToken: decoded.access_token, refreshToken: decoded.refresh_token, expiresAt: .now.addingTimeInterval(decoded.expires_in), userId: decoded.user.id, email: decoded.user.email ?? payload["email"] ?? "")
+        return .init(accessToken: decoded.access_token, refreshToken: decoded.refresh_token, expiresAt: .now.addingTimeInterval(decoded.expires_in), userId: decoded.user.id, email: decoded.user.email ?? fallbackEmail)
     }
 
     private func request(path: String, method: String, payload: [String: String]?, bearer: String?) async throws -> (Data, HTTPURLResponse) {
@@ -166,6 +185,7 @@ final class AccountModel: ObservableObject {
         didSet { LocalDataScope.activeOwnerId = tokens?.userId }
     }
     @Published private(set) var sessionNotice: String?
+    @Published private(set) var pendingConfirmationEmail: String?
     @Published private(set) var isRefreshing = false
     let configuration: AppConfiguration; private let service: SupabaseAuthService; private let store: TokenStore
     private let accountDeletionHandler: (UUID) throws -> Void
@@ -181,10 +201,32 @@ final class AccountModel: ObservableObject {
     var tokens: AuthTokens? { if case let .signedIn(tokens) = state { tokens } else { nil } }
     var localScopeKey: String { tokens?.userId.uuidString ?? "guest" }
     func signIn(email: String, password: String) async { await perform { try await self.service.signIn(email: email, password: password) } }
-    func signUp(email: String, password: String) async { await perform { try await self.service.signUp(email: email, password: password) } }
+    func signUp(email: String, password: String) async {
+        state = .loading; sessionNotice = nil
+        do {
+            switch try await service.signUp(email: email, password: password) {
+            case let .signedIn(tokens):
+                try store.save(tokens); pendingConfirmationEmail = nil; state = .signedIn(tokens)
+            case let .confirmationRequired(confirmedEmail):
+                pendingConfirmationEmail = confirmedEmail; state = .signedOut
+                sessionNotice = "Revisa \(confirmedEmail) y confirma tu correo. Después vuelve para iniciar sesión."
+            }
+        } catch { state = .error(error.localizedDescription) }
+    }
+    func resendSignUpConfirmation() async {
+        guard let email = pendingConfirmationEmail else { return }
+        state = .loading; sessionNotice = nil
+        do {
+            try await service.resendSignUpConfirmation(email: email); state = .signedOut
+            sessionNotice = "Enviamos de nuevo la confirmación a \(email)."
+        } catch { state = .error(error.localizedDescription) }
+    }
     func recover(email: String) async {
         state = .loading
-        do { try await service.sendPasswordRecovery(email: email); state = .signedOut }
+        do {
+            try await service.sendPasswordRecovery(email: email); state = .signedOut
+            sessionNotice = "Si existe una cuenta con ese correo, recibirás instrucciones para restablecer la contraseña."
+        }
         catch { state = .error(error.localizedDescription) }
     }
     @discardableResult
@@ -225,7 +267,7 @@ final class AccountModel: ObservableObject {
         }
     }
     func signOut() async {
-        let access = tokens?.accessToken; state = .loading; sessionNotice = nil
+        let access = tokens?.accessToken; state = .loading; sessionNotice = nil; pendingConfirmationEmail = nil
         if let access { try? await service.signOut(accessToken: access) }
         do { try store.clear(); state = configuration.isSupabaseConfigured ? .signedOut : .unavailable }
         catch { state = .error(error.localizedDescription) }
@@ -252,7 +294,7 @@ final class AccountModel: ObservableObject {
 
     private func perform(_ operation: () async throws -> AuthTokens) async {
         state = .loading; sessionNotice = nil
-        do { let value = try await operation(); try store.save(value); state = .signedIn(value); sessionNotice = nil }
+        do { let value = try await operation(); try store.save(value); pendingConfirmationEmail = nil; state = .signedIn(value); sessionNotice = nil }
         catch { state = .error(error.localizedDescription) }
     }
 }

@@ -724,6 +724,21 @@ struct LabGoldenVerifier {
         let rejectedTokens = await rejected.validTokens(now: now)
         precondition(rejectedTokens == nil)
         precondition(rejected.state == .signedOut && rejectedStore.value == nil)
+
+        let pendingData = Data("{\"id\":\"33333333-3333-4333-8333-333333333333\",\"email\":\"new@example.com\"}".utf8)
+        let pendingStore = VerifierTokenStore(nil)
+        let pending = AccountModel(configuration: configuration, transport: VerifierTransport(responseData: pendingData), store: pendingStore)
+        await pending.signUp(email: "new@example.com", password: "password123")
+        precondition(pending.state == .signedOut && pendingStore.value == nil)
+        precondition(pending.sessionNotice?.contains("confirma tu correo") == true)
+        precondition(pending.pendingConfirmationEmail == "new@example.com")
+        await pending.resendSignUpConfirmation()
+        precondition(pending.state == .signedOut && pending.sessionNotice?.contains("Enviamos de nuevo") == true)
+
+        let recovery = AccountModel(configuration: configuration, transport: VerifierTransport(responseData: Data("{}".utf8)), store: VerifierTokenStore(nil))
+        await recovery.recover(email: "maybe@example.com")
+        precondition(recovery.state == .signedOut)
+        precondition(recovery.sessionNotice?.contains("Si existe una cuenta") == true)
     }
 }
 
@@ -736,10 +751,12 @@ private final class VerifierTokenStore: TokenStore {
 }
 
 private final class VerifierTransport: NetworkTransport {
-    let statusCode: Int; let error: Error?
-    init(statusCode: Int = 200, error: Error? = nil) { self.statusCode = statusCode; self.error = error }
+    let responseData: Data; let statusCode: Int; let error: Error?
+    init(responseData: Data = Data("{\"message\":\"Invalid refresh token\"}".utf8), statusCode: Int = 200, error: Error? = nil) {
+        self.responseData = responseData; self.statusCode = statusCode; self.error = error
+    }
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         if let error { throw error }
-        return (Data("{\"message\":\"Invalid refresh token\"}".utf8), HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!)
+        return (responseData, HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!)
     }
 }

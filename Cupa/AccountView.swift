@@ -36,6 +36,9 @@ struct AccountView: View {
                     if case let .error(message) = model.state { Text(message).foregroundStyle(.red).font(.caption) }
                     Button("Iniciar sesión") { Task { await model.signIn(email: email, password: password) } }.disabled(email.isEmpty || password.isEmpty)
                     Button("Crear cuenta") { Task { await model.signUp(email: email, password: password) } }.disabled(email.isEmpty || password.count < 8 || password != confirmation)
+                    if model.pendingConfirmationEmail != nil {
+                        Button("Reenviar correo de confirmación") { Task { await model.resendSignUpConfirmation() } }
+                    }
                     Button("Recuperar contraseña") { Task { await model.recover(email: email) } }.disabled(email.isEmpty)
                 }
             }

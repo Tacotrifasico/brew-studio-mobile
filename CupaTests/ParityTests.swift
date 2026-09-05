@@ -742,6 +742,56 @@ final class AccountAndSyncTests: XCTestCase {
         XCTAssertNil(transport.requests.first?.value(forHTTPHeaderField: "Authorization"))
     }
 
+    @MainActor func testSignUpSupportsEmailConfirmationWithoutInventingASession() async throws {
+        let userId = UUID()
+        let pendingBody = try JSONSerialization.data(withJSONObject: ["id": userId.uuidString, "email": "new@example.com"])
+        let pendingTransport = MockTransport(responseData: pendingBody)
+        let pendingStore = MemoryTokenStore()
+        let pendingModel = AccountModel(
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: pendingTransport, store: pendingStore
+        )
+
+        await pendingModel.signUp(email: "new@example.com", password: "password123")
+
+        XCTAssertEqual(pendingModel.state, .signedOut)
+        XCTAssertNil(pendingStore.value)
+        XCTAssertTrue(pendingModel.sessionNotice?.contains("confirma tu correo") == true)
+        XCTAssertEqual(pendingTransport.requests.first?.url?.path, "/auth/v1/signup")
+        XCTAssertEqual(pendingModel.pendingConfirmationEmail, "new@example.com")
+
+        await pendingModel.resendSignUpConfirmation()
+        XCTAssertEqual(pendingModel.state, .signedOut)
+        XCTAssertTrue(pendingModel.sessionNotice?.contains("Enviamos de nuevo") == true)
+        XCTAssertEqual(pendingTransport.requests.map { $0.url?.path }, ["/auth/v1/signup", "/auth/v1/resend"])
+        let resendBody = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(pendingTransport.requests.last?.httpBody)) as? [String: String])
+        XCTAssertEqual(resendBody, ["email": "new@example.com", "type": "signup"])
+
+        let activeBody = try JSONSerialization.data(withJSONObject: [
+            "access_token": "access", "refresh_token": "refresh", "expires_in": 3_600,
+            "user": ["id": userId.uuidString, "email": "active@example.com"]
+        ])
+        let activeStore = MemoryTokenStore()
+        let activeModel = AccountModel(
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: MockTransport(responseData: activeBody), store: activeStore
+        )
+        await activeModel.signUp(email: "active@example.com", password: "password123")
+        XCTAssertEqual(activeModel.tokens?.userId, userId)
+        XCTAssertEqual(activeStore.value?.accessToken, "access")
+        XCTAssertNil(activeModel.pendingConfirmationEmail)
+    }
+
+    @MainActor func testPasswordRecoveryShowsEnumerationSafeConfirmation() async {
+        let model = AccountModel(
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: MockTransport(responseData: Data("{}".utf8)), store: MemoryTokenStore()
+        )
+        await model.recover(email: "maybe@example.com")
+        XCTAssertEqual(model.state, .signedOut)
+        XCTAssertTrue(model.sessionNotice?.contains("Si existe una cuenta") == true)
+    }
+
     func testAccountDeletionUsesAuthenticatedEdgeFunction() async throws {
         let transport = MockTransport(responseData: Data("{\"deleted\":true}".utf8))
         let service = SupabaseAccountService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)

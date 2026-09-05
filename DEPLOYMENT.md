@@ -33,6 +33,8 @@ Antes de `supabase db push`, crear un respaldo y ensayar sobre un proyecto Stagi
 
 Después se debe validar con dos cuentas distintas que cada usuario sólo pueda leer y modificar sus filas. También se prueban registro, verificación de correo, recuperación, renovación, cierre, eliminación, cuota de Gemini y restauración en otro dispositivo. Con las dos aplicaciones se crea y edita al menos un café, molino, equipo, receta, técnica con pasos, experimento, perfil y publicación en cada dirección; ambos clientes deben ver el mismo UUID y el último valor.
 
+En Authentication → Email debe configurarse un proveedor SMTP real y conservarse **Confirm email** activado para producción. La app acepta correctamente tanto el alta que devuelve sesión inmediata como el alta que devuelve sólo usuario pendiente, permite reenviar la confirmación y pide iniciar sesión después de abrir el enlace. Configurar `SITE_URL` y la lista de Redirect URLs con una página HTTPS controlada antes del ensayo; la recuperación usa una respuesta deliberadamente genérica para no revelar si una dirección tiene cuenta.
+
 ## Xcode y TestFlight
 
 1. Abrir `Cupa.xcodeproj`.

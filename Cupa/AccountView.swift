@@ -17,7 +17,7 @@ struct AccountView: View {
                 case .unavailable:
                     ContentUnavailableView("Cuenta no disponible", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("El servicio de cuenta todavía no está disponible en esta versión. Tus datos locales permanecen en el dispositivo."))
                 case let .signedIn(tokens):
-                    Section("Sesión") { LabeledContent("Correo", value: tokens.email); LabeledContent("Usuario", value: tokens.userId.uuidString) }
+                    Section("Sesión") { LabeledContent("Correo", value: tokens.email) }
                     Button("Cerrar sesión", role: .destructive) { Task { await model.signOut() } }
                     Section("Eliminar cuenta y datos") {
                         Text("Esta acción elimina la cuenta y los datos asociados. Escribe ELIMINAR para confirmarla.").font(.caption).foregroundStyle(.secondary)

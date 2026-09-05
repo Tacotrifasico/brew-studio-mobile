@@ -11,7 +11,7 @@
 - [ ] Conflictos y errores de sincronización validados.
 - [ ] Gemini seguro con fallback local.
 - [ ] Tema claro/oscuro completo. El sistema Warm Specialty Paper & Ceramic y su contraste están implementados; falta recorrido visual/VoiceOver en Simulator.
-- [ ] Sin botones muertos, mocks ni placeholders de producción.
+- [ ] Sin botones muertos, mocks ni placeholders de producción. La cuenta y el envío directo ya no exponen UUID técnicos; falta recorrido visual completo.
 - [x] Sin TODO críticos ni secretos.
 - [ ] Pruebas críticas aprobadas (dominio aprobado; UI e integración real pendientes).
 - [x] Build Release del código aprobado sin firma.

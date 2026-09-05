@@ -18,3 +18,5 @@ El proyecto no se considera terminado porque compile o muestre pantallas. La def
 4. Documentos de decisiones y paridad.
 
 Última referencia Android auditada: commit `392fd2bbb3c4b906d30af1799ca15612eafa34bb`, integrado y confirmado contra `origin/main` el 5 de septiembre de 2026. Incluye la continuidad Calculadora → Preparar y la selección persistente del favorito.
+
+Último avance iOS: el envío directo recibe un alias público y lo resuelve mediante una RPC autenticada, sin pedir ni mostrar UUID de cuenta. La migración conserva el contrato Android y fue ejecutada en las dos rutas de actualización sobre PostgreSQL efímero.

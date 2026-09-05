@@ -191,3 +191,7 @@ Cerrar sesión conserva la caché aislada para una futura sesión offline, pero 
 ## D-048 — El favorito elegido gobierna el borrador de preparación
 
 Guardar presets no basta para expresar cuál prefiere usar la persona. Android e iOS conservan por separado el identificador del último favorito seleccionado y lo restauran con prioridad al reabrir; al eliminar ese preset también eliminan la selección. Cada cambio numérico válido de la Calculadora actualiza dosis, agua, ratio, método y pasos del borrador de Preparación, por lo que cambiar de pestaña no requiere pulsar un botón de transferencia. Una preparación cuyo cronómetro ya comenzó nunca se reemplaza. En iOS el lienzo claro adopta los tokens canónicos `#F7F5F0`, `#EFECE6`, `#FFFFFF`, `#E6DFD5`, `#C26638` y sombra `#1E1A17` al 8%; el terracota usado como texto se oscurece sólo donde WCAG AA exige contraste.
+
+## D-049 — El destinatario directo se elige por alias, no por UUID
+
+Un UUID es una referencia interna estable, no una credencial que una persona deba copiar para usar el Hub. El compositor acepta el alias público con o sin `@`; una RPC autenticada realiza una coincidencia exacta sin distinguir mayúsculas, no devuelve la propia cuenta y sólo expone al cliente el UUID necesario para escribir `target_user_id`. Los alias activos se hacen únicos de forma insensible a mayúsculas. La política de lectura de perfiles continúa limitada y la pantalla de cuenta deja de mostrar su UUID técnico.

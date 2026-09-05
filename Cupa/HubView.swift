@@ -44,7 +44,7 @@ struct HubView: View {
             }
             .sheet(isPresented: $showAccount) { AccountView(model: account) }
             .sheet(item: $shareDraft) { draft in
-                ShareComposer(title: draft.title, allowsPublic: !isPrivate) { message, visibility, recipient in
+                ShareComposer(title: draft.title, allowsPublic: !isPrivate, account: account) { message, visibility, recipient in
                     publish(draft, message: message, visibility: visibility, targetUserId: recipient)
                 }
             }
@@ -107,7 +107,7 @@ struct HubView: View {
                 else {
                     ForEach(Array(blockedUserIds).sorted(by: { $0.uuidString < $1.uuidString }), id: \.self) { userId in
                         HStack {
-                            VStack(alignment: .leading) { Text("Usuario bloqueado"); Text("Referencia ···\(userId.uuidString.suffix(6))").font(.caption2).foregroundStyle(.secondary) }
+                            VStack(alignment: .leading) { Text("Cuenta bloqueada"); Text("Sus publicaciones permanecen ocultas.").font(.caption2).foregroundStyle(.secondary) }
                             Spacer(); Button("Desbloquear") { unblock(userId) }
                         }
                     }
@@ -453,17 +453,19 @@ struct HubView: View {
 private struct ShareComposer: View {
     let title: String
     let allowsPublic: Bool
+    @ObservedObject var account: AccountModel
     let onPublish: (String, String, UUID?) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var message = ""
     @State private var visibility: String
     @State private var recipientText = ""
+    @State private var recipientError: String?
+    @State private var isResolvingRecipient = false
 
-    private var recipient: UUID? { UUID(uuidString: recipientText.trimmingCharacters(in: .whitespacesAndNewlines)) }
-    private var canPublish: Bool { visibility == "PUBLIC" || recipient != nil }
+    private var canPublish: Bool { visibility == "PUBLIC" || !recipientText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-    init(title: String, allowsPublic: Bool, onPublish: @escaping (String, String, UUID?) -> Void) {
-        self.title = title; self.allowsPublic = allowsPublic; self.onPublish = onPublish
+    init(title: String, allowsPublic: Bool, account: AccountModel, onPublish: @escaping (String, String, UUID?) -> Void) {
+        self.title = title; self.allowsPublic = allowsPublic; self.account = account; self.onPublish = onPublish
         _visibility = State(initialValue: allowsPublic ? "PUBLIC" : "DIRECT")
     }
 
@@ -478,11 +480,12 @@ private struct ShareComposer: View {
                     }.pickerStyle(.segmented)
                     if !allowsPublic { Text("Tu perfil privado sólo permite compartir directamente.").font(.caption).foregroundStyle(.secondary) }
                     if visibility == "DIRECT" {
-                        TextField("UUID del destinatario", text: $recipientText)
+                        TextField("Alias del destinatario", text: $recipientText)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
-                        Text("El identificador debe ser el UUID exacto de la cuenta destinataria.")
+                            .onChange(of: recipientText) { _, _ in recipientError = nil }
+                        Text("Escribe su alias público, por ejemplo @ana.cafe.")
                             .font(.caption).foregroundStyle(.secondary)
-                        if !recipientText.isEmpty, recipient == nil { Text("El UUID no es válido.").font(.caption).foregroundStyle(.red) }
+                        if let recipientError { Text(recipientError).font(.caption).foregroundStyle(.red) }
                     }
                 }
                 Section("Mensaje opcional") {
@@ -504,9 +507,24 @@ private struct ShareComposer: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Compartir") { onPublish(message, visibility, visibility == "DIRECT" ? recipient : nil); dismiss() }
-                        .disabled(!canPublish)
+                    Button(isResolvingRecipient ? "Buscando…" : "Compartir", action: submit)
+                        .disabled(!canPublish || isResolvingRecipient)
                 }
+            }
+        }
+    }
+
+    private func submit() {
+        guard visibility == "DIRECT" else { onPublish(message, visibility, nil); dismiss(); return }
+        isResolvingRecipient = true; recipientError = nil
+        Task {
+            do {
+                let recipient = try await account.authenticated { token in
+                    try await SocialService(configuration: account.configuration).recipient(alias: recipientText, accessToken: token)
+                }
+                onPublish(message, visibility, recipient.userId); dismiss()
+            } catch {
+                recipientError = error.localizedDescription; isResolvingRecipient = false
             }
         }
     }

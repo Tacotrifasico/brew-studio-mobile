@@ -908,6 +908,27 @@ final class SettingsTests: XCTestCase {
 }
 
 final class SocialTests: XCTestCase {
+    func testDirectRecipientResolvesByPublicAliasWithoutUserFacingUUID() async throws {
+        let recipientId = UUID()
+        let response = try JSONSerialization.data(withJSONObject: [["user_id": recipientId.uuidString, "alias": "ana.cafe"]])
+        let transport = MockTransport(responseData: response)
+        let service = SocialService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
+
+        let recipient = try await service.recipient(alias: "  @Ana.Cafe ", accessToken: "jwt")
+
+        XCTAssertEqual(recipient, .init(userId: recipientId, alias: "ana.cafe"))
+        XCTAssertEqual(transport.requests.first?.url?.path, "/rest/v1/rpc/resolve_profile_alias")
+        XCTAssertEqual(transport.requests.first?.httpMethod, "POST")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(transport.requests.first?.httpBody)) as? [String: String])
+        XCTAssertEqual(body["alias_input"], "Ana.Cafe")
+        do {
+            _ = try await service.recipient(alias: "alias con espacios", accessToken: "jwt")
+            XCTFail("Un alias inválido no debe llegar a la red")
+        } catch {
+            XCTAssertEqual(error as? SocialRecipientError, .invalidAlias)
+        }
+    }
+
     @MainActor func testFeedContractImportAndAttribution() async throws {
         let originalId = UUID(); let ownerId = UUID()
         let recipe = SharedRecipeSnapshot(name: "V60 comunitaria", recipeKind: "BLACK_COFFEE", intention: "Dulzor", suggestedMethodName: "V60", tags: "frutal", ingredients: [.init(name: "Café", amount: 15, unit: "GRAMS")], steps: [.init(instruction: "Bloom", durationSeconds: 45)])

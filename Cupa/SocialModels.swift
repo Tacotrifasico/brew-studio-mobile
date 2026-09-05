@@ -196,6 +196,22 @@ enum SocialReportValidationError: LocalizedError, Equatable {
     var errorDescription: String? { "Los detalles del reporte deben tener 450 caracteres o menos." }
 }
 
+struct SocialRecipient: Decodable, Equatable {
+    let userId: UUID
+    let alias: String
+    enum CodingKeys: String, CodingKey { case userId = "user_id", alias }
+}
+
+enum SocialRecipientError: LocalizedError, Equatable {
+    case invalidAlias, notFound
+    var errorDescription: String? {
+        switch self {
+        case .invalidAlias: "Escribe un alias válido, por ejemplo @ana.cafe."
+        case .notFound: "No encontramos una cuenta distinta a la tuya con ese alias."
+        }
+    }
+}
+
 struct SocialService {
     let configuration: AppConfiguration; let transport: NetworkTransport
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
@@ -230,6 +246,19 @@ struct SocialService {
         let query = "select=*&user_id=eq.\(userId.uuidString)&order=created_at.desc&limit=100"
         let (data, _) = try await request(path: "rest/v1/activity_log", query: query, method: "GET", body: nil, accessToken: accessToken, prefer: nil)
         return try JSONDecoder().decode([SocialActivity].self, from: data)
+    }
+    func recipient(alias: String, accessToken: String) async throws -> SocialRecipient {
+        let normalized = alias.trimmingCharacters(in: .whitespacesAndNewlines).drop(while: { $0 == "@" })
+        guard !normalized.isEmpty, normalized.count <= 40,
+              normalized.range(of: "^[A-Za-z0-9._-]+$", options: .regularExpression) != nil else {
+            throw SocialRecipientError.invalidAlias
+        }
+        let body = try JSONSerialization.data(withJSONObject: ["alias_input": String(normalized)])
+        let (data, _) = try await request(path: "rest/v1/rpc/resolve_profile_alias", query: nil, method: "POST", body: body, accessToken: accessToken, prefer: nil)
+        guard let recipient = try JSONDecoder().decode([SocialRecipient].self, from: data).first else {
+            throw SocialRecipientError.notFound
+        }
+        return recipient
     }
     func markInboxRead(itemId: UUID, accessToken: String, date: Date = .now) async throws {
         let body = try JSONSerialization.data(withJSONObject: ["read_at": ISO8601DateFormatter().string(from: date)])

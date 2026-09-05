@@ -15,6 +15,7 @@ const otherUserId = '22222222-2222-4222-8222-222222222222';
 async function bootstrap(db) {
   await db.exec(`
     create role authenticated;
+    create role anon;
     create schema auth;
     create table auth.users (id uuid primary key, email text not null);
     create function auth.uid() returns uuid language sql stable as $$
@@ -45,6 +46,8 @@ async function applyIOSMigrations(db, excludedSuffix = '') {
 async function verifyRLS(db) {
   await db.exec(`
     insert into auth.users(id,email) values ('${otherUserId}','otra@example.com');
+    update public.profiles set display_name='Ana',handle='ana',alias='ana',is_private=false where id='${userId}';
+    update public.profiles set display_name='Otra',handle='otra.cafe',alias='otra.cafe',is_private=true where id='${otherUserId}';
     insert into public.beans(user_id,name,stock_grams) values ('${otherUserId}','Privado B',100);
     grant usage on schema public,auth to authenticated;
     grant select,insert,update,delete on all tables in schema public to authenticated;
@@ -56,6 +59,10 @@ async function verifyRLS(db) {
   if (visible.rows.length !== 1 || visible.rows[0].user_id !== userId) throw new Error('RLS permitió leer café privado de otra cuenta');
   const modified = await db.query(`update public.beans set name='Intruso' where user_id='${otherUserId}' returning id`);
   if (modified.rows.length !== 0) throw new Error('RLS permitió modificar café privado de otra cuenta');
+  const recipient = await db.query(`select * from public.resolve_profile_alias('@OTRA.CAFE')`);
+  if (recipient.rows.length !== 1 || recipient.rows[0].user_id !== otherUserId || recipient.rows[0].alias !== 'otra.cafe') throw new Error('La resolución exacta por alias no encontró al destinatario');
+  const self = await db.query(`select * from public.resolve_profile_alias('ana')`);
+  if (self.rows.length !== 0) throw new Error('La resolución por alias permitió enviarse a la misma cuenta');
   await db.exec('reset role');
 }
 

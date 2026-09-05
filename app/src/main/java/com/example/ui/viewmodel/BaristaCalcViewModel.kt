@@ -239,7 +239,25 @@ data class BaristaCalcState(
     val labRecommendationText: String = "Relación ideal para resaltar dulzura."
 )
 
+internal class CalculatorFavoriteStore(
+    private val preferences: android.content.SharedPreferences
+) {
+    private val key = "selected_favorite_preset_id"
+
+    fun select(id: String) { preferences.edit().putString(key, id).apply() }
+    fun selectedId(): String? = preferences.getString(key, null)
+    fun selectedPreset(saved: List<RatioPreset>): RatioPreset? = selectedId()?.let { id -> saved.firstOrNull { it.id == id } }
+    fun clearIfSelected(id: String) {
+        if (selectedId() == id) preferences.edit().remove(key).apply()
+    }
+}
+
 class BaristaCalcViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val favoriteStore = CalculatorFavoriteStore(
+        application.getSharedPreferences("brew_studio_calculator_preferences", android.content.Context.MODE_PRIVATE)
+    )
+    private var favoriteSelectionRestored = false
 
     private val database = AppDatabase.getDatabase(application)
     private val repository = BrewRepository(
@@ -306,6 +324,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             repository.allPresets.collect { list ->
                 _state.update { it.copy(savedRatioPresets = list) }
+                restoreSelectedFavorite(list)
             }
         }
         viewModelScope.launch {
@@ -540,7 +559,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         val parsed = rawInput.toFloatOrNull()
         if (parsed != null && parsed >= 1.0f) {
             val calcWater = (parsed * _state.value.ratio).toInt()
-            _state.update { it.copy(
+            updateCalculatorAndPreparation { it.copy(
                 coffee = parsed,
                 water = calcWater,
                 waterInput = calcWater.toString(),
@@ -556,7 +575,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         if (parsed != null && parsed >= 1.0f) {
             updateSensoryCategory(parsed)
             val calcWater = (_state.value.coffee * parsed).toInt()
-            _state.update { it.copy(
+            updateCalculatorAndPreparation { it.copy(
                 ratio = parsed,
                 water = calcWater,
                 waterInput = calcWater.toString(),
@@ -570,7 +589,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         val parsed = input.toIntOrNull()
         if (parsed != null && parsed >= 1) {
             val calcCoffee = Math.round((parsed / _state.value.ratio) * 10f) / 10f
-            _state.update { it.copy(
+            updateCalculatorAndPreparation { it.copy(
                 coffee = calcCoffee,
                 coffeeInput = calcCoffee.toString(),
                 water = parsed,
@@ -583,7 +602,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         val ratio = baseRatios[method] ?: 15.0f
         updateSensoryCategory(ratio)
         val calcWater = (_state.value.coffee * ratio).toInt()
-        _state.update { it.copy(
+        updateCalculatorAndPreparation { it.copy(
             method = method,
             ratio = ratio,
             ratioInput = ratio.toString(),
@@ -596,7 +615,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     fun applyPreset(preset: BaristaPreset) {
         updateSensoryCategory(preset.ratio)
         val calcWater = (preset.coffee * preset.ratio).toInt()
-        _state.update { it.copy(
+        updateCalculatorAndPreparation { it.copy(
             method = preset.method,
             coffee = preset.coffee,
             coffeeInput = preset.coffee.toString(),
@@ -606,6 +625,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             waterInput = calcWater.toString(),
             microcopy = "Se cargó el preset: ${preset.label}."
         ) }
+        if (preset.isCustom) rememberSelectedFavorite(preset.id)
     }
 
     fun adjustCoffee(amount: Float) {
@@ -703,6 +723,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
             if (existing != null) {
                 repository.deletePreset(existing)
+                favoriteStore.clearIfSelected(existing.id)
                 showToast("Ratio eliminado de los guardados de la Calculadora.")
             } else {
                 val coffeeStr = if (currentCoffee % 1 == 0f) currentCoffee.toInt().toString() else currentCoffee.toString()
@@ -716,8 +737,52 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     label = label
                 )
                 repository.insertPreset(newPreset)
+                rememberSelectedFavorite(newPreset.id)
                 showToast("Ratio guardado en Presets de la Calculadora.")
             }
+        }
+    }
+
+    private fun rememberSelectedFavorite(id: String) {
+        favoriteStore.select(id)
+    }
+
+    private fun restoreSelectedFavorite(saved: List<RatioPreset>) {
+        if (favoriteSelectionRestored) return
+        val selectedId = favoriteStore.selectedId()
+        if (selectedId == null) {
+            favoriteSelectionRestored = true
+            return
+        }
+        val favorite = favoriteStore.selectedPreset(saved) ?: return
+        favoriteSelectionRestored = true
+        applyPreset(
+            BaristaPreset(
+                id = favorite.id,
+                method = favorite.methodName,
+                coffee = favorite.coffeeGrams,
+                ratio = favorite.ratio,
+                label = favorite.label,
+                isCustom = true
+            )
+        )
+        _state.update { it.copy(microcopy = "Se restauró tu favorito seleccionado.") }
+    }
+
+    private fun updateCalculatorAndPreparation(
+        transform: (BaristaCalcState) -> BaristaCalcState
+    ) {
+        _state.update { current ->
+            val updated = transform(current)
+            if (current.timerRunning) updated else updated.copy(
+                activePrepMethod = updated.method,
+                activePrepCoffee = updated.coffee,
+                activePrepWater = updated.water,
+                activePrepRatio = updated.ratio,
+                activePrepTemp = 93,
+                activePrepTechniqueName = "${updated.method} Estándar",
+                activePrepSteps = generateQuickSteps(updated.method, updated.water)
+            )
         }
     }
 

@@ -187,3 +187,7 @@ Una receta o técnica importada conserva autor original, entidad raíz, publicac
 ## D-047 — Eliminar cuenta también elimina su caché local
 
 Cerrar sesión conserva la caché aislada para una futura sesión offline, pero eliminar una cuenta es irreversible y debe retirar también sus datos asociados del dispositivo. La Edge Function elimina primero el usuario remoto para evitar perder la única copia antes de confirmar el servidor. Sólo tras ese éxito, iOS borra todas las entidades Core Data y preferencias con el `ownerId` confirmado, limpia Keychain y muestra confirmación; las filas de invitado y de otras cuentas no se alteran. Esta separación satisface la expectativa de eliminación completa sin convertir un simple cierre de sesión en pérdida de datos.
+
+## D-048 — El favorito elegido gobierna el borrador de preparación
+
+Guardar presets no basta para expresar cuál prefiere usar la persona. Android e iOS conservan por separado el identificador del último favorito seleccionado y lo restauran con prioridad al reabrir; al eliminar ese preset también eliminan la selección. Cada cambio numérico válido de la Calculadora actualiza dosis, agua, ratio, método y pasos del borrador de Preparación, por lo que cambiar de pestaña no requiere pulsar un botón de transferencia. Una preparación cuyo cronómetro ya comenzó nunca se reemplaza. En iOS el lienzo claro adopta los tokens canónicos `#F7F5F0`, `#EFECE6`, `#FFFFFF`, `#E6DFD5`, `#C26638` y sombra `#1E1A17` al 8%; el terracota usado como texto se oscurece sólo donde WCAG AA exige contraste.

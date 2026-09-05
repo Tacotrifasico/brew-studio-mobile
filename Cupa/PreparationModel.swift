@@ -73,6 +73,16 @@ final class PreparationModel: ObservableObject {
         )
     }
 
+    func loadCalculatorDraftIfPossible(_ calculator: CalculatorModel) {
+        guard state.status == .ready, state.elapsedSeconds == 0, state.savedAt == nil else { return }
+        load(calculator: calculator)
+    }
+
+    func loadCalculatorIfPristine(_ calculator: CalculatorModel) {
+        guard state.status == .ready, state.steps.isEmpty, state.elapsedSeconds == 0, state.savedAt == nil else { return }
+        load(calculator: calculator)
+    }
+
     func load(lab: LabState) {
         timer?.invalidate(); timer = nil
         state = PreparationState(

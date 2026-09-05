@@ -49,6 +49,7 @@ final class CalculatorModel: ObservableObject {
     @Published var microcopy = "Listo para preparar."
     @Published private(set) var savedPresets: [BrewPreset] = []
     @Published private(set) var pinnedMethodNames: Set<String> = []
+    @Published private(set) var transferVersion = 0
 
     let methods = ["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"]
     private let defaultPinnedMethods: Set<String> = ["V60", "AeroPress", "Espresso", "Prensa francesa"]
@@ -73,9 +74,11 @@ final class CalculatorModel: ObservableObject {
     private let stateKeyBase = "cupa.calculatorState.v1"
     private let pinnedMethodsKeyBase = "cupa.pinnedCalculatorMethods.v1"
     private let savedRatiosKeyBase = "cupa.savedRatios"
+    private let selectedFavoriteKeyBase = "cupa.selectedCalculatorFavorite.v1"
     private var stateKey: String { LocalDataScope.scopedKey(stateKeyBase, ownerId: scopeOwnerId) }
     private var pinnedMethodsKey: String { LocalDataScope.scopedKey(pinnedMethodsKeyBase, ownerId: scopeOwnerId) }
     private var savedRatiosKey: String { LocalDataScope.scopedKey(savedRatiosKeyBase, ownerId: scopeOwnerId) }
+    private var selectedFavoriteKey: String { LocalDataScope.scopedKey(selectedFavoriteKeyBase, ownerId: scopeOwnerId) }
 
     var presets: [BrewPreset] { savedPresets + builtInPresets }
 
@@ -127,6 +130,14 @@ final class CalculatorModel: ObservableObject {
             coffeeInput = format(restored.coffee, forceDecimal: true)
             ratioInput = format(restored.ratio, forceDecimal: true); waterInput = String(restored.water)
             microcopy = "Se restauró tu última preparación."
+        }
+        let storedFavoriteId = userDefaults.string(forKey: selectedFavoriteKey)
+            ?? (LocalDataScope.migrateLegacyObject(in: userDefaults, baseKey: selectedFavoriteKeyBase, ownerId: scopeOwnerId) as? String)
+        if let storedFavoriteId,
+           let selected = savedPresets.first(where: { $0.id == storedFavoriteId }) {
+            restore(selectedFavorite: selected)
+        } else if storedFavoriteId != nil {
+            userDefaults.removeObject(forKey: selectedFavoriteKey)
         }
     }
 
@@ -181,6 +192,7 @@ final class CalculatorModel: ObservableObject {
         ratioInput = format(ratio, forceDecimal: true)
         waterInput = String(water)
         microcopy = "Se cargó: \(preset.label)."
+        if preset.isCustom { userDefaults.set(preset.id, forKey: selectedFavoriteKey) }
         persistState()
     }
 
@@ -203,13 +215,15 @@ final class CalculatorModel: ObservableObject {
         if let index = savedPresets.firstIndex(where: {
             $0.method == method && abs($0.coffee - coffee) < 0.2 && abs($0.ratio - ratio) < 0.2
         }) {
-            savedPresets.remove(at: index)
+            let removed = savedPresets.remove(at: index)
+            if userDefaults.string(forKey: selectedFavoriteKey) == removed.id {
+                userDefaults.removeObject(forKey: selectedFavoriteKey)
+            }
             microcopy = "Proporción eliminada de favoritos."
         } else {
-            savedPresets.insert(
-                BrewPreset(id: UUID().uuidString, method: method, methodId: selectedMethodId, coffee: coffee, ratio: ratio, isCustom: true),
-                at: 0
-            )
+            let favorite = BrewPreset(id: UUID().uuidString, method: method, methodId: selectedMethodId, coffee: coffee, ratio: ratio, isCustom: true)
+            savedPresets.insert(favorite, at: 0)
+            userDefaults.set(favorite.id, forKey: selectedFavoriteKey)
             microcopy = "Proporción guardada en favoritos."
         }
         if let data = try? JSONEncoder().encode(savedPresets) {
@@ -231,6 +245,15 @@ final class CalculatorModel: ObservableObject {
     private func persistState() {
         let snapshot = CalculatorStateSnapshot(method: method, methodId: selectedMethodId, coffee: coffee, ratio: ratio, water: water)
         if let data = try? JSONEncoder().encode(snapshot) { userDefaults.set(data, forKey: stateKey) }
+        transferVersion &+= 1
+    }
+
+    private func restore(selectedFavorite preset: BrewPreset) {
+        method = preset.method; selectedMethodId = preset.methodId
+        coffee = preset.coffee; ratio = preset.ratio; water = Int(preset.coffee * preset.ratio)
+        coffeeInput = format(coffee, forceDecimal: true)
+        ratioInput = format(ratio, forceDecimal: true); waterInput = String(water)
+        microcopy = "Se restauró tu favorito seleccionado."
     }
 
     private func format(_ value: Double, forceDecimal: Bool = false) -> String {

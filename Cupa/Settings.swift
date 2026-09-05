@@ -47,6 +47,7 @@ struct SettingsView: View {
                 Section("Cuenta") { Button("Abrir cuenta") { showAccount = true } }
                 Section("Aplicación") { LabeledContent("Versión", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"); LabeledContent("Entorno", value: Bundle.main.object(forInfoDictionaryKey: "APP_ENVIRONMENT") as? String ?? "Development") }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Configuración")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Cerrar") { dismiss() } } }
             .sheet(isPresented: $showAccount) { AccountView(model: account) }

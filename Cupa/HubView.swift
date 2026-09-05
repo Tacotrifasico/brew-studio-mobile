@@ -120,7 +120,7 @@ struct HubView: View {
             Section("Cuenta") {
                 Button("Cerrar sesión", role: .destructive) { Task { await account.signOut() } }
             }
-        }.scrollContentBackground(.hidden)
+        }.brewScrollableCanvas()
     }
 
     private var formulasTab: some View {
@@ -133,7 +133,7 @@ struct HubView: View {
                 if techniques.isEmpty { Text("Sin técnicas guardadas") }
                 else { ForEach(techniques) { technique in HStack { VStack(alignment: .leading) { Text(technique.name); Text(technique.methodName).font(.caption).foregroundStyle(.secondary); if technique.isShared { Label("Con atribución de comunidad", systemImage: "person.2").font(.caption2).foregroundStyle(.secondary) } }; Spacer(); Button { shareDraft = .technique(technique) } label: { Image(systemName: "square.and.arrow.up") }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("Compartir técnica \(technique.name)") } } }
             }
-        }.scrollContentBackground(.hidden)
+        }.brewScrollableCanvas()
     }
 
     private var historyTab: some View {
@@ -151,7 +151,7 @@ struct HubView: View {
             }
             Section("Preparaciones") { if brews.isEmpty { Text("Sin preparaciones") } else { ForEach(brews.prefix(20)) { Text("\($0.techniqueNameSnapshot) · \($0.completedAt.formatted(date: .abbreviated, time: .omitted))") } } }
             Section("Catas") { if tastings.isEmpty { Text("Sin catas") } else { ForEach(tastings.prefix(20)) { Text("\($0.activeFlavorFamily.capitalized) · \(Int($0.rating))/5") } } }
-        }.scrollContentBackground(.hidden)
+        }.brewScrollableCanvas()
     }
 
     @ViewBuilder private var communityTab: some View {
@@ -165,14 +165,14 @@ struct HubView: View {
                     Spacer()
                     Button("Reintentar") { Task { await loadSocialData() } }.font(.caption.bold())
                 }
-                .foregroundStyle(CupaTheme.onAccent).padding(10).background(CupaTheme.terracotta)
+                .foregroundStyle(CupaTheme.onTerracotta).padding(10).background(CupaTheme.terracotta)
                 .accessibilityIdentifier("hub.social.loadWarning")
             }
             if communitySection == 0 {
                 if feedLoading { ProgressView("Cargando comunidad…").frame(maxWidth: .infinity, maxHeight: .infinity) }
                 else if let socialLoadError, feed.isEmpty { socialFailureView(socialLoadError) }
                 else if feed.isEmpty { ContentUnavailableView("Comunidad sin contenido", systemImage: "person.3", description: Text("Cuando haya fórmulas públicas aparecerán aquí.")) }
-                else { List(feed) { share in shareCard(share, inboxItem: nil) }.scrollContentBackground(.hidden).refreshable { await loadSocialData() } }
+                else { List(feed) { share in shareCard(share, inboxItem: nil) }.brewScrollableCanvas().refreshable { await loadSocialData() } }
             } else {
                 if inboxLoading { ProgressView("Cargando recibidos…").frame(maxWidth: .infinity, maxHeight: .infinity) }
                 else if let socialLoadError, inbox.isEmpty { socialFailureView(socialLoadError) }
@@ -182,7 +182,7 @@ struct HubView: View {
                         if let share = item.share { shareCard(share, inboxItem: item) }
                         else { removedInboxCard(item) }
                     }
-                    .scrollContentBackground(.hidden).refreshable { await loadSocialData() }
+                    .brewScrollableCanvas().refreshable { await loadSocialData() }
                 }
             }
         }
@@ -229,7 +229,7 @@ struct HubView: View {
                !originalAuthorName.isEmpty,
                originalAuthorName.caseInsensitiveCompare(share.fromName) != .orderedSame {
                 Label("Original de \(originalAuthorName)", systemImage: "arrow.triangle.branch")
-                    .font(.caption).foregroundStyle(CupaTheme.terracotta)
+                    .font(.caption).foregroundStyle(CupaTheme.terracottaText)
             }
             if let date = socialDate(share.createdAt) {
                 Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary)
@@ -265,7 +265,7 @@ struct HubView: View {
                 }
                 Text("\(recipe.ingredients.count) ingredientes · \(recipe.steps.count) pasos")
                     .font(.caption).foregroundStyle(.secondary)
-                if !recipe.tags.isEmpty { Text(recipe.tags).font(.caption2).foregroundStyle(CupaTheme.terracotta).lineLimit(2) }
+                if !recipe.tags.isEmpty { Text(recipe.tags).font(.caption2).foregroundStyle(CupaTheme.terracottaText).lineLimit(2) }
             }
         } else if let technique = payload.technique {
             VStack(alignment: .leading, spacing: 5) {
@@ -498,6 +498,7 @@ private struct ShareComposer: View {
                     if let communityURL = configuredHTTPSURL(for: "COMMUNITY_GUIDELINES_URL") { Link("Consultar normas de la comunidad", destination: communityURL).font(.caption) }
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Compartir fórmula")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -529,6 +530,7 @@ private struct ReportComposer: View {
                 }
                 Section { Text("El reporte se enviará para revisión. Si existe peligro inmediato, contacta a los servicios de emergencia locales.").font(.caption).foregroundStyle(.secondary) }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Reportar contenido").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }

@@ -301,7 +301,7 @@ private struct BaristaCalculatorCard: View {
                         .accessibilityLabel("Restablecer proporción")
                     Button { calculator.toggleFavorite() } label: {
                         Image(systemName: calculator.isCurrentFavorite ? "heart.fill" : "heart")
-                            .foregroundStyle(calculator.isCurrentFavorite ? CupaTheme.terracotta : CupaTheme.secondaryText)
+                            .foregroundStyle(calculator.isCurrentFavorite ? CupaTheme.terracottaText : CupaTheme.secondaryText)
                     }
                     .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel(calculator.isCurrentFavorite ? "Quitar de favoritos" : "Guardar como favorito")
@@ -451,6 +451,7 @@ private struct CalculatorMethodManager: View {
                     }
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Gestionar métodos")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { dismiss() } } }
@@ -803,6 +804,7 @@ struct LabView: View {
                 TextField("Altitud (msnm)", text: $customAltitude).keyboardType(.numberPad)
                 if !customLocationIsValid { Text("Escribe una ciudad y una altitud entre 0 y 5,000 msnm.").font(.caption).foregroundStyle(.red) }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Tu ciudad y altura")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { showCustomCity = false } }
@@ -859,7 +861,7 @@ struct LabView: View {
 
     private func labSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, display: String) -> some View {
         VStack(spacing: 6) {
-            HStack { Text(title).font(.subheadline.bold()); Spacer(); Text(display).font(.subheadline.bold()).foregroundStyle(CupaTheme.terracotta) }
+            HStack { Text(title).font(.subheadline.bold()); Spacer(); Text(display).font(.subheadline.bold()).foregroundStyle(CupaTheme.terracottaText) }
             Slider(value: value, in: range, step: step).tint(CupaTheme.forest)
         }
     }
@@ -964,7 +966,7 @@ private struct CupHistoryView: View {
                 }
             }
         }
-        .scrollContentBackground(.hidden)
+        .brewScrollableCanvas()
         .sheet(item: $selectedCup) { cup in
             CupSessionDetailView(cup: cup, onDelete: { if delete(cup) { selectedCup = nil } })
         }
@@ -1020,6 +1022,7 @@ private struct CupSessionDetailView: View {
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar taza y cata", systemImage: "trash") }
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Detalle de taza")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } } }
@@ -1079,7 +1082,7 @@ private struct CoffeeInventoryView: View {
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
+            .brewScrollableCanvas()
         }
         .toolbar {
             Button { showAddBean = true } label: { Image(systemName: "plus") }
@@ -1127,7 +1130,7 @@ private struct CoffeeInventoryView: View {
                     .font(.caption).foregroundStyle(bean.inventoryStatus == .finished ? CupaTheme.secondaryText : CupaTheme.forest)
                 CoffeeFreshnessBar(result: freshness)
                 if let warning = freshness.openWarning {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill").font(.caption2).foregroundStyle(CupaTheme.terracotta)
+                    Label(warning, systemImage: "exclamationmark.triangle.fill").font(.caption2).foregroundStyle(CupaTheme.terracottaText)
                 }
             }
             .padding(.vertical, 6)
@@ -1217,7 +1220,7 @@ private struct CoffeeBeanDetail: View {
                     }
                     if record.inventoryStatus != .finished {
                         Button("Marcar como terminado", systemImage: "checkmark.circle") { confirmingFinished = true }
-                            .foregroundStyle(CupaTheme.terracotta)
+                            .foregroundStyle(CupaTheme.terracottaText)
                     }
                 }
 
@@ -1271,6 +1274,7 @@ private struct CoffeeBeanDetail: View {
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar café", systemImage: "trash") }
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Historial del café")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1473,7 +1477,7 @@ private struct CoffeeBeanEditor: View {
                     CoffeeFreshnessBar(result: freshness)
                     Text(freshness.recommendation).font(.caption).foregroundStyle(CupaTheme.secondaryText)
                     if let warning = freshness.openWarning {
-                        Label(warning, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(CupaTheme.terracotta)
+                        Label(warning, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(CupaTheme.terracottaText)
                     }
                 }
                 Section("Inventario") {
@@ -1511,6 +1515,7 @@ private struct CoffeeBeanEditor: View {
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || validationMessage != nil)
                 }
             }
+            .brewScrollableCanvas()
             .alert("No se pudo guardar el café", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
                 Button("Aceptar") {}
             } message: { Text(saveError ?? "") }

@@ -27,8 +27,8 @@
 ## Evidencia ejecutada
 
 - `LabGoldenVerifier`: cuatro perfiles dorados aprobados (nivel del mar, CDMX/hervor, subextracción y sobreextracción).
-- Calculadora: favorito personalizado guardado, restaurado desde `UserDefaults` aislado y eliminado: aprobado.
-- Calculadora: restauración de método/café/ratio/agua y pasos rápidos V60, AeroPress y Espresso: aprobados.
+- Calculadora: favorito personalizado guardado, elegido de forma persistente, restaurado con prioridad aunque exista un borrador posterior y eliminado junto con su selección: prueba Android aprobada + XCTest compilado.
+- Calculadora: restauración de método/café/ratio/agua y pasos rápidos V60, AeroPress y Espresso; continuidad automática hacia Preparar y protección de una extracción iniciada: prueba Android aprobada + XCTest compilado.
 - Calculadora: cuatro métodos fijados iniciales, personalización persistente, método de equipo con ratio de respaldo 1:15 y conservación de su UUID en favorito, Laboratorio y Preparación: verificador ejecutado + XCTest y recorrido del gestor compilados.
 - Restauración de altitud, unidad y tiempo mediante `UserDefaults`: aprobada.
 - Laboratorio geográfico: las 12 ciudades y su orden/altitud coinciden con `LabAltitudeHeaderCard.kt`; selección ciudad frente a manual, límites negativos/superiores a 5,000 m y hervor de 83 °C a 5,000 m ejecutados.
@@ -55,7 +55,7 @@
 - Configuración: restauración de tema oscuro y Fahrenheit aprobada; eliminado el control métrico sin efecto que no existe en Android.
 - Navegación: las cinco secciones mantienen el orden Taller, Preparar, Cata, Laboratorio y Almacén; el modelo compartido conserva los 18 g introducidos en Calculadora al recorrerlas todas: XCTest y recorrido UI compilados.
 - Taller: la Calculadora completa reutiliza el mismo modelo y persistencia de Preparar; café, ratio, agua, presets, métodos del inventario, favoritos y acciones Lab/Preparar están disponibles desde Inicio. Los contadores y últimos recursos provienen de Core Data filtrado por propietario y desaparecen en vacío en vez de mostrar datos ficticios: target UI compilado.
-- Tema y accesibilidad: paletas clara y oscura verificadas matemáticamente con contraste WCAG AA mínimo 4.5:1 para texto, secundarios, acentos y categorías; colores sobre botones adaptativos, métricas críticas con Dynamic Type y fila de valoración refluible con valor ajustable: XCTest compilado.
+- Tema y accesibilidad: paletas clara y oscura verificadas matemáticamente con contraste WCAG AA mínimo 4.5:1 para texto, secundarios, acentos y categorías; lienzo claro `#F7F5F0`, superficie secundaria `#EFECE6`, tarjetas `#FFFFFF`, borde `#E6DFD5`, terracota `#C26638`, texto terracota accesible y sombra café al 8%; formularios/listas heredan el lienzo cálido: XCTest compilado.
 - Inventario: fallos de guardado de café, molino y equipo hacen rollback, mantienen el editor abierto y muestran alerta; flujo compilado.
 - Café: altitud fuera de rango, cantidades vacías/no numéricas/negativas, existencias mayores al lote y fechas futuras o invertidas son rechazadas antes de guardar; decimal con coma aceptado: verificador ejecutado + XCTest compilado.
 - Recuperación de Core Data: un destino SQLite imposible activa un store temporal visible, permite guardar durante la sesión y no termina la app ni destruye el archivo original: verificador ejecutado + XCTest compilado.

@@ -85,10 +85,13 @@ struct AppShell: View {
         }
         .id(account.localScopeKey)
         .tint(CupaTheme.forest)
+        .background(CupaTheme.background.ignoresSafeArea())
+        .toolbarBackground(CupaTheme.card, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 if let storageWarning {
-                    statusBanner(storageWarning, icon: "externaldrive.badge.exclamationmark", color: CupaTheme.terracotta)
+                    statusBanner(storageWarning, icon: "externaldrive.badge.exclamationmark", color: CupaTheme.terracotta, foreground: CupaTheme.onTerracotta)
                         .accessibilityIdentifier("storage.recoveryWarning")
                 }
                 if let notice = account.sessionNotice ?? syncNotice {
@@ -101,11 +104,18 @@ struct AppShell: View {
             if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
             if phase == .active { Task { await refreshAndSync() } }
         }
-        .task { context.activeOwnerId = account.tokens?.userId; lab.setTemperatureUnit(settings.temperatureUnit); await refreshAndSync() }
+        .task {
+            context.activeOwnerId = account.tokens?.userId
+            lab.setTemperatureUnit(settings.temperatureUnit)
+            preparation.loadCalculatorIfPristine(calculator)
+            await refreshAndSync()
+        }
         .onChange(of: account.localScopeKey) { _, _ in
             let ownerId = account.tokens?.userId; context.activeOwnerId = ownerId
             calculator.switchScope(to: ownerId); lab.switchScope(to: ownerId); preparation.switchScope(to: ownerId); tasting.switchScope(to: ownerId)
+            preparation.loadCalculatorIfPristine(calculator)
         }
+        .onChange(of: calculator.transferVersion) { _, _ in preparation.loadCalculatorDraftIfPossible(calculator) }
         .onChange(of: settings.temperatureUnit) { _, unit in lab.setTemperatureUnit(unit) }
         .onChange(of: lab.state.temperatureUnit) { _, unit in
             if settings.temperatureUnit != unit { settings.temperatureUnit = unit }
@@ -117,10 +127,10 @@ struct AppShell: View {
         .preferredColorScheme(settings.preferredColorScheme)
     }
 
-    private func statusBanner(_ text: String, icon: String, color: Color) -> some View {
+    private func statusBanner(_ text: String, icon: String, color: Color, foreground: Color = CupaTheme.onAccent) -> some View {
         Label(text, systemImage: icon)
             .font(.caption.bold())
-            .foregroundStyle(CupaTheme.onAccent)
+            .foregroundStyle(foreground)
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 12).padding(.vertical, 8)

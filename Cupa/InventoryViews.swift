@@ -38,7 +38,7 @@ struct GrinderInventoryView: View {
                 }
             }
         }
-        .scrollContentBackground(.hidden)
+        .brewScrollableCanvas()
         .toolbar {
             Button { adding = true } label: { Image(systemName: "plus") }
                 .accessibilityLabel("Agregar molino")
@@ -117,7 +117,7 @@ struct EquipmentInventoryView: View {
                 }
             }
         }
-        .scrollContentBackground(.hidden)
+        .brewScrollableCanvas()
         .toolbar {
             Button { adding = true } label: { Image(systemName: "plus") }
                 .accessibilityLabel("Agregar equipo")
@@ -197,6 +197,7 @@ private struct GrinderEditor: View {
                     TextField("Notas", text: $notes, axis: .vertical).lineLimit(2...5)
                 }
             }
+            .brewScrollableCanvas()
             .onChange(of: minimum) { _, newValue in maximum = max(maximum, newValue) }
             .navigationTitle(record == nil ? "Agregar molino" : "Editar molino")
             .toolbar {
@@ -242,6 +243,7 @@ private struct GrinderDetailView: View {
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar molino", systemImage: "trash") }
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Detalle del molino")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -301,6 +303,7 @@ private struct EquipmentEditor: View {
                     Toggle("Equipo activo", isOn: $active)
                 }
             }
+            .brewScrollableCanvas()
             .onChange(of: type) { oldValue, newValue in
                 if oldValue == "BREWER_METHOD" || newValue == "BREWER_METHOD" { favorite = newValue == "BREWER_METHOD" }
             }
@@ -353,6 +356,7 @@ private struct EquipmentDetailView: View {
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar equipo", systemImage: "trash") }
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Detalle del equipo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -39,6 +39,7 @@ struct AccountView: View {
                     Button("Recuperar contraseña") { Task { await model.recover(email: email) } }.disabled(email.isEmpty)
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Cuenta")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Cerrar") { dismiss() } } }
         }

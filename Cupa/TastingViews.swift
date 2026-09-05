@@ -60,7 +60,7 @@ struct TastingView: View {
                 HStack {
                     switch model.state.coolingStatus {
                     case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent).accessibilityIdentifier("tasting.cooling.start")
-                    case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta).foregroundStyle(CupaTheme.onAccent).accessibilityIdentifier("tasting.cooling.pause")
+                    case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta).foregroundStyle(CupaTheme.onTerracotta).accessibilityIdentifier("tasting.cooling.pause")
                     case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent).accessibilityIdentifier("tasting.cooling.resume")
                     case .completed: Label("Guardada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forest)
                     }
@@ -242,7 +242,7 @@ private struct TastingDetailView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 9) {
                         HStack {
-                            Image(systemName: "heart.circle.fill").font(.title2).foregroundStyle(CupaTheme.terracotta)
+                            Image(systemName: "heart.circle.fill").font(.title2).foregroundStyle(CupaTheme.terracottaText)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(FlavorFamily(rawValue: tasting.activeFlavorFamily)?.label ?? "Cata").font(.title3.bold())
                                 Text(tasting.evaluatedAt.formatted(date: .long, time: .shortened)).font(.caption).foregroundStyle(CupaTheme.secondaryText)
@@ -299,6 +299,7 @@ private struct TastingDetailView: View {
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar cata", systemImage: "trash") }
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Detalle de cata")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

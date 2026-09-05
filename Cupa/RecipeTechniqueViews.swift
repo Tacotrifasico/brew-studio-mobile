@@ -56,7 +56,7 @@ struct RecipeInventoryView: View {
             }
         }
         .searchable(text: $search, prompt: "Buscar en recetario")
-        .scrollContentBackground(.hidden)
+        .brewScrollableCanvas()
         .toolbar {
             Button { importedDraft = nil; importing = true } label: { Image(systemName: "wand.and.stars") }.accessibilityLabel("Importar receta desde texto").accessibilityIdentifier("recipes.import")
             Button { importedDraft = nil; adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar receta").accessibilityIdentifier("recipes.add")
@@ -161,6 +161,7 @@ private struct RecipeDetailView: View {
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar receta", systemImage: "trash") }
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Detalle de receta")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -219,7 +220,7 @@ struct TechniqueInventoryView: View {
             }
         }
         .searchable(text: $search, prompt: "Buscar técnica o método")
-        .scrollContentBackground(.hidden)
+        .brewScrollableCanvas()
         .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar técnica").accessibilityIdentifier("techniques.add") }
         .sheet(isPresented: $adding) { TechniqueEditorView(technique: nil) }
         .sheet(item: $editing) { TechniqueEditorView(technique: $0) }
@@ -330,6 +331,7 @@ private struct TechniqueDetailView: View {
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar técnica", systemImage: "trash") }
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Detalle de técnica")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -397,6 +399,7 @@ private struct RecipeEditorView: View {
                     Button { draft.steps.append(.init()) } label: { Label("Agregar paso", systemImage: "plus") }
                 }
             }
+            .brewScrollableCanvas()
             .environment(\.editMode, .constant(.active))
             .navigationTitle(recipe == nil ? "Nueva receta" : "Editar receta")
             .toolbar {
@@ -436,6 +439,7 @@ private struct RecipeImporterView: View {
                     Text("Ejemplo: Receta: Espresso tonic · Ingredientes: 30 ml espresso… · Pasos: 1. Servir hielo…")
                 }
             }
+            .brewScrollableCanvas()
             .navigationTitle("Importar receta")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
@@ -484,6 +488,7 @@ private struct TechniqueEditorView: View {
                     Button { draft.steps.append(.init()) } label: { Label("Agregar paso", systemImage: "plus") }
                 }
             }
+            .brewScrollableCanvas()
             .environment(\.editMode, .constant(.active))
             .navigationTitle(technique == nil ? "Nueva técnica" : "Editar técnica")
             .toolbar {

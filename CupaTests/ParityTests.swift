@@ -161,14 +161,37 @@ final class CalculatorParityTests: XCTestCase {
         calculator.changeRatio("15")
         calculator.toggleFavorite()
         XCTAssertTrue(calculator.isCurrentFavorite)
+        calculator.changeCoffee("20")
         let restored = CalculatorModel(defaults: defaults)
         XCTAssertEqual(restored.savedPresets.first?.coffee, 18)
         XCTAssertEqual(restored.coffee, 18)
         XCTAssertEqual(restored.ratio, 15)
         XCTAssertEqual(restored.water, 270)
-        calculator.toggleFavorite()
-        XCTAssertFalse(calculator.isCurrentFavorite)
+        restored.toggleFavorite()
+        XCTAssertFalse(restored.isCurrentFavorite)
         XCTAssertTrue(CalculatorModel(defaults: defaults).savedPresets.isEmpty)
+    }
+
+    @MainActor func testCalculatorDraftContinuouslyFeedsPreparationWithoutReplacingRunningBrew() throws {
+        let suite = "CalculatorPreparationContinuityTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let calculator = CalculatorModel(defaults: defaults)
+        let preparation = PreparationModel(defaults: defaults)
+        preparation.loadCalculatorIfPristine(calculator)
+
+        calculator.changeCoffee("21")
+        calculator.changeRatio("15")
+        preparation.loadCalculatorDraftIfPossible(calculator)
+        XCTAssertEqual(preparation.state.doseGrams, 21)
+        XCTAssertEqual(preparation.state.waterMl, 315)
+        XCTAssertEqual(preparation.state.ratio, 15)
+        XCTAssertEqual(preparation.state.steps.last?.waterAccumulatedMl, 315)
+
+        preparation.start()
+        calculator.changeCoffee("18")
+        preparation.loadCalculatorDraftIfPossible(calculator)
+        XCTAssertEqual(preparation.state.doseGrams, 21, "Una preparación iniciada no debe sobrescribirse")
     }
 
     @MainActor func testPinnedMethodsAndCustomEquipmentReferencePersistAndTransfer() throws {
@@ -1149,6 +1172,15 @@ final class EntitySyncTests: XCTestCase {
 }
 
 final class NavigationAndThemeTests: XCTestCase {
+    func testWarmSpecialtyCanvasUsesCanonicalLightTokens() {
+        XCTAssertEqual(CupaPalette.Light.background, 0xF7F5F0)
+        XCTAssertEqual(CupaPalette.Light.backgroundAlt, 0xEFECE6)
+        XCTAssertEqual(CupaPalette.Light.card, 0xFFFFFF)
+        XCTAssertEqual(CupaPalette.Light.border, 0xE6DFD5)
+        XCTAssertEqual(CupaPalette.Light.text, 0x1E1A17)
+        XCTAssertEqual(CupaPalette.Light.terracotta, 0xC26638)
+    }
+
     @MainActor func testFiveReferenceTabsKeepSharedFeatureState() throws {
         XCTAssertEqual(CupaTab.allCases.map(\.title), ["Taller", "Preparar", "Cata", "Laboratorio", "Almacén"])
         let suite = "NavigationAndThemeTests.\(UUID().uuidString)"
@@ -1163,8 +1195,8 @@ final class NavigationAndThemeTests: XCTestCase {
     }
 
     func testBrandPaletteMeetsWCAGNormalTextContrast() {
-        let lightForegrounds = [CupaPalette.Light.text, CupaPalette.Light.secondaryText, CupaPalette.Light.forest, CupaPalette.Light.terracotta, CupaPalette.Light.gold, CupaPalette.Light.espresso, CupaPalette.Light.clarity]
-        let darkForegrounds = [CupaPalette.Dark.text, CupaPalette.Dark.secondaryText, CupaPalette.Dark.forest, CupaPalette.Dark.terracotta, CupaPalette.Dark.gold, CupaPalette.Dark.espresso, CupaPalette.Dark.clarity]
+        let lightForegrounds = [CupaPalette.Light.text, CupaPalette.Light.secondaryText, CupaPalette.Light.forest, CupaPalette.Light.terracottaText, CupaPalette.Light.gold, CupaPalette.Light.espresso, CupaPalette.Light.clarity]
+        let darkForegrounds = [CupaPalette.Dark.text, CupaPalette.Dark.secondaryText, CupaPalette.Dark.forest, CupaPalette.Dark.terracottaText, CupaPalette.Dark.gold, CupaPalette.Dark.espresso, CupaPalette.Dark.clarity]
         for foreground in lightForegrounds {
             XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Light.background), 4.5)
             XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Light.card), 4.5)
@@ -1173,12 +1205,14 @@ final class NavigationAndThemeTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Dark.background), 4.5)
             XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Dark.card), 4.5)
         }
-        for accent in [CupaPalette.Light.forest, CupaPalette.Light.terracotta, CupaPalette.Light.gold, CupaPalette.Light.espresso, CupaPalette.Light.clarity] {
+        for accent in [CupaPalette.Light.forest, CupaPalette.Light.gold, CupaPalette.Light.espresso, CupaPalette.Light.clarity] {
             XCTAssertGreaterThanOrEqual(contrast(CupaPalette.Light.onAccent, accent), 4.5)
         }
-        for accent in [CupaPalette.Dark.forest, CupaPalette.Dark.terracotta, CupaPalette.Dark.gold, CupaPalette.Dark.espresso, CupaPalette.Dark.clarity] {
+        XCTAssertGreaterThanOrEqual(contrast(CupaPalette.Light.onTerracotta, CupaPalette.Light.terracotta), 4.5)
+        for accent in [CupaPalette.Dark.forest, CupaPalette.Dark.gold, CupaPalette.Dark.espresso, CupaPalette.Dark.clarity] {
             XCTAssertGreaterThanOrEqual(contrast(CupaPalette.Dark.onAccent, accent), 4.5)
         }
+        XCTAssertGreaterThanOrEqual(contrast(CupaPalette.Dark.onTerracotta, CupaPalette.Dark.terracotta), 4.5)
     }
 
     private func contrast(_ first: UInt, _ second: UInt) -> Double {

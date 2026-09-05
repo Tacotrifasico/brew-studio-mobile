@@ -183,3 +183,7 @@ Android presenta la calculadora barista completa en Inicio; iOS sólo mostraba u
 ## D-046 — Atribución social transitiva y estados honestos del Hub
 
 Una receta o técnica importada conserva autor original, entidad raíz, publicación fuente y modo de copia al sincronizar y al volver a publicarse; no se reemplaza esa procedencia por el último usuario que la compartió. Los valores locales `PRIVATE`/`PUBLIC` y `IMPORT`/`FORK` se traducen a minúsculas sólo en la frontera PostgreSQL para respetar las restricciones Android. El compositor adopta el límite Android de 280 caracteres. El Hub diferencia una comunidad realmente vacía de un error de red, permite reintentar sin descartar datos ya cargados y representa explícitamente una publicación retirada del buzón, evitando presentar fallos o eliminaciones como contenido inexistente normal.
+
+## D-047 — Eliminar cuenta también elimina su caché local
+
+Cerrar sesión conserva la caché aislada para una futura sesión offline, pero eliminar una cuenta es irreversible y debe retirar también sus datos asociados del dispositivo. La Edge Function elimina primero el usuario remoto para evitar perder la única copia antes de confirmar el servidor. Sólo tras ese éxito, iOS borra todas las entidades Core Data y preferencias con el `ownerId` confirmado, limpia Keychain y muestra confirmación; las filas de invitado y de otras cuentas no se alteran. Esta separación satisface la expectativa de eliminación completa sin convertir un simple cierre de sesión en pérdida de datos.

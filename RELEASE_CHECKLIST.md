@@ -5,7 +5,7 @@
 - [ ] Core Data funciona offline y sincroniza al reconectar.
 - [x] Caché, outbox y trabajo recuperable quedan aislados al cambiar de cuenta localmente.
 - [x] Contrato remoto alineado con tablas y payloads Android; migraciones con sintaxis válida y ejecución PostgreSQL efímera aprobada en ambos historiales.
-- [ ] Sesión recuperada tras reinicio y datos tras reinstalación/login.
+- [ ] Sesión recuperada tras reinicio y datos tras reinstalación/login; la eliminación remota y la purga local selectiva ya están preparadas.
 - [x] Calculadora y Laboratorio pasan pruebas de paridad.
 - [ ] CRUD completo de entidades separadas.
 - [ ] Conflictos y errores de sincronización validados.
@@ -18,6 +18,7 @@
 - [x] Archive técnico generado sin firma y sin catálogo por fallo local de `actool`.
 - [ ] Bundle ID, versión, cifrado, icono, launch screen y permisos revisados (bundle/versión/cifrado/launch aprobados; no se usan APIs con permiso; ícono preparado y falta validar catálogo).
 - [x] Development, Staging y Production separados y compilables; metadata expandida dentro de cada bundle validada.
-- [ ] Privacidad, accesibilidad y localización revisadas.
+- [ ] Privacidad, accesibilidad y localización revisadas; manifiesto, consentimiento de IA, región española y purga local tras eliminar cuenta están comprobados, falta validar las declaraciones y recorridos en App Store Connect/dispositivo.
+- [x] Compilación realizada con Xcode 26 y SDK iOS 26.5, superior al mínimo de SDK iOS 26 vigente desde el 28 de abril de 2026.
 - [ ] Moderación UGC operativa: normas y contacto publicados, cola de reportes atendida y bloqueo validado con dos usuarios.
 - [x] Acciones de cuenta Apple y legales documentadas.

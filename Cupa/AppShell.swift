@@ -36,7 +36,7 @@ struct AppShell: View {
     let storageWarning: String?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.managedObjectContext) private var context
-    @StateObject private var account = AccountModel()
+    @StateObject private var account: AccountModel
     @StateObject private var navigation = AppNavigationModel()
     @StateObject private var calculator = CalculatorModel()
     @StateObject private var lab = LabModel()
@@ -47,7 +47,10 @@ struct AppShell: View {
     @State private var syncInProgress = false
     @State private var syncNotice: String?
 
-    init(storageWarning: String? = nil) { self.storageWarning = storageWarning }
+    init(storageWarning: String? = nil, accountDeletionHandler: @escaping (UUID) throws -> Void = { _ in }) {
+        self.storageWarning = storageWarning
+        _account = StateObject(wrappedValue: AccountModel(accountDeletionHandler: accountDeletionHandler))
+    }
 
     var body: some View {
         TabView(selection: $navigation.selection) {

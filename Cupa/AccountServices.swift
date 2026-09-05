@@ -168,9 +168,11 @@ final class AccountModel: ObservableObject {
     @Published private(set) var sessionNotice: String?
     @Published private(set) var isRefreshing = false
     let configuration: AppConfiguration; private let service: SupabaseAuthService; private let store: TokenStore
+    private let accountDeletionHandler: (UUID) throws -> Void
 
-    init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), store: TokenStore = KeychainTokenStore()) {
+    init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), store: TokenStore = KeychainTokenStore(), accountDeletionHandler: @escaping (UUID) throws -> Void = { _ in }) {
         self.configuration = configuration; self.service = SupabaseAuthService(configuration: configuration, transport: transport); self.store = store
+        self.accountDeletionHandler = accountDeletionHandler
         LocalDataScope.activeOwnerId = nil
         guard configuration.isSupabaseConfigured else { state = .unavailable; return }
         do { state = try store.load().map(State.signedIn) ?? .signedOut } catch { state = .error(error.localizedDescription) }
@@ -229,13 +231,23 @@ final class AccountModel: ObservableObject {
         catch { state = .error(error.localizedDescription) }
     }
     func deleteAccount(confirmation: String) async {
-        guard tokens != nil else { sessionNotice = "Necesitas una sesión activa y conexión para eliminar la cuenta."; return }
+        guard let ownerId = tokens?.userId else { sessionNotice = "Necesitas una sesión activa y conexión para eliminar la cuenta."; return }
         do {
             try await authenticated { access in
                 try await SupabaseAccountService(configuration: self.configuration, transport: self.service.transport).deleteAccount(accessToken: access, confirmation: confirmation)
             }
-            try store.clear(); state = .signedOut; sessionNotice = nil
-        } catch { sessionNotice = error.localizedDescription }
+        } catch {
+            sessionNotice = error.localizedDescription
+            return
+        }
+
+        var cleanupMessages: [String] = []
+        do { try accountDeletionHandler(ownerId) }
+        catch { cleanupMessages.append("No fue posible limpiar por completo la caché local: \(error.localizedDescription)") }
+        do { try store.clear() }
+        catch { cleanupMessages.append("No fue posible borrar las credenciales locales: \(error.localizedDescription)") }
+        state = .signedOut
+        sessionNotice = cleanupMessages.isEmpty ? "Tu cuenta y sus datos fueron eliminados." : cleanupMessages.joined(separator: " ")
     }
 
     private func perform(_ operation: () async throws -> AuthTokens) async {

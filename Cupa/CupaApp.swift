@@ -8,7 +8,12 @@ struct CupaApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AppShell(storageWarning: persistence.storageRecoveryMessage)
+            AppShell(
+                storageWarning: persistence.storageRecoveryMessage,
+                accountDeletionHandler: { ownerId in
+                    try LocalAccountDataPurger(context: persistence.container.viewContext).purge(ownerId: ownerId)
+                }
+            )
                 .preferredColorScheme(nil)
                 .environment(\.managedObjectContext, persistence.container.viewContext)
         }

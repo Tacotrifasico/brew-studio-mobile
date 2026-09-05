@@ -50,4 +50,6 @@ El historial de uso de `CoffeeBean` se deriva por su UUID estable: `BrewSession.
 
 El almacén físico puede contener la caché de varias cuentas, pero ninguna consulta funcional es global: el ámbito activo acepta sólo `ownerId` coincidente y, durante adopción inicial, filas sin propietario. Las filas nuevas reciben propietario desde el contexto. Outbox y checkpoints se particionan por UUID; Calculadora, Laboratorio, Preparación, Cata y preferencias de trabajo se particionan en `UserDefaults`. Al salir, las filas permanecen como caché cifrada por la protección de archivos de iOS, pero dejan de ser visibles para la aplicación.
 
+Cerrar sesión conserva esa caché para permitir volver a entrar offline. Eliminar la cuenta es distinto: después de que la Edge Function confirma la eliminación remota, `LocalAccountDataPurger` elimina físicamente todas las entidades Core Data cuyo `ownerId` corresponde a esa cuenta y todas sus claves `UserDefaults` con ámbito. Los datos de invitado y de otras cuentas permanecen intactos.
+
 `syncStatus`: `synced`, `pendingCreate`, `pendingUpdate`, `pendingDelete`, `conflict`, `error`.

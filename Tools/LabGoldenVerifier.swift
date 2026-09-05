@@ -52,8 +52,9 @@ struct LabGoldenVerifier {
         verifyEntitySyncMapping()
         verifyAndroidBackendContract()
         verifyLocalDataIsolation()
+        verifyLocalAccountDeletion()
         await verifySessionRecovery()
-        print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, ambientes, sesión offline, sincronización multiusuario, IA, perfil y social aprobados")
+        print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, ambientes, sesión offline, eliminación local, sincronización multiusuario, IA, perfil y social aprobados")
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -678,6 +679,26 @@ struct LabGoldenVerifier {
         defaults.set("legado", forKey: "scope.legacy")
         precondition(LocalDataScope.migrateLegacyObject(in: defaults, baseKey: "scope.legacy", ownerId: ownerA) as? String == "legado")
         precondition(defaults.object(forKey: "scope.legacy") == nil)
+    }
+
+    @MainActor private static func verifyLocalAccountDeletion() {
+        let owner = UUID(); let otherOwner = UUID(); let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let suite = "CupaAccountDeletionVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        context.activeOwnerId = owner
+        _ = CoffeeBeanRecord(context: context, name: "Eliminar", brand: "A", remainingQuantityGrams: 100)
+        context.activeOwnerId = otherOwner
+        _ = CoffeeBeanRecord(context: context, name: "Conservar", brand: "B", remainingQuantityGrams: 100)
+        context.activeOwnerId = nil
+        _ = CoffeeBeanRecord(context: context, name: "Invitado", brand: "Local", remainingQuantityGrams: 100)
+        try! context.save()
+        defaults.set("A", forKey: LocalDataScope.scopedKey("cupa.activeTasting.v1", ownerId: owner))
+        defaults.set("B", forKey: LocalDataScope.scopedKey("cupa.activeTasting.v1", ownerId: otherOwner))
+        try! LocalAccountDataPurger(context: context, defaults: defaults).purge(ownerId: owner)
+        let request = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
+        precondition(Set((try! context.fetch(request)).map(\.name)) == ["Conservar", "Invitado"])
+        precondition(defaults.object(forKey: LocalDataScope.scopedKey("cupa.activeTasting.v1", ownerId: owner)) == nil)
+        precondition(defaults.string(forKey: LocalDataScope.scopedKey("cupa.activeTasting.v1", ownerId: otherOwner)) == "B")
     }
 
     @MainActor private static func verifySessionRecovery() async {

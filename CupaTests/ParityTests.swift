@@ -728,6 +728,39 @@ final class AccountAndSyncTests: XCTestCase {
         XCTAssertFalse(String(data: transport.requests.first?.httpBody ?? Data(), encoding: .utf8)?.contains("service_role") == true)
     }
 
+    @MainActor func testAccountDeletionPurgesOnlyThatUsersLocalDataAndPreferences() async throws {
+        let owner = UUID(); let otherOwner = UUID(); let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let suite = "AccountDeletion.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        context.activeOwnerId = owner
+        _ = CoffeeBeanRecord(context: context, name: "Cuenta eliminada", brand: "Casa", remainingQuantityGrams: 100)
+        context.activeOwnerId = otherOwner
+        _ = CoffeeBeanRecord(context: context, name: "Otra cuenta", brand: "Casa", remainingQuantityGrams: 100)
+        context.activeOwnerId = nil
+        _ = CoffeeBeanRecord(context: context, name: "Invitado", brand: "Local", remainingQuantityGrams: 100)
+        try context.save()
+        defaults.set("A", forKey: LocalDataScope.scopedKey("cupa.labState.v1", ownerId: owner))
+        defaults.set("B", forKey: LocalDataScope.scopedKey("cupa.labState.v1", ownerId: otherOwner))
+        defaults.set("G", forKey: LocalDataScope.scopedKey("cupa.labState.v1", ownerId: nil))
+
+        let tokens = AuthTokens(accessToken: "active", refreshToken: "refresh", expiresAt: .now.addingTimeInterval(3_600), userId: owner, email: "delete@example.com")
+        let store = MemoryTokenStore(); store.value = tokens
+        let model = AccountModel(
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: MockTransport(responseData: Data("{\"deleted\":true}".utf8)), store: store,
+            accountDeletionHandler: { try LocalAccountDataPurger(context: context, defaults: defaults).purge(ownerId: $0) }
+        )
+        await model.deleteAccount(confirmation: "ELIMINAR")
+
+        let request = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
+        XCTAssertEqual(Set(try context.fetch(request).map(\.name)), ["Otra cuenta", "Invitado"])
+        XCTAssertNil(defaults.object(forKey: LocalDataScope.scopedKey("cupa.labState.v1", ownerId: owner)))
+        XCTAssertEqual(defaults.string(forKey: LocalDataScope.scopedKey("cupa.labState.v1", ownerId: otherOwner)), "B")
+        XCTAssertEqual(defaults.string(forKey: LocalDataScope.scopedKey("cupa.labState.v1", ownerId: nil)), "G")
+        XCTAssertNil(store.value); XCTAssertEqual(model.state, .signedOut)
+        XCTAssertEqual(model.sessionNotice, "Tu cuenta y sus datos fueron eliminados.")
+    }
+
     @MainActor func testOfflineRefreshKeepsStoredSessionAndLocalIdentity() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let expired = AuthTokens(accessToken: "old", refreshToken: "refresh", expiresAt: now.addingTimeInterval(-1), userId: UUID(), email: "brew@example.com")

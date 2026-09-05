@@ -29,6 +29,37 @@ enum LocalDataScope {
     }
 }
 
+@MainActor
+struct LocalAccountDataPurger {
+    let context: NSManagedObjectContext
+    let defaults: UserDefaults
+
+    init(context: NSManagedObjectContext, defaults: UserDefaults = .standard) {
+        self.context = context
+        self.defaults = defaults
+    }
+
+    func purge(ownerId: UUID) throws {
+        do {
+            for entity in context.persistentStoreCoordinator?.managedObjectModel.entities ?? [] {
+                guard let entityName = entity.name, entity.attributesByName["ownerId"] != nil else { continue }
+                let request = NSFetchRequest<NSManagedObject>(entityName: entityName)
+                request.predicate = NSPredicate(format: "ownerId == %@", ownerId as CVarArg)
+                for object in try context.fetch(request) { context.delete(object) }
+            }
+            if context.hasChanges { try context.save() }
+        } catch {
+            context.rollback()
+            throw error
+        }
+
+        let suffix = ".scope.\(ownerId.uuidString.lowercased())"
+        for key in defaults.dictionaryRepresentation().keys where key.hasSuffix(suffix) {
+            defaults.removeObject(forKey: key)
+        }
+    }
+}
+
 extension NSManagedObjectContext {
     private static let activeOwnerKey = "cupa.activeOwnerId"
     var activeOwnerId: UUID? {

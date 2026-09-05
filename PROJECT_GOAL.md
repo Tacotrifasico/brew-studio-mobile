@@ -17,4 +17,4 @@ El proyecto no se considera terminado porque compile o muestre pantallas. La def
 3. Proyecto iOS de este directorio.
 4. Documentos de decisiones y paridad.
 
-Última referencia Android auditada: commit `aff626ef0c34d6bd4dc9ac5e29be8b8befc00605`, descargado el 17 de agosto de 2026 y confirmado nuevamente contra `origin/main` el 4 de septiembre de 2026.
+Última referencia Android auditada: commit `392fd2bbb3c4b906d30af1799ca15612eafa34bb`, integrado y confirmado contra `origin/main` el 5 de septiembre de 2026. Incluye la continuidad Calculadora → Preparar y la selección persistente del favorito.

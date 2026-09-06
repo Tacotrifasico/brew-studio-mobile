@@ -22,3 +22,5 @@ El proyecto no se considera terminado porque compile o muestre pantallas. La def
 Último avance iOS: el envío directo recibe un alias público y lo resuelve mediante una RPC autenticada, sin pedir ni mostrar UUID de cuenta. La migración conserva el contrato Android y fue ejecutada en las dos rutas de actualización sobre PostgreSQL efímero.
 
 Cuenta contempla la configuración productiva habitual de Supabase: si el alta no entrega sesión porque exige verificar correo, conserva el estado desconectado, explica el siguiente paso y permite reenviar la confirmación. Recuperar contraseña confirma la solicitud sin revelar si el correo está registrado, abre de nuevo Cupa mediante un enlace propio por ambiente y permite guardar la contraseña nueva con el token temporal sin crear una sesión persistente.
+
+La sincronización incremental conserva una frontera tomada del reloj HTTP de Supabase al comenzar el recorrido y retrocede cinco minutos de forma deliberada. Así, una edición remota concurrente no queda detrás de un checkpoint creado al final; si el servidor omite la fecha se aplica el mismo solapamiento al inicio local.

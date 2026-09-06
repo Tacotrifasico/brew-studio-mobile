@@ -694,12 +694,14 @@ private final class MemoryTokenStore: TokenStore {
 }
 
 private final class MockTransport: NetworkTransport {
-    var requests: [URLRequest] = []; var responseData: Data; var statusCode: Int; var error: Error?
-    init(responseData: Data = Data(), statusCode: Int = 200, error: Error? = nil) { self.responseData = responseData; self.statusCode = statusCode; self.error = error }
+    var requests: [URLRequest] = []; var responseData: Data; var statusCode: Int; var error: Error?; var headerFields: [String: String]?
+    init(responseData: Data = Data(), statusCode: Int = 200, error: Error? = nil, headerFields: [String: String]? = nil) {
+        self.responseData = responseData; self.statusCode = statusCode; self.error = error; self.headerFields = headerFields
+    }
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         requests.append(request)
         if let error { throw error }
-        return (responseData, HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!)
+        return (responseData, HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)!)
     }
 }
 
@@ -1276,6 +1278,43 @@ final class EntitySyncTests: XCTestCase {
         XCTAssertTrue(transport.requests.contains { $0.httpMethod == "POST" && $0.url?.path == "/rest/v1/beans" })
         let pulledTables = Set(transport.requests.filter { $0.httpMethod == "GET" }.compactMap { $0.url?.lastPathComponent })
         XCTAssertEqual(pulledTables, Set(CoreSyncSchema.descriptors.map(\.table)))
+    }
+
+    @MainActor func testSuccessfulSyncUsesServerBoundaryInsteadOfEndOfSweep() async throws {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        let suite = "SafeCheckpoint.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let serverDate = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-05T20:00:00Z"))
+        let clientDate = serverDate.addingTimeInterval(3_600)
+        let transport = MockTransport(responseData: Data("[]".utf8), headerFields: ["Date": "Sat, 05 Sep 2026 20:00:00 GMT"])
+        let coordinator = EntitySyncCoordinator(
+            context: context,
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: transport, defaults: defaults, now: { clientDate }
+        )
+
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+
+        let checkpointKey = "sync.lastSuccessfulAt.v2.\(owner.uuidString.lowercased())"
+        XCTAssertEqual(defaults.object(forKey: checkpointKey) as? Date, serverDate.addingTimeInterval(-300))
+        XCTAssertEqual(transport.requests.filter { $0.httpMethod == "GET" }.count, CoreSyncSchema.descriptors.count)
+    }
+
+    @MainActor func testSyncCheckpointFallsBackWithOverlapWhenServerDateIsMissing() async throws {
+        let persistence = PersistenceController(inMemory: true); let owner = UUID()
+        let suite = "FallbackCheckpoint.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let startedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let coordinator = EntitySyncCoordinator(
+            context: persistence.container.viewContext,
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: MockTransport(responseData: Data("[]".utf8)), defaults: defaults, now: { startedAt }
+        )
+
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+
+        let checkpointKey = "sync.lastSuccessfulAt.v2.\(owner.uuidString.lowercased())"
+        XCTAssertEqual(defaults.object(forKey: checkpointKey) as? Date, startedAt.addingTimeInterval(-300))
     }
 
     @MainActor func testOfflineSyncIsRecoverableAndKeepsOutbox() async throws {

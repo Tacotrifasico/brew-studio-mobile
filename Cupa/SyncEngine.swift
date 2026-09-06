@@ -63,6 +63,11 @@ struct SyncOutboxRepository {
 }
 
 struct SupabaseDataService {
+    struct ChangeBatch {
+        let data: Data
+        let serverDate: Date?
+    }
+
     let configuration: AppConfiguration; let transport: NetworkTransport
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
 
@@ -74,9 +79,17 @@ struct SupabaseDataService {
         let body = try JSONSerialization.data(withJSONObject: ["deleted_at": iso, "updated_at": iso])
         _ = try await request(table: table, query: "id=eq.\(id.uuidString)", method: "PATCH", body: body, accessToken: accessToken, prefer: "return=minimal")
     }
-    func changes(table: String, since: Date, accessToken: String) async throws -> Data {
+    func changes(table: String, since: Date, accessToken: String) async throws -> ChangeBatch {
         let iso = ISO8601DateFormatter().string(from: since).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        return try await request(table: table, query: "updated_at=gte.\(iso)&order=updated_at.asc", method: "GET", body: nil, accessToken: accessToken, prefer: nil).0
+        let result = try await request(table: table, query: "updated_at=gte.\(iso)&order=updated_at.asc", method: "GET", body: nil, accessToken: accessToken, prefer: nil)
+        return ChangeBatch(data: result.0, serverDate: Self.httpDate(result.1.value(forHTTPHeaderField: "Date")))
+    }
+
+    private static func httpDate(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
+        return formatter.date(from: value)
     }
 
     private func request(table: String, query: String?, method: String, body: Data?, accessToken: String, prefer: String?) async throws -> (Data, HTTPURLResponse) {

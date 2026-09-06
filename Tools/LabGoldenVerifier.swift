@@ -50,6 +50,7 @@ struct LabGoldenVerifier {
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
+        await verifySafeSyncCheckpoint()
         verifyAndroidBackendContract()
         verifyLocalDataIsolation()
         verifyLocalAccountDeletion()
@@ -606,6 +607,23 @@ struct LabGoldenVerifier {
         precondition(bean.name == "Remoto" && bean.syncStatus == .synced && bean.version == 8)
     }
 
+    @MainActor private static func verifySafeSyncCheckpoint() async {
+        let persistence = PersistenceController(inMemory: true); let owner = UUID()
+        let suite = "CupaCheckpointVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let serverDate = ISO8601DateFormatter().date(from: "2026-09-05T20:00:00Z")!
+        let transport = VerifierTransport(responseData: Data("[]".utf8), headerFields: ["Date": "Sat, 05 Sep 2026 20:00:00 GMT"])
+        let coordinator = EntitySyncCoordinator(
+            context: persistence.container.viewContext,
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: transport, defaults: defaults, now: { serverDate.addingTimeInterval(3_600) }
+        )
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+        let key = "sync.lastSuccessfulAt.v2.\(owner.uuidString.lowercased())"
+        precondition(defaults.object(forKey: key) as? Date == serverDate.addingTimeInterval(-300))
+        precondition(transport.requests.filter { $0.httpMethod == "GET" }.count == CoreSyncSchema.descriptors.count)
+    }
+
     @MainActor private static func verifyAndroidBackendContract() {
         let shared: [String: (String, String)] = [
             "CoffeeBeanRecord": ("beans", "user_id"), "GrinderRecord": ("grinders", "user_id"),
@@ -761,14 +779,14 @@ private final class VerifierTokenStore: TokenStore {
 }
 
 private final class VerifierTransport: NetworkTransport {
-    let responseData: Data; let statusCode: Int; let error: Error?
+    let responseData: Data; let statusCode: Int; let error: Error?; let headerFields: [String: String]?
     var requests: [URLRequest] = []
-    init(responseData: Data = Data("{\"message\":\"Invalid refresh token\"}".utf8), statusCode: Int = 200, error: Error? = nil) {
-        self.responseData = responseData; self.statusCode = statusCode; self.error = error
+    init(responseData: Data = Data("{\"message\":\"Invalid refresh token\"}".utf8), statusCode: Int = 200, error: Error? = nil, headerFields: [String: String]? = nil) {
+        self.responseData = responseData; self.statusCode = statusCode; self.error = error; self.headerFields = headerFields
     }
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         requests.append(request)
         if let error { throw error }
-        return (responseData, HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!)
+        return (responseData, HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)!)
     }
 }

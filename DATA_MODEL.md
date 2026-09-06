@@ -50,6 +50,8 @@ La Calculadora conserva por propietario el último estado válido, sus presets y
 
 `SyncOperation` es una outbox local compactada por tabla y UUID. Conserva operación, payload, intentos, próximo reintento y último error. No se sincroniza a Supabase: coordina el envío de todas las entidades privadas y desaparece lógicamente sólo después de una respuesta remota exitosa.
 
+Cada propietario tiene un checkpoint incremental. Su valor procede de la cabecera `Date` del primer response de cada barrido exitoso menos cinco minutos, no del final de la sincronización. Los pulls usan comparación inclusiva y el merge es idempotente, por lo que volver a leer el límite y la ventana solapada es seguro.
+
 El almacén físico puede contener la caché de varias cuentas, pero ninguna consulta funcional es global: el ámbito activo acepta sólo `ownerId` coincidente y, durante adopción inicial, filas sin propietario. Las filas nuevas reciben propietario desde el contexto. Outbox y checkpoints se particionan por UUID; Calculadora, Laboratorio, Preparación, Cata y preferencias de trabajo se particionan en `UserDefaults`. Al salir, las filas permanecen como caché cifrada por la protección de archivos de iOS, pero dejan de ser visibles para la aplicación.
 
 Cerrar sesión conserva esa caché para permitir volver a entrar offline. Eliminar la cuenta es distinto: después de que la Edge Function confirma la eliminación remota, `LocalAccountDataPurger` elimina físicamente todas las entidades Core Data cuyo `ownerId` corresponde a esa cuenta y todas sus claves `UserDefaults` con ámbito. Los datos de invitado y de otras cuentas permanecen intactos.

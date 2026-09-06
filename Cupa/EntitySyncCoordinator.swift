@@ -39,18 +39,20 @@ final class EntitySyncCoordinator: ObservableObject {
     @Published private(set) var state: State = .idle
     @Published private(set) var authenticationRejected = false
     private let context: NSManagedObjectContext; private let configuration: AppConfiguration; private let transport: NetworkTransport
-    private let defaults: UserDefaults; private let checkpointKeyPrefix = "sync.lastSuccessfulAt.v2"
-    init(context: NSManagedObjectContext, configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), defaults: UserDefaults = .standard) {
-        self.context = context; self.configuration = configuration; self.transport = transport; self.defaults = defaults
+    private let defaults: UserDefaults; private let now: () -> Date
+    private let checkpointKeyPrefix = "sync.lastSuccessfulAt.v2"; private let fallbackOverlap: TimeInterval = 300
+    init(context: NSManagedObjectContext, configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
+        self.context = context; self.configuration = configuration; self.transport = transport; self.defaults = defaults; self.now = now
     }
 
     func sync(ownerId: UUID, accessToken: String) async {
         guard configuration.isSupabaseConfigured else { state = .offline; return }; state = .syncing; authenticationRejected = false
+        let startedAt = now()
         do {
             try enqueuePending(ownerId: ownerId)
             try await push(ownerId: ownerId, accessToken: accessToken)
-            try await pull(ownerId: ownerId, accessToken: accessToken)
-            defaults.set(Date(), forKey: checkpointKey(ownerId)); state = .completed(.now)
+            let safeCheckpoint = try await pull(ownerId: ownerId, accessToken: accessToken, fallbackCheckpoint: startedAt.addingTimeInterval(-fallbackOverlap))
+            defaults.set(safeCheckpoint, forKey: checkpointKey(ownerId)); state = .completed(now())
         } catch {
             authenticationRejected = RemoteFailureClassifier.isUnauthorized(error)
             state = RemoteFailureClassifier.isOffline(error) ? .offline : .failed(error.localizedDescription)
@@ -85,15 +87,18 @@ final class EntitySyncCoordinator: ObservableObject {
         }
     }
 
-    private func pull(ownerId: UUID, accessToken: String) async throws {
+    private func pull(ownerId: UUID, accessToken: String, fallbackCheckpoint: Date) async throws -> Date {
         let service = SupabaseDataService(configuration: configuration, transport: transport)
         let since = defaults.object(forKey: checkpointKey(ownerId)) as? Date ?? Date(timeIntervalSince1970: 0)
-        for descriptor in CoreSyncSchema.descriptors {
-            let data = try await service.changes(table: descriptor.table, since: since, accessToken: accessToken)
-            let rows = (try JSONSerialization.jsonObject(with: data)) as? [[String: Any]] ?? []
+        var safeCheckpoint = fallbackCheckpoint
+        for (index, descriptor) in CoreSyncSchema.descriptors.enumerated() {
+            let batch = try await service.changes(table: descriptor.table, since: since, accessToken: accessToken)
+            if index == 0, let serverDate = batch.serverDate { safeCheckpoint = serverDate.addingTimeInterval(-fallbackOverlap) }
+            let rows = (try JSONSerialization.jsonObject(with: batch.data)) as? [[String: Any]] ?? []
             for row in rows { try merge(row, descriptor: descriptor, expectedOwner: ownerId) }
         }
         if context.hasChanges { try context.save() }
+        return safeCheckpoint
     }
     private func checkpointKey(_ ownerId: UUID) -> String { "\(checkpointKeyPrefix).\(ownerId.uuidString.lowercased())" }
 

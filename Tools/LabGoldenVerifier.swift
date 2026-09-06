@@ -34,6 +34,7 @@ struct LabGoldenVerifier {
         verifyCoffeeInputValidation()
         verifyCoffeeInventoryActions()
         verifySQLiteReopening()
+        verifyOutboxLightweightMigration()
         verifyPersistentStoreRecovery()
         verifyCalculatorFavorites()
         verifyCalculatorQuickPreparation()
@@ -51,6 +52,9 @@ struct LabGoldenVerifier {
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
         await verifySafeSyncCheckpoint()
+        await verifyConditionalUpdateContract()
+        await verifyStaleWriteProtection()
+        await verifyUnresolvedConflictRetention()
         verifyAndroidBackendContract()
         verifyLocalDataIsolation()
         verifyLocalAccountDeletion()
@@ -74,6 +78,41 @@ struct LabGoldenVerifier {
         precondition(production.supabaseURL?.absoluteString == "https://project.supabase.co" && production.supabaseAnonKey == "public-key")
         let local = AppConfiguration(environment: ["SUPABASE_URL": "http://127.0.0.1:54321", "SUPABASE_ANON_KEY": "local-key"])
         precondition(local.isSupabaseConfigured)
+    }
+
+    @MainActor private static func verifyOutboxLightweightMigration() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CupaOutboxMigration-\(UUID().uuidString)", isDirectory: true)
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cupa.sqlite")
+        let owner = UUID(); let entityId = UUID(); let operationId = UUID()
+        autoreleasepool {
+            let legacyModel = PersistenceController.makeModel()
+            let legacyEntity = legacyModel.entitiesByName["SyncOperationRecord"]!
+            let legacyTable = legacyEntity.propertiesByName["tableName"] as! NSAttributeDescription
+            legacyTable.name = "entityName"; legacyTable.renamingIdentifier = nil
+            legacyEntity.uniquenessConstraints = [["id"], ["entityName", "entityId"]]
+            let legacyContainer = NSPersistentContainer(name: "Cupa", managedObjectModel: legacyModel)
+            let description = NSPersistentStoreDescription(url: storeURL); description.type = NSSQLiteStoreType
+            legacyContainer.persistentStoreDescriptions = [description]
+            var loadError: Error?
+            legacyContainer.loadPersistentStores { _, error in loadError = error }
+            precondition(loadError == nil)
+            let legacy = NSEntityDescription.insertNewObject(forEntityName: "SyncOperationRecord", into: legacyContainer.viewContext)
+            legacy.setValue(operationId, forKey: "id"); legacy.setValue(owner, forKey: "ownerId")
+            legacy.setValue("beans", forKey: "entityName"); legacy.setValue(entityId, forKey: "entityId")
+            legacy.setValue(SyncStatus.pendingUpdate.rawValue, forKey: "operation"); legacy.setValue("[]", forKey: "payloadJSON")
+            legacy.setValue(0, forKey: "attemptCount"); legacy.setValue(Date.distantPast, forKey: "nextAttemptAt"); legacy.setValue("", forKey: "lastError")
+            legacy.setValue(Date(), forKey: "createdAt"); legacy.setValue(Date(), forKey: "updatedAt"); legacy.setValue(1, forKey: "version")
+            legacy.setValue(SyncStatus.pendingCreate.rawValue, forKey: "syncStatusRaw"); legacy.setValue(nil, forKey: "deletedAt")
+            try! legacyContainer.viewContext.save()
+            for store in legacyContainer.persistentStoreCoordinator.persistentStores { try! legacyContainer.persistentStoreCoordinator.remove(store) }
+        }
+
+        let migrated = PersistenceController(inMemory: false, storeURL: storeURL)
+        precondition(migrated.storageRecoveryMessage == nil)
+        let rows = try! migrated.container.viewContext.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord"))
+        precondition(rows.count == 1 && rows[0].id == operationId && rows[0].tableName == "beans" && rows[0].entityId == entityId)
     }
 
     @MainActor private static func verifyCoffeeInventoryActions() {
@@ -624,6 +663,80 @@ struct LabGoldenVerifier {
         precondition(transport.requests.filter { $0.httpMethod == "GET" }.count == CoreSyncSchema.descriptors.count)
     }
 
+    @MainActor private static func verifyStaleWriteProtection() async {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        context.activeOwnerId = owner
+        defer { context.activeOwnerId = nil }
+        let bean = CoffeeBeanRecord(context: context, ownerId: owner, name: "Edición local atrasada", brand: "Tostador")
+        bean.updatedAt = Date(timeIntervalSince1970: 100); bean.version = 2; bean.syncStatus = .pendingUpdate
+        try! context.save()
+        let encoder = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: nil, supabaseAnonKey: nil))
+        let descriptor = CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" }!
+        let localPayload = try! encoder.encode(bean, descriptor: descriptor, ownerId: owner)
+        var remoteRow = (try! JSONSerialization.jsonObject(with: localPayload) as! [[String: Any]])[0]
+        remoteRow["name"] = "Edición remota vigente"; remoteRow["updated_at"] = "1970-01-01T00:03:20Z"; remoteRow["version"] = 3
+        let legacy = SyncOperationRecord(context: context)
+        legacy.id = UUID(); legacy.ownerId = owner; legacy.tableName = ""; legacy.entityId = bean.id
+        legacy.operation = SyncStatus.pendingUpdate.rawValue; legacy.payloadJSON = String(data: localPayload, encoding: .utf8)!
+        legacy.attemptCount = 0; legacy.nextAttemptAt = .distantPast; legacy.lastError = ""
+        legacy.createdAt = .now; legacy.updatedAt = .now; legacy.version = 1; legacy.syncStatusRaw = SyncStatus.pendingCreate.rawValue; legacy.deletedAt = nil
+        try! context.save()
+        let transport = VerifierConflictTransport(remoteRow: remoteRow)
+        let coordinator = EntitySyncCoordinator(
+            context: context,
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: transport, defaults: UserDefaults(suiteName: "CupaStaleWriteVerifier.\(UUID().uuidString)")!
+        )
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+        guard case .completed = coordinator.state else {
+            let trace = transport.requests.map { "\($0.httpMethod ?? "?") \($0.url?.absoluteString ?? "?")" }.joined(separator: " | ")
+            preconditionFailure("El conflicto remoto no se resolvió: \(coordinator.state). Solicitudes: \(trace)")
+        }
+        precondition(bean.name == "Edición remota vigente" && bean.version == 3 && bean.syncStatus == .synced)
+        let repaired = try! context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord"))
+        precondition(repaired.count == 1 && repaired[0].tableName == "beans" && repaired[0].deletedAt != nil)
+        precondition(!transport.requests.contains { $0.value(forHTTPHeaderField: "Prefer")?.contains("merge-duplicates") == true })
+    }
+
+    private static func verifyConditionalUpdateContract() async {
+        let transport = VerifierTransport(responseData: Data("[{}]".utf8))
+        let service = SupabaseDataService(
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: transport
+        )
+        let id = UUID(); let updatedAt = Date(timeIntervalSince1970: 200)
+        let payload = try! JSONSerialization.data(withJSONObject: [["id": id.uuidString, "updated_at": ISO8601DateFormatter().string(from: updatedAt)]])
+        let result = try! await service.upsertIfNewer(table: "beans", id: id, updatedAt: updatedAt, json: payload, accessToken: "jwt")
+        guard case .applied = result else { preconditionFailure("La escritura condicional válida no se aplicó") }
+        precondition(transport.requests.count == 1 && transport.requests[0].httpMethod == "PATCH")
+        precondition(transport.requests[0].url?.query?.contains("updated_at=lte.") == true)
+        precondition(transport.requests[0].value(forHTTPHeaderField: "Prefer") == "return=representation")
+    }
+
+    @MainActor private static func verifyUnresolvedConflictRetention() async {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        context.activeOwnerId = owner
+        defer { context.activeOwnerId = nil }
+        let bean = CoffeeBeanRecord(context: context, ownerId: owner, name: "Edición local vigente", brand: "Tostador")
+        bean.updatedAt = Date(timeIntervalSince1970: 200); bean.version = 3; bean.syncStatus = .pendingUpdate
+        try! context.save()
+        let encoder = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: nil, supabaseAnonKey: nil))
+        let descriptor = CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" }!
+        var remoteRow = (try! JSONSerialization.jsonObject(with: encoder.encode(bean, descriptor: descriptor, ownerId: owner)) as! [[String: Any]])[0]
+        remoteRow["name"] = "Respuesta remota atrasada"; remoteRow["updated_at"] = "1970-01-01T00:01:40Z"; remoteRow["version"] = 2
+        let transport = VerifierConflictTransport(remoteRow: remoteRow)
+        let coordinator = EntitySyncCoordinator(
+            context: context,
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: transport, defaults: UserDefaults(suiteName: "CupaUnresolvedConflictVerifier.\(UUID().uuidString)")!
+        )
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+        guard case .failed = coordinator.state else { preconditionFailure("La respuesta remota incoherente se dio por resuelta") }
+        let pending = try! context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord"))
+        precondition(bean.name == "Edición local vigente" && bean.syncStatus == .pendingUpdate)
+        precondition(pending.count == 1 && pending[0].deletedAt == nil && pending[0].attemptCount == 1 && pending[0].nextAttemptAt > Date())
+    }
+
     @MainActor private static func verifyAndroidBackendContract() {
         let shared: [String: (String, String)] = [
             "CoffeeBeanRecord": ("beans", "user_id"), "GrinderRecord": ("grinders", "user_id"),
@@ -788,5 +901,23 @@ private final class VerifierTransport: NetworkTransport {
         requests.append(request)
         if let error { throw error }
         return (responseData, HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)!)
+    }
+}
+
+private final class VerifierConflictTransport: NetworkTransport {
+    let remoteRow: [String: Any]
+    var requests: [URLRequest] = []
+    init(remoteRow: [String: Any]) { self.remoteRow = remoteRow }
+
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        requests.append(request)
+        let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.query ?? ""
+        let body: Data
+        if request.httpMethod == "GET", request.url?.lastPathComponent == "beans", query.contains("id=eq.") {
+            body = try JSONSerialization.data(withJSONObject: [remoteRow])
+        } else {
+            body = Data("[]".utf8)
+        }
+        return (body, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
     }
 }

@@ -487,7 +487,7 @@ struct PersistenceController {
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
 
-    private static func makeModel() -> NSManagedObjectModel {
+    static func makeModel() -> NSManagedObjectModel {
         let model = NSManagedObjectModel()
         let coffeeEntity = NSEntityDescription()
         coffeeEntity.name = "CoffeeBeanRecord"
@@ -687,13 +687,15 @@ struct PersistenceController {
 
         let syncOperationEntity = NSEntityDescription()
         syncOperationEntity.name = "SyncOperationRecord"; syncOperationEntity.managedObjectClassName = NSStringFromClass(SyncOperationRecord.self)
+        let syncTableName = attribute("tableName", .stringAttributeType, defaultValue: "")
+        syncTableName.renamingIdentifier = "entityName"
         syncOperationEntity.properties = syncProperties(attribute: attribute) + [
-            attribute("entityName", .stringAttributeType, defaultValue: ""), attribute("entityId", .UUIDAttributeType),
+            syncTableName, attribute("entityId", .UUIDAttributeType),
             attribute("operation", .stringAttributeType, defaultValue: SyncStatus.pendingCreate.rawValue), attribute("payloadJSON", .stringAttributeType, defaultValue: "{}"),
             attribute("attemptCount", .integer64AttributeType, defaultValue: 0), attribute("nextAttemptAt", .dateAttributeType),
             attribute("lastError", .stringAttributeType, defaultValue: "")
         ]
-        syncOperationEntity.uniquenessConstraints = [["id"], ["entityName", "entityId"]]
+        syncOperationEntity.uniquenessConstraints = [["id"], ["tableName", "entityId"]]
 
         let profileEntity = NSEntityDescription()
         profileEntity.name = "UserProfileRecord"; profileEntity.managedObjectClassName = NSStringFromClass(UserProfileRecord.self)

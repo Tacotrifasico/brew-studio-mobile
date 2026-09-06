@@ -7,6 +7,25 @@ struct SyncVersion: Equatable {
 
 enum ConflictChoice: Equatable { case local, remote, identical, ownerMismatch }
 
+enum ConditionalWriteResult {
+    case applied
+    case remoteConflict([String: Any])
+}
+
+enum SyncServiceError: LocalizedError {
+    case missingDescriptor(String), missingLocalRecord(String), missingUpdatedAt(String), unrecoverableLegacyOperation(String), unresolvedConflict
+
+    var errorDescription: String? {
+        switch self {
+        case let .missingDescriptor(table): "No existe un descriptor de sincronización para \(table)."
+        case let .missingLocalRecord(identifier): "El cambio local \(identifier) ya no existe o pertenece a otra cuenta."
+        case let .missingUpdatedAt(identifier): "El cambio local \(identifier) no tiene una fecha válida para resolver conflictos."
+        case let .unrecoverableLegacyOperation(identifier): "La operación offline heredada \(identifier) no pudo asociarse de forma segura con una tabla."
+        case .unresolvedConflict: "El cambio se conservó para reintentar porque el conflicto remoto no pudo resolverse con seguridad."
+        }
+    }
+}
+
 enum LastWriteWinsResolver {
     static func resolve(local: SyncVersion, remote: SyncVersion) -> ConflictChoice {
         guard local.ownerId == remote.ownerId else { return .ownerMismatch }
@@ -20,7 +39,7 @@ enum LastWriteWinsResolver {
 
 @objc(SyncOperationRecord)
 final class SyncOperationRecord: NSManagedObject, SyncTrackedRecord {
-    @NSManaged var id: UUID; @NSManaged var ownerId: UUID?; @NSManaged var entityName: String; @NSManaged var entityId: UUID
+    @NSManaged var id: UUID; @NSManaged var ownerId: UUID?; @NSManaged var tableName: String; @NSManaged var entityId: UUID
     @NSManaged var operation: String; @NSManaged var payloadJSON: String; @NSManaged var attemptCount: Int64
     @NSManaged var nextAttemptAt: Date; @NSManaged var lastError: String; @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date
     @NSManaged var version: Int64; @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
@@ -34,11 +53,12 @@ struct SyncOutboxRepository {
 
     @discardableResult func enqueue(entityName: String, entityId: UUID, ownerId: UUID?, operation: SyncStatus, payloadJSON: String) throws -> SyncOperationRecord {
         let request = NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")
-        if let ownerId { request.predicate = NSPredicate(format: "entityName == %@ AND entityId == %@ AND ownerId == %@ AND deletedAt == nil", entityName, entityId as CVarArg, ownerId as CVarArg) }
-        else { request.predicate = NSPredicate(format: "entityName == %@ AND entityId == %@ AND ownerId == nil AND deletedAt == nil", entityName, entityId as CVarArg) }
-        let item = try context.fetch(request).first ?? SyncOperationRecord(context: context)
-        if item.value(forKey: "createdAt") == nil {
-            item.id = UUID(); item.ownerId = ownerId; item.entityName = entityName; item.entityId = entityId
+        if let ownerId { request.predicate = NSPredicate(format: "tableName == %@ AND entityId == %@ AND ownerId == %@ AND deletedAt == nil", entityName, entityId as CVarArg, ownerId as CVarArg) }
+        else { request.predicate = NSPredicate(format: "tableName == %@ AND entityId == %@ AND ownerId == nil AND deletedAt == nil", entityName, entityId as CVarArg) }
+        let existing = try context.fetch(request).first
+        let item = existing ?? SyncOperationRecord(context: context)
+        if existing == nil {
+            item.id = UUID(); item.ownerId = ownerId; item.tableName = entityName; item.entityId = entityId
             item.createdAt = .now; item.version = 1; item.attemptCount = 0; item.syncStatusRaw = SyncStatus.pendingCreate.rawValue; item.deletedAt = nil
         } else { item.markUpdated() }
         item.operation = operation.rawValue; item.payloadJSON = payloadJSON; item.nextAttemptAt = .now; item.lastError = ""; item.updatedAt = .now
@@ -71,8 +91,39 @@ struct SupabaseDataService {
     let configuration: AppConfiguration; let transport: NetworkTransport
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
 
-    func upsert(table: String, json: Data, accessToken: String) async throws {
-        _ = try await request(table: table, query: nil, method: "POST", body: json, accessToken: accessToken, prefer: "resolution=merge-duplicates,return=minimal")
+    func upsertIfNewer(table: String, id: UUID, updatedAt: Date, json: Data, accessToken: String) async throws -> ConditionalWriteResult {
+        let iso = ISO8601DateFormatter().string(from: updatedAt).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let patch = try Self.singleRowBody(from: json)
+        let update = try await request(
+            table: table,
+            query: "id=eq.\(id.uuidString)&updated_at=lte.\(iso)",
+            method: "PATCH",
+            body: patch,
+            accessToken: accessToken,
+            prefer: "return=representation"
+        )
+        if Self.containsRow(update.0) { return .applied }
+
+        let insert = try await request(
+            table: table,
+            query: "on_conflict=id",
+            method: "POST",
+            body: json,
+            accessToken: accessToken,
+            prefer: "resolution=ignore-duplicates,return=representation"
+        )
+        if Self.containsRow(insert.0) { return .applied }
+
+        let existing = try await request(
+            table: table,
+            query: "id=eq.\(id.uuidString)&limit=1",
+            method: "GET",
+            body: nil,
+            accessToken: accessToken,
+            prefer: nil
+        )
+        guard let row = (try JSONSerialization.jsonObject(with: existing.0) as? [[String: Any]])?.first else { throw AuthServiceError.invalidResponse }
+        return .remoteConflict(row)
     }
     func delete(table: String, id: UUID, updatedAt: Date, accessToken: String) async throws {
         let iso = ISO8601DateFormatter().string(from: updatedAt)
@@ -90,6 +141,15 @@ struct SupabaseDataService {
         let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
         return formatter.date(from: value)
+    }
+
+    private static func singleRowBody(from data: Data) throws -> Data {
+        guard let row = (try JSONSerialization.jsonObject(with: data) as? [[String: Any]])?.first else { throw AuthServiceError.invalidResponse }
+        return try JSONSerialization.data(withJSONObject: row)
+    }
+
+    private static func containsRow(_ data: Data) -> Bool {
+        ((try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]])?.isEmpty == false
     }
 
     private func request(table: String, query: String?, method: String, body: Data?, accessToken: String, prefer: String?) async throws -> (Data, HTTPURLResponse) {

@@ -291,17 +291,9 @@ struct HubView: View {
         guard let tokens = account.tokens else { showAccount = true; return }
         do {
             let repository = ProfileRepository(context: context)
-            let record = try repository.save(ownerId: tokens.userId, displayName: displayName, alias: alias, biography: biography, avatarColor: avatarColor, favoriteMethods: favoriteMethods, isPrivate: isPrivate)
-            let payload = try repository.remoteJSON(record)
-            Task {
-                do {
-                    try await account.authenticated { token in
-                        try await SupabaseDataService(configuration: account.configuration).upsert(table: "profiles", json: payload, accessToken: token)
-                    }
-                    record.syncStatusRaw = SyncStatus.synced.rawValue; try? context.save(); message = "Perfil guardado y sincronizado."
-                }
-                catch { message = "Perfil guardado offline; se sincronizará cuando el backend esté disponible." }
-            }
+            _ = try repository.save(ownerId: tokens.userId, displayName: displayName, alias: alias, biography: biography, avatarColor: avatarColor, favoriteMethods: favoriteMethods, isPrivate: isPrivate)
+            message = "Perfil guardado; se sincronizará con protección de conflictos."
+            synchronize()
         } catch { context.rollback(); message = error.localizedDescription }
     }
     private func loadSocialData() async {

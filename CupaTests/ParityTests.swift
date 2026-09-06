@@ -705,6 +705,38 @@ private final class MockTransport: NetworkTransport {
     }
 }
 
+private final class SuccessfulConditionalSyncTransport: NetworkTransport {
+    var requests: [URLRequest] = []
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        requests.append(request)
+        let body: Data
+        switch request.httpMethod {
+        case "PATCH": body = Data("[]".utf8)
+        case "POST": body = Data("[{}]".utf8)
+        default: body = Data("[]".utf8)
+        }
+        return (body, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
+}
+
+private final class RemoteConflictSyncTransport: NetworkTransport {
+    let remoteRow: [String: Any]
+    var requests: [URLRequest] = []
+    init(remoteRow: [String: Any]) { self.remoteRow = remoteRow }
+
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        requests.append(request)
+        let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.query ?? ""
+        let body: Data
+        if request.httpMethod == "GET", request.url?.lastPathComponent == "beans", query.contains("id=eq.") {
+            body = try JSONSerialization.data(withJSONObject: [remoteRow])
+        } else {
+            body = Data("[]".utf8)
+        }
+        return (body, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
+}
+
 final class AccountAndSyncTests: XCTestCase {
     @MainActor func testAccountIsUnavailableWithoutPublicConfiguration() {
         let model = AccountModel(configuration: .init(supabaseURL: nil, supabaseAnonKey: nil), transport: MockTransport(), store: MemoryTokenStore())
@@ -1227,7 +1259,7 @@ final class EntitySyncTests: XCTestCase {
         XCTAssertEqual(bean.ownerId, owner)
         let outbox = try context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord"))
         XCTAssertEqual(outbox.count, 2)
-        let coffeePayload = try XCTUnwrap(outbox.first { $0.entityName == "beans" }?.payloadJSON.data(using: .utf8))
+        let coffeePayload = try XCTUnwrap(outbox.first { $0.tableName == "beans" }?.payloadJSON.data(using: .utf8))
         var coffeeRow = try XCTUnwrap((JSONSerialization.jsonObject(with: coffeePayload) as? [[String: Any]])?.first)
         XCTAssertEqual(coffeeRow["user_id"] as? String, owner.uuidString)
         XCTAssertEqual(coffeeRow["roaster"] as? String, "Tostador"); XCTAssertEqual(coffeeRow["stock_grams"] as? Double, 200)
@@ -1237,7 +1269,7 @@ final class EntitySyncTests: XCTestCase {
         try coordinator.merge(coffeeRow, descriptor: descriptor, expectedOwner: owner)
         XCTAssertEqual(bean.name, "Remoto"); XCTAssertEqual(bean.syncStatus, .synced); XCTAssertEqual(bean.version, 8)
 
-        let brewPayload = try XCTUnwrap(outbox.first { $0.entityName == "brew_sessions" }?.payloadJSON.data(using: .utf8))
+        let brewPayload = try XCTUnwrap(outbox.first { $0.tableName == "brew_sessions" }?.payloadJSON.data(using: .utf8))
         let brewRow = try XCTUnwrap((JSONSerialization.jsonObject(with: brewPayload) as? [[String: Any]])?.first)
         XCTAssertTrue(brewRow["steps_snapshot"] is [[String: Any]])
         var foreign = coffeeRow; foreign["user_id"] = UUID().uuidString; foreign["name"] = "Intruso"
@@ -1270,14 +1302,92 @@ final class EntitySyncTests: XCTestCase {
     @MainActor func testEndToEndSyncPushesThenPullsEveryDescriptor() async throws {
         let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
         let bean = CoffeeBeanRecord(context: context, name: "Pendiente", brand: "Tostador"); try context.save()
-        let transport = MockTransport(responseData: Data("[]".utf8), statusCode: 200)
+        let transport = SuccessfulConditionalSyncTransport()
         let coordinator = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport, defaults: UserDefaults(suiteName: "EndToEndSync.\(UUID().uuidString)")!)
         await coordinator.sync(ownerId: owner, accessToken: "jwt")
         guard case .completed = coordinator.state else { return XCTFail("La sincronización no terminó: \(coordinator.state)") }
         XCTAssertEqual(bean.syncStatus, .synced); XCTAssertEqual(bean.ownerId, owner)
         XCTAssertTrue(transport.requests.contains { $0.httpMethod == "POST" && $0.url?.path == "/rest/v1/beans" })
+        XCTAssertTrue(transport.requests.contains { $0.httpMethod == "PATCH" && $0.url?.query?.contains("updated_at=lte.") == true })
+        XCTAssertTrue(transport.requests.contains { $0.httpMethod == "POST" && $0.value(forHTTPHeaderField: "Prefer") == "resolution=ignore-duplicates,return=representation" })
         let pulledTables = Set(transport.requests.filter { $0.httpMethod == "GET" }.compactMap { $0.url?.lastPathComponent })
         XCTAssertEqual(pulledTables, Set(CoreSyncSchema.descriptors.map(\.table)))
+    }
+
+    @MainActor func testStaleLocalWriteCannotOverwriteNewerRemoteRecord() async throws {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        context.activeOwnerId = owner
+        defer { context.activeOwnerId = nil }
+        let bean = CoffeeBeanRecord(context: context, ownerId: owner, name: "Edición local atrasada", brand: "Tostador")
+        bean.updatedAt = Date(timeIntervalSince1970: 100); bean.version = 2; bean.syncStatus = .pendingUpdate
+        try context.save()
+        let encoder = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: nil, supabaseAnonKey: nil))
+        let descriptor = try XCTUnwrap(CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" })
+        var remoteRow = try XCTUnwrap((JSONSerialization.jsonObject(with: encoder.encode(bean, descriptor: descriptor, ownerId: owner)) as? [[String: Any]])?.first)
+        remoteRow["name"] = "Edición remota vigente"; remoteRow["updated_at"] = "1970-01-01T00:03:20Z"; remoteRow["version"] = 3
+        let transport = RemoteConflictSyncTransport(remoteRow: remoteRow)
+        let coordinator = EntitySyncCoordinator(
+            context: context,
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: transport, defaults: UserDefaults(suiteName: "RemoteConflict.\(UUID().uuidString)")!
+        )
+
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+
+        guard case .completed = coordinator.state else { return XCTFail("El conflicto no se resolvió: \(coordinator.state)") }
+        XCTAssertEqual(bean.name, "Edición remota vigente")
+        XCTAssertEqual(bean.updatedAt, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(bean.version, 3)
+        XCTAssertEqual(bean.syncStatus, .synced)
+        XCTAssertTrue(try context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")).allSatisfy { $0.deletedAt != nil })
+        XCTAssertFalse(transport.requests.contains { $0.value(forHTTPHeaderField: "Prefer")?.contains("merge-duplicates") == true })
+    }
+
+    func testConditionalUpdateUsesTimestampGuardWithoutBlindUpsert() async throws {
+        let transport = MockTransport(responseData: Data("[{}]".utf8))
+        let service = SupabaseDataService(
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: transport
+        )
+        let id = UUID(); let updatedAt = Date(timeIntervalSince1970: 200)
+        let json = try JSONSerialization.data(withJSONObject: [["id": id.uuidString, "updated_at": ISO8601DateFormatter().string(from: updatedAt)]])
+
+        let result = try await service.upsertIfNewer(table: "beans", id: id, updatedAt: updatedAt, json: json, accessToken: "jwt")
+
+        guard case .applied = result else { return XCTFail("La actualización condicional debió aplicarse") }
+        XCTAssertEqual(transport.requests.count, 1)
+        XCTAssertEqual(transport.requests[0].httpMethod, "PATCH")
+        XCTAssertTrue(transport.requests[0].url?.query?.contains("id=eq.\(id.uuidString)") == true)
+        XCTAssertTrue(transport.requests[0].url?.query?.contains("updated_at=lte.") == true)
+        XCTAssertEqual(transport.requests[0].value(forHTTPHeaderField: "Prefer"), "return=representation")
+    }
+
+    @MainActor func testUnresolvedRemoteConflictKeepsLocalChangeForRetry() async throws {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        context.activeOwnerId = owner
+        defer { context.activeOwnerId = nil }
+        let bean = CoffeeBeanRecord(context: context, ownerId: owner, name: "Edición local vigente", brand: "Tostador")
+        bean.updatedAt = Date(timeIntervalSince1970: 200); bean.version = 3; bean.syncStatus = .pendingUpdate
+        try context.save()
+        let encoder = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: nil, supabaseAnonKey: nil))
+        let descriptor = try XCTUnwrap(CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" })
+        var remoteRow = try XCTUnwrap((JSONSerialization.jsonObject(with: encoder.encode(bean, descriptor: descriptor, ownerId: owner)) as? [[String: Any]])?.first)
+        remoteRow["name"] = "Respuesta remota atrasada"; remoteRow["updated_at"] = "1970-01-01T00:01:40Z"; remoteRow["version"] = 2
+        let transport = RemoteConflictSyncTransport(remoteRow: remoteRow)
+        let coordinator = EntitySyncCoordinator(
+            context: context,
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: transport, defaults: UserDefaults(suiteName: "UnresolvedConflict.\(UUID().uuidString)")!
+        )
+
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+
+        guard case .failed = coordinator.state else { return XCTFail("La respuesta incoherente no debió darse por resuelta") }
+        XCTAssertEqual(bean.name, "Edición local vigente")
+        XCTAssertEqual(bean.syncStatus, .pendingUpdate)
+        let pending = try context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord"))
+        XCTAssertEqual(pending.count, 1); XCTAssertNil(pending[0].deletedAt); XCTAssertEqual(pending[0].attemptCount, 1)
+        XCTAssertGreaterThan(pending[0].nextAttemptAt, Date())
     }
 
     @MainActor func testSuccessfulSyncUsesServerBoundaryInsteadOfEndOfSweep() async throws {

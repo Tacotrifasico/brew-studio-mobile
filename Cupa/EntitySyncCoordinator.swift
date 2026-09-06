@@ -49,6 +49,7 @@ final class EntitySyncCoordinator: ObservableObject {
         guard configuration.isSupabaseConfigured else { state = .offline; return }; state = .syncing; authenticationRejected = false
         let startedAt = now()
         do {
+            try repairLegacyOutbox(ownerId: ownerId)
             try enqueuePending(ownerId: ownerId)
             try await push(ownerId: ownerId, accessToken: accessToken)
             let safeCheckpoint = try await pull(ownerId: ownerId, accessToken: accessToken, fallbackCheckpoint: startedAt.addingTimeInterval(-fallbackOverlap))
@@ -75,13 +76,33 @@ final class EntitySyncCoordinator: ObservableObject {
         }
     }
 
+    private func repairLegacyOutbox(ownerId: UUID) throws {
+        let request = NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")
+        request.predicate = NSPredicate(format: "ownerId == %@ AND tableName == %@ AND deletedAt == nil", ownerId as CVarArg, "")
+        for item in try context.fetch(request) {
+            let matches = try CoreSyncSchema.descriptors.filter { try localObject($0.entityName, id: item.entityId, expectedOwner: ownerId) != nil }
+            guard matches.count == 1, let descriptor = matches.first else { throw SyncServiceError.unrecoverableLegacyOperation(item.id.uuidString) }
+            item.tableName = descriptor.table
+        }
+        if context.hasChanges { try context.save() }
+    }
+
     private func push(ownerId: UUID, accessToken: String) async throws {
         let outbox = SyncOutboxRepository(context: context); let service = SupabaseDataService(configuration: configuration, transport: transport)
         for item in try outbox.ready(ownerId: ownerId) {
             guard let data = item.payloadJSON.data(using: .utf8) else { continue }
             do {
-                try await service.upsert(table: item.entityName, json: data, accessToken: accessToken)
-                if let descriptor = CoreSyncSchema.descriptors.first(where: { $0.table == item.entityName }), let local = try localObject(descriptor.entityName, id: item.entityId, expectedOwner: ownerId) { local.setValue(SyncStatus.synced.rawValue, forKey: "syncStatusRaw") }
+                let table = item.tableName
+                guard let descriptor = CoreSyncSchema.descriptors.first(where: { $0.table == table }) else { throw SyncServiceError.missingDescriptor(table) }
+                guard let local = try localObject(descriptor.entityName, id: item.entityId, expectedOwner: ownerId) else { throw SyncServiceError.missingLocalRecord(item.entityId.uuidString) }
+                guard let updatedAt = local.value(forKey: "updatedAt") as? Date else { throw SyncServiceError.missingUpdatedAt(item.entityId.uuidString) }
+                switch try await service.upsertIfNewer(table: table, id: item.entityId, updatedAt: updatedAt, json: data, accessToken: accessToken) {
+                case .applied:
+                    local.setValue(SyncStatus.synced.rawValue, forKey: "syncStatusRaw")
+                case let .remoteConflict(row):
+                    let choice = try merge(row, descriptor: descriptor, expectedOwner: ownerId)
+                    guard choice == .remote || choice == .identical else { throw SyncServiceError.unresolvedConflict }
+                }
                 try outbox.markSucceeded(item)
             } catch { try outbox.markFailed(item, message: error.localizedDescription); throw error }
         }
@@ -114,22 +135,24 @@ final class EntitySyncCoordinator: ObservableObject {
         return try JSONSerialization.data(withJSONObject: [row])
     }
 
-    func merge(_ row: [String: Any], descriptor: SyncEntityDescriptor, expectedOwner: UUID) throws {
+    @discardableResult func merge(_ row: [String: Any], descriptor: SyncEntityDescriptor, expectedOwner: UUID) throws -> ConflictChoice {
         guard let idText = row["id"] as? String, let id = UUID(uuidString: idText) else { throw AuthServiceError.invalidResponse }
         let remoteOwner = descriptor.profileIdentity ? id : (row[descriptor.ownerField] as? String).flatMap(UUID.init(uuidString:))
-        guard remoteOwner == expectedOwner else { return }
+        guard remoteOwner == expectedOwner else { return .ownerMismatch }
         let remoteUpdated = parseDate(row["updated_at"]) ?? .distantPast; let remoteVersion = (row["version"] as? NSNumber)?.int64Value ?? 1
         let object = try localObject(descriptor.entityName, id: id) ?? NSEntityDescription.insertNewObject(forEntityName: descriptor.entityName, into: context)
-        if let localOwner = object.value(forKey: "ownerId") as? UUID, localOwner != expectedOwner { return }
+        if let localOwner = object.value(forKey: "ownerId") as? UUID, localOwner != expectedOwner { return .ownerMismatch }
+        var resolution: ConflictChoice = .remote
         if let localUpdated = object.value(forKey: "updatedAt") as? Date {
             let localVersion = (object.value(forKey: "version") as? NSNumber)?.int64Value ?? 1
-            let choice = LastWriteWinsResolver.resolve(local: .init(ownerId: expectedOwner, updatedAt: localUpdated, version: localVersion, deletedAt: object.value(forKey: "deletedAt") as? Date), remote: .init(ownerId: expectedOwner, updatedAt: remoteUpdated, version: remoteVersion, deletedAt: parseDate(row["deleted_at"])))
-            if choice == .local { return }
+            resolution = LastWriteWinsResolver.resolve(local: .init(ownerId: expectedOwner, updatedAt: localUpdated, version: localVersion, deletedAt: object.value(forKey: "deletedAt") as? Date), remote: .init(ownerId: expectedOwner, updatedAt: remoteUpdated, version: remoteVersion, deletedAt: parseDate(row["deleted_at"])))
+            if resolution == .local { return .local }
         }
         object.setValue(id, forKey: "id"); object.setValue(expectedOwner, forKey: "ownerId")
         for field in descriptor.fields { object.setValue(localValue(row[field.remote], kind: field.kind), forKey: field.local) }
         object.setValue(parseDate(row["created_at"]) ?? remoteUpdated, forKey: "createdAt"); object.setValue(remoteUpdated, forKey: "updatedAt")
         object.setValue(remoteVersion, forKey: "version"); object.setValue(parseDate(row["deleted_at"]), forKey: "deletedAt"); object.setValue(SyncStatus.synced.rawValue, forKey: "syncStatusRaw")
+        return resolution
     }
 
     private func localObject(_ entity: String, id: UUID, expectedOwner: UUID? = nil) throws -> NSManagedObject? {

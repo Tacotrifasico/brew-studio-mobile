@@ -8,7 +8,7 @@
 - [ ] Sesión recuperada tras reinicio y datos tras reinstalación/login; registro con confirmación/reenvío, recuperación completa por enlace profundo y cambio de contraseña, eliminación remota y purga local selectiva ya están preparados.
 - [x] Calculadora y Laboratorio pasan pruebas de paridad.
 - [ ] CRUD completo de entidades separadas.
-- [ ] Conflictos y errores de sincronización validados.
+- [x] Conflictos y errores de sincronización validados localmente: comparación atómica, remoto más reciente, respuesta incoherente, offline, autenticación y backoff; la integración real permanece cubierta por su bloqueo Supabase independiente.
 - [ ] Gemini seguro con fallback local.
 - [ ] Tema claro/oscuro completo. El sistema Warm Specialty Paper & Ceramic y su contraste están implementados; falta recorrido visual/VoiceOver en Simulator.
 - [ ] Sin botones muertos, mocks ni placeholders de producción. La cuenta y el envío directo ya no exponen UUID técnicos; falta recorrido visual completo.

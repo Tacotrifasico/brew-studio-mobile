@@ -50,6 +50,7 @@ final class CalculatorModel: ObservableObject {
     @Published private(set) var savedPresets: [BrewPreset] = []
     @Published private(set) var pinnedMethodNames: Set<String> = []
     @Published private(set) var transferVersion = 0
+    private var customMethodRatios: [String: Double] = [:]
 
     let methods = ["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"]
     private let defaultPinnedMethods: Set<String> = ["V60", "AeroPress", "Espresso", "Prensa francesa"]
@@ -75,10 +76,12 @@ final class CalculatorModel: ObservableObject {
     private let pinnedMethodsKeyBase = "cupa.pinnedCalculatorMethods.v1"
     private let savedRatiosKeyBase = "cupa.savedRatios"
     private let selectedFavoriteKeyBase = "cupa.selectedCalculatorFavorite.v1"
+    private let customRatiosKeyBase = "cupa.customMethodRatios.v1"
     private var stateKey: String { LocalDataScope.scopedKey(stateKeyBase, ownerId: scopeOwnerId) }
     private var pinnedMethodsKey: String { LocalDataScope.scopedKey(pinnedMethodsKeyBase, ownerId: scopeOwnerId) }
     private var savedRatiosKey: String { LocalDataScope.scopedKey(savedRatiosKeyBase, ownerId: scopeOwnerId) }
     private var selectedFavoriteKey: String { LocalDataScope.scopedKey(selectedFavoriteKeyBase, ownerId: scopeOwnerId) }
+    private var customRatiosKey: String { LocalDataScope.scopedKey(customRatiosKeyBase, ownerId: scopeOwnerId) }
 
     var presets: [BrewPreset] { savedPresets + builtInPresets }
 
@@ -109,6 +112,7 @@ final class CalculatorModel: ObservableObject {
         method = "V60"; selectedMethodId = nil; coffee = 15; ratio = 16; water = 240
         coffeeInput = "15.0"; ratioInput = "16.0"; waterInput = "240"; microcopy = "Listo para preparar."
         savedPresets = []
+        customMethodRatios = userDefaults.dictionary(forKey: customRatiosKey) as? [String: Double] ?? [:]
         let storedPins = userDefaults.object(forKey: pinnedMethodsKey) ?? LocalDataScope.migrateLegacyObject(in: userDefaults, baseKey: pinnedMethodsKeyBase, ownerId: scopeOwnerId)
         if let stored = storedPins as? [String] {
             pinnedMethodNames = Set(stored)
@@ -171,15 +175,21 @@ final class CalculatorModel: ObservableObject {
         persistState()
     }
 
-    func selectMethod(_ selected: String, methodId: UUID? = nil) {
+    func selectMethod(_ selected: String, methodId: UUID? = nil, defaultRatio: Double? = nil) {
         method = selected
         selectedMethodId = methodId
-        ratio = baseRatios[selected] ?? 15
+        ratio = defaultRatio ?? baseRatios[selected] ?? customMethodRatios[selected] ?? 16
         ratioInput = format(ratio, forceDecimal: true)
         water = Int(coffee * ratio)
         waterInput = String(water)
         microcopy = "Método cambiado a \(selected). Proporción sugerida 1:\(format(ratio))."
         persistState()
+    }
+
+    func registerCustomMethod(_ name: String, methodId: UUID, defaultRatio: Double) {
+        customMethodRatios[name] = defaultRatio
+        userDefaults.set(customMethodRatios, forKey: customRatiosKey)
+        selectMethod(name, methodId: methodId, defaultRatio: defaultRatio)
     }
 
     func apply(_ preset: BrewPreset) {
@@ -201,7 +211,7 @@ final class CalculatorModel: ObservableObject {
     func adjustWater(_ amount: Int) { changeWater(String(max(1, water + amount))) }
 
     func resetRatio() {
-        changeRatio(format(baseRatios[method] ?? 15, forceDecimal: true))
+        changeRatio(format(baseRatios[method] ?? customMethodRatios[method] ?? 16, forceDecimal: true))
         microcopy = "Se restauró la proporción base de \(method)."
     }
 

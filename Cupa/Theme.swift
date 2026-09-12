@@ -3,17 +3,17 @@ import UIKit
 
 enum CupaPalette {
     enum Light {
-        static let background: UInt = 0xF7F5F0, backgroundAlt: UInt = 0xEFECE6, card: UInt = 0xFFFFFF
-        static let text: UInt = 0x1E1A17, secondaryText: UInt = 0x5A655D, border: UInt = 0xE6DFD5
-        static let forest: UInt = 0x234E3C, terracotta: UInt = 0xC26638, terracottaText: UInt = 0xA04A2A, gold: UInt = 0xA95600
-        static let espresso: UInt = 0xA9472E, clarity: UInt = 0x2E5A44, onAccent: UInt = 0xFFFFFF, onTerracotta: UInt = 0x120E0C
+        static let background: UInt = 0xF4F1EA, backgroundAlt: UInt = 0xEBE6DC, card: UInt = 0xFFFFFF
+        static let text: UInt = 0x1A1C1A, secondaryText: UInt = 0x5A655D, border: UInt = 0xE2DDD2
+        static let forest: UInt = 0x234E3C, terracotta: UInt = 0xC86D51, terracottaText: UInt = 0xB85D42, gold: UInt = 0xD97706
+        static let espresso: UInt = 0xB85D42, clarity: UInt = 0x2E5A44, onAccent: UInt = 0xFFFFFF, onTerracotta: UInt = 0x120E0C
     }
 
     enum Dark {
-        static let background: UInt = 0x111512, backgroundAlt: UInt = 0x1A211D, card: UInt = 0x202823
-        static let text: UInt = 0xF1F4F1, secondaryText: UInt = 0xB8C2BB, border: UInt = 0x38443D
-        static let forest: UInt = 0x6FC59B, terracotta: UInt = 0xF09A7D, terracottaText: UInt = 0xF09A7D, gold: UInt = 0xFFB45C
-        static let espresso: UInt = 0xF09A7D, clarity: UInt = 0x78CDA3, onAccent: UInt = 0x111512, onTerracotta: UInt = 0x111512
+        static let background: UInt = 0x121413, backgroundAlt: UInt = 0x181C1A, card: UInt = 0x1C211F
+        static let text: UInt = 0xF7F9F6, secondaryText: UInt = 0x9CA3AF, border: UInt = 0x2A302D
+        static let forest: UInt = 0x234E3C, terracotta: UInt = 0xC86D51, terracottaText: UInt = 0xF09A7D, gold: UInt = 0xD97706
+        static let espresso: UInt = 0xB85D42, clarity: UInt = 0x2E5A44, onAccent: UInt = 0xFFFFFF, onTerracotta: UInt = 0x111512
     }
 }
 

@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import UIKit
 
 struct HomeView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
@@ -169,9 +170,6 @@ private struct WorkshopMetric: View {
 }
 
 struct BrewView: View {
-    @Binding var selection: CupaTab
-    @ObservedObject var calculator: CalculatorModel
-    @ObservedObject var lab: LabModel
     @ObservedObject var preparation: PreparationModel
 
     var body: some View {
@@ -179,24 +177,13 @@ struct BrewView: View {
             CupaTheme.background.ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 20) {
-                    SectionHeader(eyebrow: "Barista", title: "Calculadora barista", subtitle: "Café, proporción y agua se recalculan en ambas direcciones.")
-
-                    BaristaCalculatorCard(
-                        calculator: calculator,
-                        onLab: {
-                            lab.load(calculator: calculator)
-                            selection = .lab
-                        },
-                        onPrepare: { preparation.load(calculator: calculator) }
-                    )
-
+                    SectionHeader(eyebrow: "Secuencia de extracción", title: "Preparar café", subtitle: "Elige una técnica para los datos calculados y sigue cada paso.")
                     PreparationExecutionView(model: preparation)
                 }
                 .padding()
             }
         }
-        .navigationTitle("Preparar")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true)
     }
 }
 
@@ -211,6 +198,9 @@ private struct BaristaCalculatorCard: View {
     let onPrepare: () -> Void
     @State private var showingMethodManager = false
     @State private var methodError: String?
+    @State private var coffeeDragStep = 0
+    @State private var ratioDragStep = 0
+    @State private var waterDragStep = 0
 
     var body: some View {
         CupaCard {
@@ -247,17 +237,20 @@ private struct BaristaCalculatorCard: View {
                     calculatorInput("CAFÉ (g)", identifier: "calculator.coffee", text: Binding(
                         get: { calculator.coffeeInput },
                         set: { calculator.changeCoffee($0) }
-                    ), minus: { calculator.adjustCoffee(-1) }, plus: { calculator.adjustCoffee(1) })
+                    ), dragAxis: .vertical, dragStep: $coffeeDragStep,
+                    adjust: { adjustCoffee(Double($0)) })
 
                     calculatorInput("RATIO (1:x)", identifier: "calculator.ratio", text: Binding(
                         get: { calculator.ratioInput },
                         set: { calculator.changeRatio($0) }
-                    ), minus: { calculator.adjustRatio(-0.1) }, plus: { calculator.adjustRatio(0.1) })
+                    ), dragAxis: .horizontal, dragStep: $ratioDragStep,
+                    adjust: { adjustRatio(Double($0) * 0.1) })
 
                     calculatorInput("AGUA (ml)", identifier: "calculator.water", text: Binding(
                         get: { calculator.waterInput },
                         set: { calculator.changeWater($0) }
-                    ), minus: { calculator.adjustWater(-10) }, plus: { calculator.adjustWater(10) })
+                    ), dragAxis: .vertical, dragStep: $waterDragStep,
+                    adjust: { adjustWater($0 * 10) })
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -387,7 +380,14 @@ private struct BaristaCalculatorCard: View {
         }
     }
 
-    private func calculatorInput(_ title: String, identifier: String, text: Binding<String>, minus: @escaping () -> Void, plus: @escaping () -> Void) -> some View {
+    private func calculatorInput(
+        _ title: String,
+        identifier: String,
+        text: Binding<String>,
+        dragAxis: CalculatorDragAxis,
+        dragStep: Binding<Int>,
+        adjust: @escaping (Int) -> Void
+    ) -> some View {
         VStack(spacing: 7) {
             Text(title).font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
             TextField("", text: text)
@@ -398,11 +398,16 @@ private struct BaristaCalculatorCard: View {
                 .accessibilityLabel(title)
                 .accessibilityIdentifier(identifier)
             HStack {
-                Button(action: minus) { Image(systemName: "minus.circle.fill") }
+                Button { adjust(-1) } label: { Image(systemName: "minus.circle.fill") }
                     .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel("Disminuir \(title)")
                 Spacer()
-                Button(action: plus) { Image(systemName: "plus.circle.fill") }
+                Text(dragAxis == .vertical ? "⇅ Desl." : "⇆ Desl.")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(CupaTheme.terracottaText)
+                    .accessibilityHidden(true)
+                Spacer()
+                Button { adjust(1) } label: { Image(systemName: "plus.circle.fill") }
                     .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel("Aumentar \(title)")
             }
@@ -411,6 +416,72 @@ private struct BaristaCalculatorCard: View {
         .padding(9)
         .background(CupaTheme.backgroundAlt.opacity(0.7))
         .clipShape(RoundedRectangle(cornerRadius: 15))
+        .contentShape(RoundedRectangle(cornerRadius: 15))
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 10)
+                .onChanged { value in
+                    let distance = dragAxis == .vertical ? -value.translation.height : value.translation.width
+                    let threshold: CGFloat = dragAxis == .vertical ? 34 : 24
+                    let nextStep = Int(distance / threshold)
+                    let delta = nextStep - dragStep.wrappedValue
+                    guard delta != 0 else { return }
+                    dragStep.wrappedValue = nextStep
+                    adjust(delta)
+                }
+                .onEnded { _ in dragStep.wrappedValue = 0 }
+        )
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: adjust(1)
+            case .decrement: adjust(-1)
+            @unknown default: break
+            }
+        }
+    }
+
+    private func adjustCoffee(_ amount: Double) {
+        calculator.adjustCoffee(amount)
+        CalculatorHaptics.play(.coffee, milestone: calculator.coffee.truncatingRemainder(dividingBy: 5) == 0)
+    }
+
+    private func adjustRatio(_ amount: Double) {
+        calculator.adjustRatio(amount)
+        let nearestInteger = calculator.ratio.rounded()
+        CalculatorHaptics.play(.ratio, milestone: abs(calculator.ratio - nearestInteger) < 0.001)
+    }
+
+    private func adjustWater(_ amount: Int) {
+        calculator.adjustWater(amount)
+        CalculatorHaptics.play(.water, milestone: calculator.water.isMultiple(of: 50))
+    }
+}
+
+private enum CalculatorDragAxis { case vertical, horizontal }
+
+private enum CalculatorHapticKind { case coffee, ratio, water }
+
+private enum CalculatorHaptics {
+    static func play(_ kind: CalculatorHapticKind, milestone: Bool) {
+        if milestone {
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.prepare()
+            generator.impactOccurred(intensity: 0.82)
+            return
+        }
+        switch kind {
+        case .coffee:
+            let generator = UIImpactFeedbackGenerator(style: .soft)
+            generator.prepare()
+            generator.impactOccurred(intensity: 0.55)
+        case .ratio:
+            let generator = UISelectionFeedbackGenerator()
+            generator.prepare()
+            generator.selectionChanged()
+        case .water:
+            let generator = UIImpactFeedbackGenerator(style: .rigid)
+            generator.prepare()
+            generator.impactOccurred(intensity: 0.62)
+        }
     }
 }
 
@@ -422,9 +493,14 @@ private struct CalculatorMethodOption: Identifiable {
 
 private struct CalculatorMethodManager: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var context
     @ObservedObject var calculator: CalculatorModel
     let equipment: [EquipmentRecord]
     let onEquipmentPinnedChange: (EquipmentRecord, Bool) -> Void
+    @State private var showingAddMethod = false
+    @State private var newMethodName = ""
+    @State private var newMethodRatio = "16"
+    @State private var saveError: String?
 
     var body: some View {
         NavigationStack {
@@ -450,18 +526,52 @@ private struct CalculatorMethodManager: View {
                         }
                     }
                 }
+                Section {
+                    Button { showingAddMethod = true } label: { Label("Agregar método", systemImage: "plus.circle.fill") }
+                } footer: {
+                    Text("El nuevo método quedará seleccionado en la calculadora y tendrá tres técnicas iniciales en Preparar café.")
+                }
             }
             .brewScrollableCanvas()
             .navigationTitle("Gestionar métodos")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { dismiss() } } }
+            .sheet(isPresented: $showingAddMethod) {
+                NavigationStack {
+                    Form {
+                        TextField("Nombre del método", text: $newMethodName)
+                        TextField("Ratio inicial 1:", text: $newMethodRatio).keyboardType(.decimalPad)
+                    }
+                    .navigationTitle("Nuevo método")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { showingAddMethod = false } }
+                        ToolbarItem(placement: .confirmationAction) { Button("Guardar", action: saveMethod).disabled(newMethodName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                    }
+                }
+                .presentationDetents([.medium])
+            }
+            .alert("No se pudo guardar", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+                Button("Aceptar") {}
+            } message: { Text(saveError ?? "") }
         }
+    }
+
+    private func saveMethod() {
+        let name = newMethodName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ratio = Double(newMethodRatio.replacingOccurrences(of: ",", with: ".")) ?? 16
+        let method = EquipmentRecord(context: context, name: name, equipmentType: "BREWER_METHOD", brand: "", model: "", capacityMl: nil, configuration: "", notes: "Método personalizado", isFavorite: true, isActive: true)
+        do {
+            try context.save()
+            calculator.registerCustomMethod(name, methodId: method.id, defaultRatio: max(1, ratio))
+            showingAddMethod = false; newMethodName = ""; newMethodRatio = "16"
+        } catch { context.rollback(); saveError = error.localizedDescription }
     }
 }
 
 private enum LabControlCategory: String, CaseIterable, Identifiable {
-    case ratio = "Ratio"
-    case extraction = "Calor"
+    case ratio = "Proporción"
+    case extraction = "Extracción"
     case bean = "Grano"
     var id: Self { self }
 }
@@ -493,42 +603,54 @@ struct LabView: View {
     @State private var suggestion: BrewSuggestion?
     @State private var suggestionLoading = false
     @State private var showGeminiConsent = false
+    @State private var showLabDetails = false
     @State private var errorMessage: String?
     @AppStorage("privacy.geminiConsent.v1") private var geminiConsent = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
             CupaTheme.background.ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 16) {
-                    baseDataCard
-                    altitudeCard
-                    SectionHeader(
-                        eyebrow: model.state.method.uppercased(),
-                        title: "Laboratorio",
-                        subtitle: "Simulación y calibración sensorial determinista."
-                    )
-                    hypothesisCard
-                    sensoryCard
-                    suggestionCard
-                    Picker("Variables", selection: $category) {
-                        ForEach(LabControlCategory.allCases) { Text($0.rawValue).tag($0) }
+            VStack(spacing: 8) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("LABORATORIO · \(model.state.method.uppercased())")
+                            .font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.terracottaText)
+                        Text("Variables y sabor en vivo").font(.title3.bold()).foregroundStyle(CupaTheme.text)
                     }
-                    .pickerStyle(.segmented)
-                    controlsCard
-                    if !experiments.isEmpty { savedExperimentsCard }
+                    Spacer()
+                    Button { showLabDetails = true } label: {
+                        Label("Contexto", systemImage: "slider.horizontal.3")
+                            .font(.caption.bold())
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .padding()
-                .padding(.bottom, 72)
+                calibrationWorkspaceCard
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 76)
             actionBar
         }
-        .navigationTitle("Laboratorio")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { confirmingLabReset = true } label: { Image(systemName: "arrow.counterclockwise") }
-                    .accessibilityLabel("Restablecer Laboratorio")
+        .navigationBarHidden(true)
+        .sheet(isPresented: $showLabDetails) {
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: 14) {
+                        SectionHeader(eyebrow: "Contexto", title: "Base del experimento", subtitle: "Inventario, altitud, sugerencias e historial.")
+                        baseDataCard
+                        altitudeCard
+                        suggestionCard
+                        if !experiments.isEmpty { savedExperimentsCard }
+                    }.padding()
+                }
+                .background(CupaTheme.background)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { showLabDetails = false } }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { confirmingLabReset = true } label: { Image(systemName: "arrow.counterclockwise") }
+                            .accessibilityLabel("Restablecer Laboratorio")
+                    }
+                }
             }
         }
         .sheet(isPresented: $showCustomCity) { customCitySheet }
@@ -666,43 +788,85 @@ struct LabView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var sensoryCard: some View {
+    private var calibrationWorkspaceCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("Perfil en vivo", systemImage: "chart.bar.xaxis").font(.headline)
+                    Spacer()
+                    Menu {
+                        ForEach(["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"], id: \.self) { method in
+                            Button(method) { model.update { $0.method = method } }
+                        }
+                    } label: {
+                        HStack(spacing: 4) { Text(model.state.method); Image(systemName: "chevron.down") }
+                            .font(.caption.bold()).foregroundStyle(CupaTheme.terracottaText)
+                    }
+                }
+                compactHypothesis
+                sensoryContent
+                Divider()
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("VARIABLES DE PREPARACIÓN").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
+                    Picker("Variables", selection: $category) {
+                        ForEach(LabControlCategory.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                controlsContent
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Variables de preparación y perfil sensorial en vivo")
+    }
+
+    private var compactHypothesis: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(primaryOutcome).font(.subheadline.bold())
+                Text(model.profile.summary).font(.caption2).lineLimit(2)
+            }
+            Spacer()
+            Text(String(format: "%.2fx", model.profile.extractionIndex)).font(.headline.monospacedDigit())
+        }
+        .foregroundStyle(CupaTheme.onAccent)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracotta], startPoint: .leading, endPoint: .trailing))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var sensoryContent: some View {
         let values = [
             ("Aroma", model.profile.aroma, CupaTheme.gold), ("Acidez", model.profile.acidity, .yellow),
             ("Dulzor", model.profile.sweetness, .pink), ("Cuerpo", model.profile.body, CupaTheme.terracotta),
             ("Amargor", model.profile.bitterness, .brown), ("Final", model.profile.finish, .cyan)
         ]
-        return CupaCard {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Ecualizador sensorial").font(.headline)
+        return VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .bottom, spacing: 8) {
                     ForEach(values, id: \.0) { label, value, color in
-                        VStack(spacing: 5) {
-                            Text("\(value)%").font(.caption2.bold()).foregroundStyle(color)
+                        VStack(spacing: 2) {
+                            Text("\(value)").font(.system(size: 9, weight: .bold)).foregroundStyle(color)
                             GeometryReader { proxy in
                                 ZStack(alignment: .bottom) {
                                     Capsule().fill(CupaTheme.backgroundAlt)
                                     Capsule().fill(color.gradient).frame(height: proxy.size.height * CGFloat(value) / 100)
                                 }
-                            }.frame(height: 112)
-                            Text(label).font(.caption2.weight(.semibold)).lineLimit(2).multilineTextAlignment(.center)
+                            }.frame(height: 54)
+                            Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7)
                         }.frame(maxWidth: .infinity)
                     }
                 }
-                Divider()
-                Text(model.diagnostic.extraction).font(.subheadline.bold()).foregroundStyle(CupaTheme.forest)
-                Text(model.diagnostic.recommendation).font(.caption).foregroundStyle(CupaTheme.secondaryText)
-                ForEach(model.diagnostic.risks, id: \.self) { Label($0, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange) }
-            }
+                HStack(spacing: 5) {
+                    Circle().fill(CupaTheme.forest).frame(width: 6, height: 6)
+                    Text(model.diagnostic.extraction).font(.caption2.bold()).foregroundStyle(CupaTheme.forest)
+                    Spacer()
+                    Text("SABOR ESTIMADO").font(.system(size: 8, weight: .bold)).foregroundStyle(CupaTheme.secondaryText)
+                }
         }
     }
 
-    @ViewBuilder private var controlsCard: some View {
-        CupaCard {
-            VStack(spacing: 16) {
-                Picker("Método", selection: binding(\.method)) {
-                    ForEach(["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"], id: \.self) { Text($0) }
-                }
+    @ViewBuilder private var controlsContent: some View {
+        VStack(spacing: 9) {
                 switch category {
                 case .ratio:
                     HStack {
@@ -724,7 +888,6 @@ struct LabView: View {
                     }
                     TextField("Notas del experimento", text: binding(\.notes), axis: .vertical).lineLimit(3...7)
                 }
-            }
         }
     }
 

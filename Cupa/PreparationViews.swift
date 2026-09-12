@@ -8,61 +8,13 @@ struct PreparationExecutionView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
     @ObservedObject var model: PreparationModel
-    @State private var selectedTechniqueId: UUID?; @State private var errorMessage: String?; @State private var savedConfirmation = false
+    @State private var selectedTechniqueKey: String?; @State private var errorMessage: String?; @State private var savedConfirmation = false
     @State private var confirmingReset = false
 
     var body: some View {
         VStack(spacing: 16) {
-            CupaCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Técnica de preparación").font(.headline)
-                    if techniques.isEmpty {
-                        Text("Aún no hay técnicas guardadas. Puedes iniciar una preparación libre desde la calculadora o crear una en Almacén.")
-                            .font(.caption).foregroundStyle(CupaTheme.secondaryText)
-                    } else {
-                        Picker("Técnica", selection: $selectedTechniqueId) {
-                            Text("Selecciona una técnica").tag(Optional<UUID>.none)
-                            ForEach(techniques) { Text($0.name).tag(Optional($0.id)) }
-                        }
-                        Button("Cargar técnica", action: loadTechnique).buttonStyle(.bordered).disabled(selectedTechniqueId == nil)
-                    }
-                }
-            }
-
-            CupaCard {
-                VStack(spacing: 14) {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(model.state.techniqueName).font(.headline)
-                            Text("\(model.state.methodName) · \(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(model.state.waterMl) ml")
-                                .font(.caption).foregroundStyle(CupaTheme.secondaryText)
-                            if let bean = beans.first(where: { $0.id == model.state.beanId }) {
-                                Label(bean.name, systemImage: "leaf")
-                                    .font(.caption.bold()).foregroundStyle(CupaTheme.forest)
-                            }
-                        }
-                        Spacer()
-                        Text("1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))").font(.subheadline.bold()).foregroundStyle(CupaTheme.forest)
-                    }
-                    Text(timeString(model.state.elapsedSeconds)).font(.system(.largeTitle, design: .rounded, weight: .bold)).monospacedDigit()
-                        .minimumScaleFactor(0.6)
-                        .accessibilityLabel("Tiempo transcurrido")
-                        .accessibilityValue(timeString(model.state.elapsedSeconds))
-                    if let step = model.activeStep {
-                        VStack(spacing: 8) {
-                            Text("PASO \(step.number) DE \(model.state.steps.count)").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
-                            Text(step.title).font(.title3.bold()).multilineTextAlignment(.center)
-                            HStack { Label("\(step.waterAddedMl) ml", systemImage: "drop"); Label("\(step.waterAccumulatedMl) ml total", systemImage: "sum") }.font(.caption)
-                            Text(step.gesture.replacingOccurrences(of: "_", with: " ").capitalized + " · " + step.intensity.capitalized).font(.caption.bold()).foregroundStyle(CupaTheme.forest)
-                            if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText).multilineTextAlignment(.center) }
-                            ProgressView(value: Double(min(model.stepElapsed, max(1, step.durationSeconds))), total: Double(max(1, step.durationSeconds))).tint(CupaTheme.terracotta)
-                        }
-                    } else {
-                        Text("Carga una técnica o usa los datos de la calculadora.").font(.caption).foregroundStyle(CupaTheme.secondaryText)
-                    }
-                    controls
-                }.frame(maxWidth: .infinity)
-            }
+            executionCard
+            if model.state.status == .ready { techniqueLibraryCard }
         }
         .alert("Preparación guardada", isPresented: $savedConfirmation) { Button("Aceptar") {} } message: { Text("La sesión y sus snapshots quedaron disponibles offline.") }
         .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "") }
@@ -71,6 +23,57 @@ struct PreparationExecutionView: View {
             Button("Cancelar", role: .cancel) {}
         } message: {
             Text(model.state.savedAt == nil ? "Se borrarán el tiempo y el avance que todavía no hayas guardado." : "Se iniciará una preparación nueva con otro identificador.")
+        }
+    }
+
+    private var techniqueLibraryCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("TÉCNICAS PARA \(model.state.methodName.uppercased())")
+                    .font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
+                Text("Todas usarán \(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g, \(model.state.waterMl) ml y ratio 1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1)))).")
+                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                Picker("Técnica", selection: $selectedTechniqueKey) {
+                    Text("Selecciona una técnica").tag(Optional<String>.none)
+                    Section("Incluidas en Cupa") { ForEach(builtInTechniques) { item in Text(item.name).tag(Optional(item.id)) } }
+                    if !matchingSavedTechniques.isEmpty {
+                        Section("Mis técnicas") { ForEach(matchingSavedTechniques) { Text($0.name).tag(Optional("saved:\($0.id.uuidString)")) } }
+                    }
+                }
+                Button("Cargar técnica", action: loadTechnique).buttonStyle(.bordered).disabled(selectedTechniqueKey == nil)
+            }
+        }
+    }
+
+    private var executionCard: some View {
+        CupaCard {
+            VStack(spacing: 14) {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(model.state.techniqueName).font(.headline)
+                        Text("\(model.state.methodName) · \(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(model.state.waterMl) ml")
+                            .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                        if let bean = beans.first(where: { $0.id == model.state.beanId }) {
+                            Label(bean.name, systemImage: "leaf").font(.caption.bold()).foregroundStyle(CupaTheme.forest)
+                        }
+                    }
+                    Spacer()
+                    Text("1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))").font(.subheadline.bold()).foregroundStyle(CupaTheme.forest)
+                }
+                Text(timeString(model.state.elapsedSeconds)).font(.system(.largeTitle, design: .rounded, weight: .bold)).monospacedDigit()
+                    .minimumScaleFactor(0.6).accessibilityLabel("Tiempo transcurrido").accessibilityValue(timeString(model.state.elapsedSeconds))
+                if let step = model.activeStep {
+                    VStack(spacing: 8) {
+                        Text("PASO \(step.number) DE \(model.state.steps.count)").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
+                        Text(step.title).font(.title3.bold()).multilineTextAlignment(.center)
+                        HStack { Label("\(step.waterAddedMl) ml", systemImage: "drop"); Label("\(step.waterAccumulatedMl) ml total", systemImage: "sum") }.font(.caption)
+                        Text(step.gesture.replacingOccurrences(of: "_", with: " ").capitalized + " · " + step.intensity.capitalized).font(.caption.bold()).foregroundStyle(CupaTheme.forest)
+                        if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText).multilineTextAlignment(.center) }
+                        ProgressView(value: Double(min(model.stepElapsed, max(1, step.durationSeconds))), total: Double(max(1, step.durationSeconds))).tint(CupaTheme.terracotta)
+                    }
+                } else { Text("Selecciona una técnica para comenzar.").font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                controls
+            }.frame(maxWidth: .infinity)
         }
     }
 
@@ -104,9 +107,18 @@ struct PreparationExecutionView: View {
     }
 
     private func loadTechnique() {
-        guard let id = selectedTechniqueId, let technique = techniques.first(where: { $0.id == id }) else { return }
+        guard let key = selectedTechniqueKey else { return }
+        if let template = builtInTechniques.first(where: { $0.id == key }) { model.load(template: template); return }
+        guard key.hasPrefix("saved:"), let id = UUID(uuidString: String(key.dropFirst(6))), let technique = matchingSavedTechniques.first(where: { $0.id == id }) else { return }
         do { model.load(technique: technique, steps: try RecipeTechniqueRepository(context: context).techniqueSteps(techniqueId: id)) }
         catch { errorMessage = error.localizedDescription }
+    }
+    private var builtInTechniques: [PreparationTechniqueTemplate] { PreparationTechniqueCatalog.techniques(for: model.state.methodName) }
+    private var matchingSavedTechniques: [TechniqueRecord] {
+        techniques.filter { technique in
+            if let selectedId = model.state.methodId, technique.methodId == selectedId { return true }
+            return technique.methodName.caseInsensitiveCompare(model.state.methodName) == .orderedSame
+        }
     }
     private func finish() {
         if model.state.status == .running { model.pause() }

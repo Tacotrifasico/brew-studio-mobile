@@ -67,7 +67,7 @@ struct AppShell: View {
                 .tag(CupaTab.home)
                 .tabItem { Label("Taller", systemImage: "house") }
 
-            NavigationStack { BrewView(selection: $navigation.selection, calculator: calculator, lab: lab, preparation: preparation) }
+            NavigationStack { BrewView(preparation: preparation) }
                 .tag(CupaTab.brew)
                 .tabItem { Label("Preparar", systemImage: "mug") }
 

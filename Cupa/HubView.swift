@@ -11,11 +11,12 @@ struct HubView: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var account: AccountModel
+    let initialTab: Int
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var techniques: FetchedResults<TechniqueRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var brews: FetchedResults<BrewSessionRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TastingRecord.evaluatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var tastings: FetchedResults<TastingRecord>
-    @State private var tab = 0; @State private var showAccount = false
+    @State private var tab: Int; @State private var showAccount = false
     @State private var displayName = ""; @State private var alias = ""; @State private var biography = ""
     @State private var avatarColor = "#3F7A63"; @State private var favoriteMethods = ""; @State private var isPrivate = true
     @State private var message: String?
@@ -28,6 +29,12 @@ struct HubView: View {
     @State private var shareDraft: HubShareDraft?
     @State private var reportShare: SocialShare?
     @State private var blockShare: SocialShare?
+
+    init(account: AccountModel, initialTab: Int = 0) {
+        self.account = account
+        self.initialTab = initialTab
+        _tab = State(initialValue: initialTab)
+    }
 
     var body: some View {
         NavigationStack {

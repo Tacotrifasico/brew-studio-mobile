@@ -79,7 +79,7 @@ struct AppShell: View {
                 .tag(CupaTab.lab)
                 .tabItem { Label("Laboratorio", systemImage: "flask") }
 
-            NavigationStack { StorageView(selection: $navigation.selection, lab: lab, preparation: preparation) }
+            NavigationStack { StorageView(selection: $navigation.selection, lab: lab, preparation: preparation, account: account) }
                 .tag(CupaTab.storage)
                 .tabItem { Label("Almacén", systemImage: "shippingbox") }
         }

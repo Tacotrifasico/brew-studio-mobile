@@ -193,8 +193,10 @@ struct TechniqueInventoryView: View {
     @FetchRequest(sortDescriptors: [], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
     @Binding var selection: CupaTab
     @ObservedObject var preparation: PreparationModel
+    @ObservedObject var account: AccountModel
     @State private var search = ""; @State private var mode = "ALL"; @State private var adding = false
     @State private var selectedTechnique: TechniqueRecord?; @State private var editing: TechniqueRecord?; @State private var pendingEdit: TechniqueRecord?
+    @State private var showHub = false; @State private var pendingHub = false
     @State private var errorMessage: String?
 
     private var visible: [TechniqueRecord] { techniques.filter { (mode == "ALL" || $0.executionMode == mode) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.methodName.localizedCaseInsensitiveContains(search)) } }
@@ -226,6 +228,7 @@ struct TechniqueInventoryView: View {
         .sheet(item: $editing) { TechniqueEditorView(technique: $0) }
         .sheet(item: $selectedTechnique, onDismiss: {
             if let pendingEdit { editing = pendingEdit; self.pendingEdit = nil }
+            else if pendingHub { pendingHub = false; showHub = true }
         }) { technique in
             TechniqueDetailView(
                 technique: technique,
@@ -235,9 +238,12 @@ struct TechniqueInventoryView: View {
                 grinderName: grinders.first { $0.id == technique.grinderId }?.name,
                 onPrepare: { prepare(technique); selectedTechnique = nil },
                 onEdit: { pendingEdit = technique; selectedTechnique = nil },
+                onDuplicate: { duplicate(technique); selectedTechnique = nil },
+                onShare: { share(technique) },
                 onDelete: { delete(technique); selectedTechnique = nil }
             )
         }
+        .sheet(isPresented: $showHub) { HubView(account: account, initialTab: 2) }
         .alert("No se pudo guardar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "Error desconocido") }
     }
     private func prepare(_ technique: TechniqueRecord) {
@@ -247,6 +253,18 @@ struct TechniqueInventoryView: View {
         } catch { errorMessage = error.localizedDescription }
     }
     private func delete(_ technique: TechniqueRecord) { do { try RecipeTechniqueRepository(context: context).deleteTechnique(technique) } catch { errorMessage = error.localizedDescription } }
+    private func duplicate(_ technique: TechniqueRecord) {
+        do {
+            _ = try RecipeTechniqueRepository(context: context).duplicateTechnique(technique)
+        } catch { errorMessage = error.localizedDescription }
+    }
+    private func share(_ technique: TechniqueRecord) {
+        guard account.configuration.isSupabaseConfigured, account.tokens != nil else {
+            errorMessage = "La técnica está segura en tu Almacén. Para compartirla, conecta tu cuenta de Supabase desde el Hub."
+            return
+        }
+        pendingHub = true; selectedTechnique = nil
+    }
 }
 
 private struct TechniqueDetailView: View {
@@ -258,6 +276,8 @@ private struct TechniqueDetailView: View {
     let grinderName: String?
     let onPrepare: () -> Void
     let onEdit: () -> Void
+    let onDuplicate: () -> Void
+    let onShare: () -> Void
     let onDelete: () -> Void
     @State private var confirmingDelete = false
 
@@ -328,6 +348,10 @@ private struct TechniqueDetailView: View {
                 Section {
                     Button(action: onPrepare) { Label("Preparar con esta técnica", systemImage: "play.fill") }
                         .accessibilityIdentifier("techniques.detail.prepare")
+                    Button(action: onDuplicate) { Label("Duplicar técnica", systemImage: "plus.square.on.square") }
+                        .accessibilityIdentifier("techniques.detail.duplicate")
+                    Button(action: onShare) { Label("Compartir desde el Hub", systemImage: "square.and.arrow.up") }
+                        .accessibilityIdentifier("techniques.detail.share")
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar técnica", systemImage: "trash") }
                 }
             }

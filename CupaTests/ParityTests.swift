@@ -361,6 +361,36 @@ final class LocalPersistenceTests: XCTestCase {
 }
 
 final class RecipeTechniqueRepositoryTests: XCTestCase {
+    @MainActor func testTechniqueDuplicationCreatesIndependentStepIdentifiers() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let repository = RecipeTechniqueRepository(context: context)
+        let original = try repository.saveTechnique(TechniqueDraftModel(
+            name: "V60 de prueba",
+            methodName: "V60",
+            doseGrams: 15,
+            waterMl: 240,
+            ratio: 16,
+            temperatureC: 93,
+            steps: [
+                .init(title: "Bloom", durationSeconds: 35, waterAddedMl: 45),
+                .init(title: "Vertido", durationSeconds: 90, waterAddedMl: 195)
+            ]
+        ))
+        let originalSteps = try repository.techniqueSteps(techniqueId: original.id)
+
+        let copy = try repository.duplicateTechnique(original)
+        let copiedSteps = try repository.techniqueSteps(techniqueId: copy.id)
+
+        XCTAssertNotEqual(copy.id, original.id)
+        XCTAssertEqual(copy.name, "Copia de V60 de prueba")
+        XCTAssertEqual(copiedSteps.map(\.title), originalSteps.map(\.title))
+        XCTAssertTrue(Set(copiedSteps.map(\.id)).isDisjoint(with: Set(originalSteps.map(\.id))))
+        copiedSteps[0].title = "Bloom editado"
+        try context.save()
+        XCTAssertEqual(originalSteps[0].title, "Bloom")
+    }
+
     func testRecipeTextParserMatchesAndroidImporterContract() {
         let draft = RecipeTextParser.parse("""
         Receta: Espresso Tonic Menta

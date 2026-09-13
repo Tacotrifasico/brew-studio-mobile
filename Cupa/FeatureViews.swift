@@ -1053,6 +1053,7 @@ struct StorageView: View {
     @Binding var selection: CupaTab
     @ObservedObject var lab: LabModel
     @ObservedObject var preparation: PreparationModel
+    @ObservedObject var account: AccountModel
     @State private var category = StorageCategory.coffee
 
     var body: some View {
@@ -1074,7 +1075,7 @@ struct StorageView: View {
             case .grinders: GrinderInventoryView()
             case .equipment: EquipmentInventoryView()
             case .recipes: RecipeInventoryView()
-            case .techniques: TechniqueInventoryView(selection: $selection, preparation: preparation)
+            case .techniques: TechniqueInventoryView(selection: $selection, preparation: preparation, account: account)
             case .cups: CupHistoryView()
             }
         }

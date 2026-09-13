@@ -906,6 +906,70 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    suspend fun getTechniqueSteps(techId: String): List<TechniqueStep> =
+        repository.getStepsForTechniqueSync(techId)
+
+    fun duplicateTechnique(techId: String) {
+        viewModelScope.launch {
+            val source = _state.value.techniquesList.firstOrNull { it.id == techId } ?: return@launch
+            val sourceSteps = repository.getStepsForTechniqueSync(techId)
+            val copyId = UUID.randomUUID().toString()
+            val copy = source.copy(
+                id = copyId,
+                name = "Copia de ${source.name}",
+                isShared = false,
+                originalEntityId = source.originalEntityId ?: source.id,
+                rootEntityId = source.rootEntityId ?: source.originalEntityId ?: source.id,
+                importedFromShareId = null,
+                copyMode = "ORIGINAL",
+                remoteId = null,
+                syncStatus = "PENDING_CREATE",
+                serverVersion = 1,
+                expectedVersion = 1,
+                lastSyncedAt = null,
+                createdAt = currentIso8601(),
+                updatedAt = currentIso8601()
+            )
+            val copiedSteps = sourceSteps.mapIndexed { index, step ->
+                step.copy(
+                    id = UUID.randomUUID().toString(),
+                    techniqueId = copyId,
+                    stepNumber = index + 1,
+                    remoteId = null,
+                    syncStatus = "PENDING_CREATE",
+                    serverVersion = 1,
+                    expectedVersion = 1,
+                    lastSyncedAt = null,
+                    createdAt = currentIso8601(),
+                    updatedAt = currentIso8601()
+                )
+            }
+            repository.insertTechnique(copy, copiedSteps)
+            showToast("Técnica duplicada en el Almacén.")
+        }
+    }
+
+    fun updateTechnique(technique: Technique, steps: List<TechniqueStep>) {
+        if (BrewTechniqueCatalog.isBuiltInTechnique(technique.id)) {
+            showToast("Duplica una técnica incluida antes de editarla.")
+            return
+        }
+        viewModelScope.launch {
+            repository.replaceTechnique(
+                technique.copy(updatedAt = currentIso8601(), syncStatus = "PENDING_UPDATE"),
+                steps.mapIndexed { index, step ->
+                    step.copy(
+                        techniqueId = technique.id,
+                        stepNumber = index + 1,
+                        updatedAt = currentIso8601(),
+                        syncStatus = if (step.remoteId == null) "PENDING_CREATE" else "PENDING_UPDATE"
+                    )
+                }
+            )
+            showToast("Técnica actualizada en el Almacén.")
+        }
+    }
+
     fun createAndSaveTechnique(
         name: String,
         methodId: String,

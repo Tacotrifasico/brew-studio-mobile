@@ -206,7 +206,15 @@ fun BrewStudioAppShell(viewModel: BaristaCalcViewModel) {
                 )
             }
             composable(Screen.Storage.route) {
-                StorageScreen(viewModel = viewModel)
+                StorageScreen(
+                    viewModel = viewModel,
+                    onNavigateToPreparation = {
+                        navController.navigate(Screen.Brew.route) { launchSingleTop = true }
+                    },
+                    onNavigateToCommunity = {
+                        navController.navigate("social") { launchSingleTop = true }
+                    }
+                )
             }
             composable("social") {
                 val socialViewModel: com.example.ui.viewmodel.SocialViewModel = androidx.lifecycle.viewmodel.compose.viewModel()

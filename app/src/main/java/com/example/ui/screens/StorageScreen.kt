@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,7 +64,9 @@ import java.util.*
 @Composable
 fun StorageScreen(
     viewModel: BaristaCalcViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToPreparation: () -> Unit = {},
+    onNavigateToCommunity: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsState()
     var selectedCategory by remember { mutableStateOf("Café") }
@@ -83,6 +86,15 @@ fun StorageScreen(
     var showRecipeImporterDialog by remember { mutableStateOf(false) }
     var importedRecipeDraft by remember { mutableStateOf<RecipeDraft?>(null) }
     var showTechniqueCreator by remember { mutableStateOf(false) }
+    var selectedTechnique by remember { mutableStateOf<Technique?>(null) }
+    var selectedTechniqueSteps by remember { mutableStateOf<List<TechniqueStep>>(emptyList()) }
+    var editingTechnique by remember { mutableStateOf<Technique?>(null) }
+    var showShareExplanation by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedTechnique?.id, editingTechnique?.id) {
+        val id = editingTechnique?.id ?: selectedTechnique?.id
+        selectedTechniqueSteps = if (id == null) emptyList() else viewModel.getTechniqueSteps(id)
+    }
 
     if (state.pendingPinDialogInstrument != null) {
         val inst = state.pendingPinDialogInstrument!!
@@ -496,6 +508,7 @@ fun StorageScreen(
                                 technique = technique,
                                 methodName = methodName,
                                 isBuiltIn = viewModel.isBuiltInTechnique(technique.id),
+                                onClick = { selectedTechnique = technique },
                                 onDelete = { viewModel.deleteTechnique(technique.id) }
                             )
                         }
@@ -627,6 +640,64 @@ fun StorageScreen(
             }
         }
     }
+
+    selectedTechnique?.let { technique ->
+        TechniqueStorageDetailDialog(
+            technique = technique,
+            steps = selectedTechniqueSteps,
+            methodName = state.userMethods.firstOrNull { it.methodId == technique.methodId }?.name
+                ?: technique.legacyMethodName ?: "Método guardado",
+            isBuiltIn = viewModel.isBuiltInTechnique(technique.id),
+            onDismiss = { selectedTechnique = null },
+            onPrepare = {
+                viewModel.loadPrepTechnique(technique.id)
+                selectedTechnique = null
+                onNavigateToPreparation()
+            },
+            onEdit = {
+                editingTechnique = technique
+                selectedTechnique = null
+            },
+            onDuplicate = {
+                viewModel.duplicateTechnique(technique.id)
+                selectedTechnique = null
+            },
+            onShare = { showShareExplanation = true },
+            onDelete = {
+                viewModel.deleteTechnique(technique.id)
+                selectedTechnique = null
+            }
+        )
+    }
+
+    editingTechnique?.let { technique ->
+        TechniqueStorageEditorDialog(
+            technique = technique,
+            initialSteps = selectedTechniqueSteps,
+            onDismiss = { editingTechnique = null },
+            onSave = { updated, steps ->
+                viewModel.updateTechnique(updated, steps)
+                editingTechnique = null
+            }
+        )
+    }
+
+    if (showShareExplanation) {
+        AlertDialog(
+            onDismissRequest = { showShareExplanation = false },
+            title = { Text("Compartir técnica", fontWeight = FontWeight.Bold) },
+            text = { Text("Tu técnica permanece guardada en el Almacén. La publicación o el envío directo se completa desde Comunidad → Mis Técnicas; si Supabase aún no está conectado, la app te lo indicará sin perder datos.") },
+            confirmButton = {
+                Button(onClick = {
+                    showShareExplanation = false
+                    selectedTechnique = null
+                    onNavigateToCommunity()
+                }) { Text("Abrir Comunidad") }
+            },
+            dismissButton = { TextButton(onClick = { showShareExplanation = false }) { Text("Ahora no") } },
+            containerColor = SurfaceCard
+        )
+    }
 }
 
 @Composable
@@ -634,11 +705,13 @@ private fun TechniqueStorageItemCard(
     technique: Technique,
     methodName: String,
     isBuiltIn: Boolean,
+    onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .border(1.dp, BordeSuave, RoundedCornerShape(16.dp)),
         colors = CardDefaults.cardColors(containerColor = SurfaceCard),
         shape = RoundedCornerShape(16.dp)
@@ -683,6 +756,205 @@ private fun TechniqueStorageItemCard(
                 }
             } else {
                 Icon(Icons.Default.Lock, contentDescription = "Técnica incluida", tint = TextSecundario, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun TechniqueStorageDetailDialog(
+    technique: Technique,
+    steps: List<TechniqueStep>,
+    methodName: String,
+    isBuiltIn: Boolean,
+    onDismiss: () -> Unit,
+    onPrepare: () -> Unit,
+    onEdit: () -> Unit,
+    onDuplicate: () -> Unit,
+    onShare: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var confirmDelete by remember { mutableStateOf(false) }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MainBackground) {
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cerrar") }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(technique.name, fontSize = 21.sp, fontWeight = FontWeight.Black, color = TextPrincipal)
+                        Text("$methodName · ${technique.executionMode.lowercase().replaceFirstChar { it.uppercase() }}", fontSize = 12.sp, color = TextSecundario)
+                    }
+                    if (isBuiltIn) Icon(Icons.Default.Lock, contentDescription = "Técnica incluida", tint = AcentoPrincipal)
+                }
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        Card(colors = CardDefaults.cardColors(containerColor = SurfaceCard), shape = RoundedCornerShape(18.dp)) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("PARÁMETROS", fontSize = 10.sp, fontWeight = FontWeight.Black, color = TextSecundario, letterSpacing = 1.sp)
+                                Text("${technique.doseG} g de café · ${technique.waterMl} ml de agua", fontWeight = FontWeight.Bold, color = TextPrincipal)
+                                Text("Proporción 1:${technique.ratio} · ${technique.temperatureC} °C", color = TextSecundario)
+                                Text("Molienda: ${technique.grindDescription ?: technique.grindValue ?: "Sin especificar"}", color = TextSecundario)
+                                if (technique.notes.isNotBlank()) Text(technique.notes, fontSize = 12.sp, color = TextSecundario)
+                            }
+                        }
+                    }
+                    item { Text("SECUENCIA · ${steps.size} PASOS", fontSize = 10.sp, fontWeight = FontWeight.Black, color = TextSecundario, letterSpacing = 1.sp) }
+                    if (steps.isEmpty()) {
+                        item { Text("Esta técnica todavía no tiene pasos guardados.", color = Advertencia) }
+                    } else {
+                        items(steps, key = { it.id }) { step ->
+                            Card(colors = CardDefaults.cardColors(containerColor = SurfaceCard), shape = RoundedCornerShape(16.dp)) {
+                                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+                                    Box(modifier = Modifier.size(30.dp).clip(CircleShape).background(AcentoPrincipal), contentAlignment = Alignment.Center) {
+                                        Text("${step.stepNumber}", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(step.title, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                                        Text("${step.durationSeconds} s · +${step.waterAddedMl} ml · ${step.waterAccumulatedMl} ml total", fontSize = 11.sp, color = TextSecundario)
+                                        Text("${step.gesture.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} · ${step.intensity.lowercase().replaceFirstChar { it.uppercase() }}", fontSize = 10.sp, color = AcentoPrincipal)
+                                        if (step.stepNote.isNotBlank()) Text(step.stepNote, fontSize = 11.sp, color = TextSecundario)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onPrepare, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal)) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Preparar con esta técnica")
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onDuplicate, modifier = Modifier.weight(1f)) { Text("Duplicar") }
+                        OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) { Text("Compartir") }
+                        if (!isBuiltIn) OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) { Text("Editar") }
+                    }
+                    if (!isBuiltIn) {
+                        TextButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.textButtonColors(contentColor = Advertencia)) {
+                            Text("Eliminar técnica")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("¿Eliminar esta técnica?") },
+            text = { Text("Se quitará del Almacén. Las preparaciones ya registradas conservarán su historial.") },
+            confirmButton = { Button(onClick = { confirmDelete = false; onDelete() }, colors = ButtonDefaults.buttonColors(containerColor = Advertencia)) { Text("Eliminar") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") } },
+            containerColor = SurfaceCard
+        )
+    }
+}
+
+private data class TechniqueStepEditDraft(
+    val id: String,
+    val remoteId: String?,
+    val title: String,
+    val duration: String,
+    val water: String,
+    val gesture: String,
+    val intensity: String,
+    val note: String
+)
+
+@Composable
+private fun TechniqueStorageEditorDialog(
+    technique: Technique,
+    initialSteps: List<TechniqueStep>,
+    onDismiss: () -> Unit,
+    onSave: (Technique, List<TechniqueStep>) -> Unit
+) {
+    var name by remember(technique.id) { mutableStateOf(technique.name) }
+    var coffee by remember(technique.id) { mutableStateOf(technique.doseG.toString()) }
+    var water by remember(technique.id) { mutableStateOf(technique.waterMl.toString()) }
+    var temperature by remember(technique.id) { mutableStateOf(technique.temperatureC.toString()) }
+    var notes by remember(technique.id) { mutableStateOf(technique.notes) }
+    val drafts = remember(technique.id, initialSteps) {
+        mutableStateListOf<TechniqueStepEditDraft>().apply {
+            addAll(initialSteps.map { TechniqueStepEditDraft(it.id, it.remoteId, it.title, it.durationSeconds.toString(), it.waterAddedMl.toString(), it.gesture, it.intensity, it.stepNote) })
+        }
+    }
+    val coffeeValue = coffee.replace(',', '.').toFloatOrNull()
+    val waterValue = water.toIntOrNull()
+    val temperatureValue = temperature.toIntOrNull()
+    val stepWater = drafts.sumOf { it.water.toIntOrNull() ?: 0 }
+    val valid = name.trim().isNotEmpty() && coffeeValue != null && coffeeValue > 0f && waterValue != null && waterValue > 0 &&
+            temperatureValue != null && temperatureValue in 60..100 && drafts.isNotEmpty() &&
+            drafts.all { it.title.trim().isNotEmpty() && (it.duration.toIntOrNull() ?: 0) > 0 && (it.water.toIntOrNull() ?: -1) >= 0 } && stepWater == waterValue
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MainBackground) {
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancelar edición") }
+                    Text("Editar técnica", fontSize = 21.sp, fontWeight = FontWeight.Black, color = TextPrincipal)
+                }
+                LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
+                    item {
+                        Card(colors = CardDefaults.cardColors(containerColor = SurfaceCard), shape = RoundedCornerShape(18.dp)) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                StyledOutlinedTextField(value = name, onValueChange = { name = it }, label = "Nombre")
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    StyledOutlinedTextField(value = coffee, onValueChange = { coffee = it }, label = "Café (g)", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
+                                    StyledOutlinedTextField(value = water, onValueChange = { water = it }, label = "Agua (ml)", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+                                    StyledOutlinedTextField(value = temperature, onValueChange = { temperature = it }, label = "°C", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(0.8f))
+                                }
+                                StyledOutlinedTextField(value = notes, onValueChange = { notes = it }, label = "Notas")
+                            }
+                        }
+                    }
+                    itemsIndexed(drafts, key = { _, item -> item.id }) { index, draft ->
+                        Card(colors = CardDefaults.cardColors(containerColor = SurfaceCard), shape = RoundedCornerShape(16.dp)) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Paso ${index + 1}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                    IconButton(onClick = { drafts.removeAt(index) }) { Icon(Icons.Default.RemoveCircleOutline, contentDescription = "Quitar paso") }
+                                }
+                                StyledOutlinedTextField(value = draft.title, onValueChange = { drafts[index] = draft.copy(title = it) }, label = "Título")
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    StyledOutlinedTextField(value = draft.duration, onValueChange = { drafts[index] = draft.copy(duration = it) }, label = "Segundos", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+                                    StyledOutlinedTextField(value = draft.water, onValueChange = { drafts[index] = draft.copy(water = it) }, label = "Agua (ml)", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+                                }
+                                StyledOutlinedTextField(value = draft.note, onValueChange = { drafts[index] = draft.copy(note = it) }, label = "Nota")
+                            }
+                        }
+                    }
+                    item {
+                        OutlinedButton(onClick = { drafts.add(TechniqueStepEditDraft(UUID.randomUUID().toString(), null, "", "30", "0", "CIRCULAR_POUR", "MEDIUM", "")) }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Agregar paso")
+                        }
+                    }
+                }
+                if (stepWater != (waterValue ?: 0)) {
+                    Text("Los vertidos suman $stepWater ml y deben coincidir con ${waterValue ?: 0} ml.", fontSize = 11.sp, color = Advertencia, modifier = Modifier.padding(bottom = 6.dp))
+                }
+                Button(
+                    enabled = valid,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        val total = waterValue ?: return@Button
+                        var accumulated = 0
+                        val steps = drafts.mapIndexed { index, draft ->
+                            val added = draft.water.toIntOrNull() ?: 0; accumulated += added
+                            TechniqueStep(
+                                id = draft.id, techniqueId = technique.id, stepNumber = index + 1, title = draft.title.trim(),
+                                durationSeconds = draft.duration.toIntOrNull() ?: 30, waterAddedMl = added, waterAccumulatedMl = accumulated,
+                                intensity = draft.intensity, gesture = draft.gesture, stepNote = draft.note.trim(), remoteId = draft.remoteId
+                            )
+                        }
+                        onSave(technique.copy(name = name.trim(), doseG = coffeeValue ?: technique.doseG, waterMl = total, ratio = total / (coffeeValue ?: technique.doseG), temperatureC = temperatureValue ?: technique.temperatureC, notes = notes.trim(), totalTimeSeconds = steps.sumOf { it.durationSeconds }), steps)
+                    }
+                ) { Text("Guardar cambios") }
             }
         }
     }

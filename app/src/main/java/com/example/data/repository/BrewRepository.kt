@@ -128,6 +128,11 @@ class BrewRepository(
         val stepsWithId = steps.map { it.copy(techniqueId = technique.id) }
         techniqueStepDao.insertSteps(stepsWithId)
     }
+    suspend fun replaceTechnique(technique: Technique, steps: List<TechniqueStep>) {
+        techniqueDao.insertTechnique(technique)
+        techniqueStepDao.deleteStepsForTechnique(technique.id)
+        techniqueStepDao.insertSteps(steps.map { it.copy(techniqueId = technique.id) })
+    }
     suspend fun deleteTechnique(technique: Technique) {
         techniqueDao.deleteTechnique(technique)
         techniqueStepDao.deleteStepsForTechnique(technique.id)

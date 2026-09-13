@@ -34,6 +34,8 @@ Antes de `supabase db push`, crear un respaldo y ensayar sobre un proyecto Stagi
 
 Después se debe validar con dos cuentas distintas que cada usuario sólo pueda leer y modificar sus filas. También se prueban registro, verificación de correo, recuperación, renovación, cierre, eliminación, cuota de Gemini y restauración en otro dispositivo. Con las dos aplicaciones se crea y edita al menos un café, molino, equipo, receta, técnica con pasos, experimento, perfil y publicación en cada dirección; ambos clientes deben ver el mismo UUID y el último valor.
 
+La cuota propia de Cupa admite cinco solicitudes Gemini por usuario en una ventana móvil de 60 segundos y es adicional a los límites del proyecto de Google. En Staging se deben comprobar cinco éxitos, una sexta respuesta 429, independencia entre dos cuentas, timeout y fallback. `ai_request_log` sólo debe mostrar `prompt_version`, `outcome_code` y fechas; no se deben agregar prompts, mediciones ni respuestas.
+
 En Authentication → Email debe configurarse un proveedor SMTP real y conservarse **Confirm email** activado para producción. La app acepta correctamente tanto el alta que devuelve sesión inmediata como el alta que devuelve sólo usuario pendiente, permite reenviar la confirmación y pide iniciar sesión después de abrir el enlace. La recuperación usa una respuesta deliberadamente genérica para no revelar si una dirección tiene cuenta.
 
 En Authentication → URL Configuration, conservar un `SITE_URL` HTTPS controlado y agregar exactamente estas Redirect URLs permitidas:

@@ -20,7 +20,9 @@ La migración `supabase/migrations/202609010006_profile_and_ugc_hardening.sql` a
 
 `supabase/migrations/202609050008_direct_recipient_alias.sql` hace únicos los alias activos sin distinguir mayúsculas y agrega una RPC autenticada que resuelve sólo una coincidencia exacta, excluyendo la propia cuenta. Así el buzón directo conserva `target_user_id` internamente sin pedir ni mostrar UUID en la interfaz.
 
-Las nueve migraciones fueron ejecutadas completas sobre PostgreSQL efímero mediante `Tools/BackendMigrationVerifier.mjs`. El verificador cubre dos historiales: esquema Android con datos de cada tabla compartida y esquema iOS previo con café que debe conservarse; después comprueba propagación Android→iOS, iOS→Android, RLS de lectura/escritura y resolución exacta de destinatario con dos UUID sintéticos. Esta validación no sustituye un ensayo sobre un clon del proyecto real ni la prueba con dos sesiones JWT reales.
+`supabase/migrations/202609060009_secure_ai_quota.sql` agrega un resultado no sensible al registro de IA y una RPC autenticada de consumo de cuota. La RPC toma un bloqueo transaccional por usuario, cuenta la ventana de 60 segundos e inserta como una sola decisión; cinco solicitudes de una cuenta no afectan a otra y una sexta no reserva ejecución. El log conserva sólo versión de prompt, resultado y fecha, nunca mediciones, texto generado ni API key.
+
+Las diez migraciones fueron ejecutadas completas sobre PostgreSQL efímero mediante `Tools/BackendMigrationVerifier.mjs`. El verificador cubre dos historiales: esquema Android con datos de cada tabla compartida y esquema iOS previo con café que debe conservarse; después comprueba propagación Android→iOS, iOS→Android, RLS de lectura/escritura, resolución exacta de destinatario y cuota IA aislada con dos UUID sintéticos. Esta validación no sustituye un ensayo sobre un clon del proyecto real ni la prueba con dos sesiones JWT reales.
 
 Antes de producción se requiere:
 

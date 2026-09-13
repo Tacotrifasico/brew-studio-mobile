@@ -26,3 +26,5 @@ Cuenta contempla la configuración productiva habitual de Supabase: si el alta n
 La sincronización incremental conserva una frontera tomada del reloj HTTP de Supabase al comenzar el recorrido y retrocede cinco minutos de forma deliberada. Así, una edición remota concurrente no queda detrás de un checkpoint creado al final; si el servidor omite la fecha se aplica el mismo solapamiento al inicio local.
 
 El push dejó de usar upsert ciego: intenta un `PATCH` condicionado por `updated_at`, crea únicamente si el UUID todavía no existe y, ante un conflicto, descarga la fila exacta antes de decidir. Una respuesta incoherente conserva la operación con backoff. La outbox migra su nombre de tabla fuera del identificador reservado `entityName` y repara operaciones heredadas antes de enviarlas.
+
+Gemini permanece como sugerencia opcional: una Edge Function valida el contrato en ambos extremos, consume una cuota atómica por usuario, separa instrucciones de mediciones no confiables, limita y filtra la salida, solicita no almacenar el contenido en Google y registra únicamente versión de prompt y resultado. Cualquier rechazo conserva el fallback local.

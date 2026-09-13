@@ -13,7 +13,10 @@ struct SuggestionContext: Codable, Equatable {
     }
 
     var isValid: Bool {
-        coffeeGrams > 0 && coffeeGrams <= 100 && waterMl > 0 && waterMl <= 2_000 && ratio >= 1 && ratio <= 40 &&
+        let normalizedMethod = method.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !normalizedMethod.isEmpty && normalizedMethod.count <= 80 && !method.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) &&
+        coffeeGrams.isFinite && coffeeGrams > 0 && coffeeGrams <= 100 && waterMl > 0 && waterMl <= 2_000 && ratio.isFinite && ratio >= 1 && ratio <= 40 &&
+        (0...100).contains(temperatureC) && (0...200).contains(grindClicks) && (1...3_600).contains(timeSeconds) && extractionIndex.isFinite && (0...3).contains(extractionIndex) &&
         (0...100).contains(aroma) && (0...100).contains(acidity) && (0...100).contains(sweetness) &&
         (0...100).contains(body) && (0...100).contains(bitterness) && (0...100).contains(finish)
     }
@@ -22,6 +25,20 @@ struct SuggestionContext: Codable, Equatable {
 struct BrewSuggestion: Codable, Equatable {
     enum Source: String, Codable { case local, gemini }
     let text: String; let source: Source; let promptVersion: String
+}
+
+enum BrewSuggestionValidator {
+    static let remotePromptVersion = "brew-adjustment-v2"
+
+    static func validateRemote(_ suggestion: BrewSuggestion) -> BrewSuggestion? {
+        let text = suggestion.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard suggestion.source == .gemini, suggestion.promptVersion == remotePromptVersion,
+              !text.isEmpty, text.count <= 800, text.split(whereSeparator: \.isWhitespace).count <= 90 else { return nil }
+        for scalar in text.unicodeScalars where CharacterSet.controlCharacters.contains(scalar) {
+            guard scalar.value == 9 || scalar.value == 10 else { return nil }
+        }
+        return .init(text: text, source: .gemini, promptVersion: suggestion.promptVersion)
+    }
 }
 
 enum LocalSuggestionEngine {
@@ -55,8 +72,8 @@ struct GeminiSuggestionService {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type"); request.httpBody = try JSONEncoder().encode(input)
             let (data, response) = try await transport.data(for: request)
             guard (200..<300).contains(response.statusCode), let decoded = try? JSONDecoder().decode(BrewSuggestion.self, from: data),
-                  decoded.source == .gemini, !decoded.text.isEmpty, decoded.text.count <= 800 else { return fallback }
-            return decoded
+                  let validated = BrewSuggestionValidator.validateRemote(decoded) else { return fallback }
+            return validated
         } catch { return fallback }
     }
 }

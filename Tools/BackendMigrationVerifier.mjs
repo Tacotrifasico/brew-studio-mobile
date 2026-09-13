@@ -63,6 +63,16 @@ async function verifyRLS(db) {
   if (recipient.rows.length !== 1 || recipient.rows[0].user_id !== otherUserId || recipient.rows[0].alias !== 'otra.cafe') throw new Error('La resolución exacta por alias no encontró al destinatario');
   const self = await db.query(`select * from public.resolve_profile_alias('ana')`);
   if (self.rows.length !== 0) throw new Error('La resolución por alias permitió enviarse a la misma cuenta');
+  for (let index = 0; index < 5; index += 1) {
+    const quota = await db.query(`select public.consume_ai_request_quota('brew-adjustment-v2') as request_id`);
+    if (!quota.rows[0]?.request_id) throw new Error(`La cuota IA rechazó prematuramente la solicitud ${index + 1}`);
+  }
+  const limited = await db.query(`select public.consume_ai_request_quota('brew-adjustment-v2') as request_id`);
+  if (limited.rows[0]?.request_id !== null) throw new Error('La cuota IA permitió una sexta solicitud dentro de la ventana');
+  await db.exec(`select set_config('request.jwt.claim.sub','${otherUserId}',false)`);
+  const independent = await db.query(`select public.consume_ai_request_quota('brew-adjustment-v2') as request_id`);
+  if (!independent.rows[0]?.request_id) throw new Error('La cuota IA de una cuenta afectó a otra');
+  await db.exec(`select set_config('request.jwt.claim.sub','${userId}',false)`);
   await db.exec('reset role');
 }
 

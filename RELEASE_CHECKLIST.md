@@ -9,7 +9,7 @@
 - [x] Calculadora y Laboratorio pasan pruebas de paridad.
 - [ ] CRUD completo de entidades separadas.
 - [x] Conflictos y errores de sincronización validados localmente: comparación atómica, remoto más reciente, respuesta incoherente, offline, autenticación y backoff; la integración real permanece cubierta por su bloqueo Supabase independiente.
-- [ ] Gemini seguro con fallback local.
+- [ ] Gemini seguro con fallback local: contrato, cuota atómica, timeout, validación simétrica, no-retención solicitada y telemetría no sensible aprobados localmente; falta desplegarlo y provocar éxito, 429, timeout y error real con el proyecto Supabase/Gemini.
 - [ ] Tema claro/oscuro completo. El sistema Warm Specialty Paper & Ceramic y su contraste están implementados; falta recorrido visual/VoiceOver en Simulator.
 - [ ] Sin botones muertos, mocks ni placeholders de producción. La cuenta y el envío directo ya no exponen UUID técnicos; falta recorrido visual completo.
 - [x] Sin TODO críticos ni secretos.

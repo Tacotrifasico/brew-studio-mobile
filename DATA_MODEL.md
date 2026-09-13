@@ -57,3 +57,5 @@ El almacén físico puede contener la caché de varias cuentas, pero ninguna con
 Cerrar sesión conserva esa caché para permitir volver a entrar offline. Eliminar la cuenta es distinto: después de que la Edge Function confirma la eliminación remota, `LocalAccountDataPurger` elimina físicamente todas las entidades Core Data cuyo `ownerId` corresponde a esa cuenta y todas sus claves `UserDefaults` con ámbito. Los datos de invitado y de otras cuentas permanecen intactos.
 
 `syncStatus`: `synced`, `pendingCreate`, `pendingUpdate`, `pendingDelete`, `conflict`, `error`.
+
+`AIRequestLog` es exclusivamente telemetría de cuota: propietario, versión de prompt, fecha y `outcome_code` cerrado (`started`, `success`, `invalid_output`, `quota_exhausted`, `upstream_error`, `timeout`, `unavailable`). No almacena parámetros de preparación, texto generado ni secretos. La reserva se crea dentro de la misma transacción que cuenta las solicitudes recientes del propietario.

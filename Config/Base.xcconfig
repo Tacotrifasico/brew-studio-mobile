@@ -1,5 +1,8 @@
 APP_DISPLAY_NAME = Cupa
 AUTH_URL_SCHEME = com.tacotrifasico.cupa
+// AXCIS-ONLINE P0: completar mediante un xcconfig local/no versionado. Staging
+// debe usar exactamente el mismo proyecto Supabase que el APK Android de prueba.
+// Sólo publishable/anon key; nunca service_role ni GEMINI_API_KEY en el cliente.
 SUPABASE_URL =
 SUPABASE_ANON_KEY =
 GEMINI_EDGE_FUNCTION = gemini-suggestions

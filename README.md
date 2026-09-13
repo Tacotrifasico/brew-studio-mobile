@@ -1,5 +1,7 @@
 # Cupa para iOS
 
+> Integración pendiente para Axcis: consultar [`AXCIS_BACKEND_HANDOFF.md`](AXCIS_BACKEND_HANDOFF.md) antes de configurar Supabase o probar Android↔iOS.
+
 Migración nativa en curso de Brew Studio Mobile a iPhone.
 
 ## Abrir

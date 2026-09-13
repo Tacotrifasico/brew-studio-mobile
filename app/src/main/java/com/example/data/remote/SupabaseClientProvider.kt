@@ -65,7 +65,9 @@ object SupabaseClientProvider {
 
     private val okHttpClient: OkHttpClient by lazy {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            // AXCIS-ONLINE P0: nunca registrar cuerpos; Auth devuelve access y
+            // refresh tokens. BASIC en debug permite diagnosticar sin exponerlos.
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
         }
 
         val headerInterceptor = Interceptor { chain ->

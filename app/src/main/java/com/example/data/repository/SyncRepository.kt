@@ -34,6 +34,9 @@ class SyncRepository(
             }
             var recipesPushed = 0
             for (localRecipe in unsyncedRecipes) {
+                // AXCIS-ONLINE P0: estos valores de preparación todavía son
+                // provisionales. Mapear ingredientes, pasos, método, dosis, agua,
+                // ratio y temperatura reales antes de declarar paridad online.
                 val remoteModel = RemoteRecipe(
                     id = localRecipe.remoteId,
                     userId = uid,

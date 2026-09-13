@@ -3,6 +3,7 @@ package com.example.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.catalog.BrewTechniqueCatalog
 import com.example.data.database.*
 import com.example.data.engine.RecipeIngredientInput
 import com.example.data.repository.BrewRepository
@@ -320,6 +321,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     private var cataTimerJob: Job? = null
 
     init {
+        viewModelScope.launch { repository.ensureCoreCatalog() }
+
         // Collect DB changes and update states
         viewModelScope.launch {
             repository.allPresets.collect { list ->
@@ -472,7 +475,24 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             if (_state.value.beansCount == 0) {
                 insertDemoData()
             }
+            delay(300)
+            syncStoredBrewingMethods()
             updateSensoryCategory(_state.value.ratio)
+        }
+    }
+
+    private suspend fun syncStoredBrewingMethods() {
+        _state.value.equipmentList.filter { instrument ->
+            instrument.type.equals("BREWER_METHOD", true) || instrument.type.equals("BREW_METHOD", true) ||
+                instrument.type.contains("metodo", true) || instrument.type.contains("método", true)
+        }.forEach { instrument ->
+            val method = repository.getOrCreateBrewMethodForInstrument(instrument.name)
+            if (repository.getPreferenceByMethodId(method.id) == null) {
+                repository.insertUserMethodPreference(
+                    UserMethodPreference(methodId = method.id, sourceInstrumentId = instrument.id)
+                )
+            }
+            createStarterTechniquesFor(method, method.defaultRatio)
         }
     }
 
@@ -524,32 +544,6 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         repository.insertInstrument(Instrument(name = "Kalita Wave 185", type = "BREWER_METHOD", notes = "Extractor de fondo plano para tazas balanceadas."))
         repository.insertInstrument(Instrument(name = "Fellow Stagg EKG", type = "KETTLE", notes = "Hervidor eléctrico con control térmico."))
 
-        // Technique demo
-        val techId = UUID.randomUUID().toString()
-        val defaultMethodUuid = "11111111-1111-4000-8000-000000000001"
-        val tech = Technique(
-            id = techId,
-            name = "V60 Tetsu Kasuya 4:6",
-            methodId = defaultMethodUuid,
-            doseG = 15.0f,
-            waterMl = 240,
-            ratio = 16.0f,
-            temperatureC = 92,
-            executionMode = "GUIDED",
-            grindValue = 24.0,
-            grindDescription = "Media Gruesa (24 clicks)",
-            grindUnit = "CLICKS",
-            notes = "Método diseñado por el Campeón Mundial Tetsu Kasuya. Divide el agua en pasajes de 40% y 60% para modular dulzura/acidez y cuerpo.",
-            totalTimeSeconds = 210
-        )
-        val steps = listOf(
-            TechniqueStep(stepNumber = 1, techniqueId = techId, title = "Bloom de gases", durationSeconds = 45, waterAddedMl = 50, waterAccumulatedMl = 50, intensity = "alta", gesture = "tap", stepNote = "Vierte rápido en espiral para mojar todo el café."),
-            TechniqueStep(stepNumber = 2, techniqueId = techId, title = "Ajuste de Dulzura", durationSeconds = 45, waterAddedMl = 70, waterAccumulatedMl = 120, intensity = "media", gesture = "tap", stepNote = "Vierte suavemente al centro."),
-            TechniqueStep(stepNumber = 3, techniqueId = techId, title = "Ajuste de Acidez", durationSeconds = 40, waterAddedMl = 40, waterAccumulatedMl = 160, intensity = "baja", gesture = "tap", stepNote = "Vierte suave."),
-            TechniqueStep(stepNumber = 4, techniqueId = techId, title = "Estructurar Cuerpo", durationSeconds = 40, waterAddedMl = 40, waterAccumulatedMl = 200, intensity = "baja", gesture = "tap", stepNote = "Vierte suave."),
-            TechniqueStep(stepNumber = 5, techniqueId = techId, title = "Claridad Final", durationSeconds = 40, waterAddedMl = 40, waterAccumulatedMl = 240, intensity = "baja", gesture = "tap", stepNote = "Completa el total de agua.")
-        )
-        repository.insertTechnique(tech, steps)
     }
 
     // --- BIDIRECTIONAL CALCULATORS ---
@@ -599,7 +593,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun onMethodSelected(method: String) {
-        val ratio = baseRatios[method] ?: 15.0f
+        val ratio = baseRatios[method]
+            ?: _state.value.userMethods.firstOrNull { it.name.equals(method, true) }?.defaultRatio
+            ?: 16.0f
         updateSensoryCategory(ratio)
         val calcWater = (_state.value.coffee * ratio).toInt()
         updateCalculatorAndPreparation { it.copy(
@@ -682,15 +678,19 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     // --- ACCIONES DE COMPARTIR VARIABLES ---
     fun onActionPrepare() {
         val currentVal = _state.value
+        val keepSelectedTechnique = currentVal.activePrepMethod.equals(currentVal.method, ignoreCase = true) &&
+            currentVal.activePrepSteps.isNotEmpty()
         // Envia variables a Preparar
         _state.update { it.copy(
             activePrepMethod = currentVal.method,
             activePrepCoffee = currentVal.coffee,
             activePrepWater = currentVal.water,
             activePrepRatio = currentVal.ratio,
-            activePrepTemp = 93,
-            activePrepTechniqueName = "${currentVal.method} Estándar",
-            activePrepSteps = generateQuickSteps(currentVal.method, currentVal.water)
+            activePrepTemp = if (keepSelectedTechnique) currentVal.activePrepTemp else 93,
+            activePrepTechniqueName = if (keepSelectedTechnique) currentVal.activePrepTechniqueName
+                else BrewTechniqueCatalog.firstTechniqueFor(currentVal.method)?.name ?: "${currentVal.method} Estándar",
+            activePrepSteps = if (keepSelectedTechnique) currentVal.activePrepSteps
+                else generateQuickSteps(currentVal.method, currentVal.water)
         ) }
         showToast("Enviado a Preparar: Extracción de ${currentVal.coffee}g para ${currentVal.water}ml.")
     }
@@ -774,15 +774,26 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     ) {
         _state.update { current ->
             val updated = transform(current)
-            if (current.timerRunning) updated else updated.copy(
-                activePrepMethod = updated.method,
-                activePrepCoffee = updated.coffee,
-                activePrepWater = updated.water,
-                activePrepRatio = updated.ratio,
-                activePrepTemp = 93,
-                activePrepTechniqueName = "${updated.method} Estándar",
-                activePrepSteps = generateQuickSteps(updated.method, updated.water)
-            )
+            if (current.timerRunning) updated else {
+                val selectedStillMatches = current.activePrepMethod.equals(updated.method, ignoreCase = true) &&
+                    current.activePrepTechniqueName.isNotBlank()
+                val techniqueName = if (selectedStillMatches) current.activePrepTechniqueName
+                    else BrewTechniqueCatalog.firstTechniqueFor(updated.method)?.name ?: "${updated.method} Estándar"
+                val sourceSteps = if (selectedStillMatches && current.activePrepSteps.isNotEmpty()) current.activePrepSteps
+                    else generateQuickSteps(updated.method, updated.water)
+                val scaledSteps = if (selectedStillMatches) {
+                    BrewTechniqueCatalog.scaleSteps(sourceSteps, current.activePrepWater, updated.water)
+                } else sourceSteps
+                updated.copy(
+                    activePrepMethod = updated.method,
+                    activePrepCoffee = updated.coffee,
+                    activePrepWater = updated.water,
+                    activePrepRatio = updated.ratio,
+                    activePrepTemp = if (selectedStillMatches) current.activePrepTemp else 93,
+                    activePrepTechniqueName = techniqueName,
+                    activePrepSteps = scaledSteps
+                )
+            }
         }
     }
 
@@ -791,13 +802,15 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             val tech = _state.value.techniquesList.find { it.id == techId }
             if (tech != null) {
+                val current = _state.value
                 val dbSteps = repository.getStepsForTechniqueSync(techId)
-                val finalSteps = if (dbSteps.isNotEmpty()) dbSteps else generateQuickSteps(tech.methodId, tech.waterMl)
+                val finalSteps = if (dbSteps.isNotEmpty()) {
+                    BrewTechniqueCatalog.scaleSteps(dbSteps, tech.waterMl, current.activePrepWater)
+                } else generateQuickSteps(current.activePrepMethod, current.activePrepWater)
+                val methodName = current.allBrewMethods.firstOrNull { it.id == tech.methodId }?.let { methodDisplayName(it) }
+                    ?: BrewTechniqueCatalog.methodName(tech.methodId)
                 _state.update { it.copy(
-                    activePrepMethod = tech.methodId,
-                    activePrepCoffee = tech.doseG,
-                    activePrepWater = tech.waterMl,
-                    activePrepRatio = tech.ratio,
+                    activePrepMethod = methodName,
                     activePrepTemp = tech.temperatureC,
                     activePrepTechniqueName = tech.name,
                     activePrepGrinder = tech.grindDescription ?: "Manual",
@@ -880,6 +893,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun deleteTechnique(techId: String) {
+        if (BrewTechniqueCatalog.isBuiltInTechnique(techId)) {
+            showToast("Las técnicas incluidas por Cupa no se pueden eliminar.")
+            return
+        }
         viewModelScope.launch {
             val tech = _state.value.techniquesList.find { it.id == techId }
             if (tech != null) {
@@ -1441,8 +1458,73 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     isActive = true
                 )
                 repository.insertUserMethodPreference(pref)
+                createStarterTechniquesFor(bm, bm.defaultRatio)
             }
             showToast("Equipo / Método '$name' registrado en el Almacén.")
+        }
+    }
+
+    fun addCustomMethod(name: String, defaultRatio: Float = 16f, onCreated: ((BrewMethod) -> Unit)? = null) {
+        val cleanName = name.trim()
+        if (cleanName.isBlank()) return
+        viewModelScope.launch {
+            val inst = Instrument(name = cleanName, type = "BREWER_METHOD", notes = "Método personalizado")
+            repository.insertInstrument(inst)
+            val method = repository.getOrCreateBrewMethodForInstrument(cleanName).let {
+                if (it.defaultRatio == defaultRatio) it else it.copy(defaultRatio = defaultRatio)
+            }
+            repository.insertBrewMethod(method)
+            val existing = repository.getPreferenceByMethodId(method.id)
+            repository.insertUserMethodPreference(
+                existing?.copy(isPinnedToCalculator = true, isActive = true, sourceInstrumentId = existing.sourceInstrumentId ?: inst.id)
+                    ?: UserMethodPreference(methodId = method.id, sourceInstrumentId = inst.id)
+            )
+            createStarterTechniquesFor(method, defaultRatio)
+            val water = (_state.value.coffee * defaultRatio).toInt().coerceAtLeast(1)
+            updateSensoryCategory(defaultRatio)
+            updateCalculatorAndPreparation { it.copy(
+                method = cleanName, ratio = defaultRatio, ratioInput = defaultRatio.toString(),
+                water = water, waterInput = water.toString(),
+                microcopy = "Método cambiado a $cleanName. Ratio sugerido 1:$defaultRatio."
+            ) }
+            showToast("Método '$cleanName' agregado a la calculadora y a Preparar café.")
+            onCreated?.invoke(method)
+        }
+    }
+
+    private suspend fun createStarterTechniquesFor(method: BrewMethod, ratio: Float) {
+        if (_state.value.techniquesList.count { it.methodId == method.id } >= 3) return
+        val dose = 15f
+        val water = (dose * ratio).toInt().coerceAtLeast(1)
+        val variants = listOf(
+            Triple("Balanceada en 3 fases", listOf(2, 4, 4), listOf(40, 50, 60)),
+            Triple("Flujo continuo", listOf(2, 8), listOf(45, 100)),
+            Triple("Pulsos suaves", listOf(2, 3, 3, 2), listOf(40, 35, 35, 45))
+        )
+        variants.forEachIndexed { index, variant ->
+            val techId = "${method.id}-starter-${index + 1}"
+            val technique = Technique(
+                id = techId, name = variant.first, methodId = method.id, doseG = dose,
+                waterMl = water, ratio = ratio, temperatureC = 93,
+                grindDescription = "Ajuste inicial", notes = "Técnica inicial editable para ${method.nameKey}.",
+                totalTimeSeconds = variant.third.sum()
+            )
+            val totalWeight = variant.second.sum()
+            var accumulated = 0
+            val steps = variant.second.mapIndexed { stepIndex, weight ->
+                val added = if (stepIndex == variant.second.lastIndex) water - accumulated
+                    else (water * weight / totalWeight)
+                accumulated += added
+                TechniqueStep(
+                    id = "$techId-step-${stepIndex + 1}", techniqueId = techId,
+                    stepNumber = stepIndex + 1,
+                    title = if (stepIndex == 0) "Inicio y saturación" else "Fase ${stepIndex + 1}",
+                    durationSeconds = variant.third[stepIndex], waterAddedMl = added,
+                    waterAccumulatedMl = accumulated, gesture = if (stepIndex == 0) "BLOOM" else "CIRCULAR_POUR",
+                    stepNote = "Ajusta este paso después de probar tu método."
+                )
+            }
+            repository.insertTechnique(technique, steps)
         }
     }
 
@@ -1558,6 +1640,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     // --- PRESET UTILITIES ---
     private fun generateQuickSteps(method: String, waterMl: Int): List<TechniqueStep> {
+        BrewTechniqueCatalog.firstTechniqueFor(method)?.let { return BrewTechniqueCatalog.steps(it, waterMl) }
         return when (method) {
             "Espresso" -> listOf(
                 TechniqueStep(stepNumber = 1, techniqueId = "", title = "Extracción de Presión", durationSeconds = 30, waterAddedMl = waterMl, waterAccumulatedMl = waterMl, intensity = "alta", gesture = "tap", stepNote = "Manten la presión uniforme.")
@@ -1573,6 +1656,23 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 TechniqueStep(stepNumber = 3, techniqueId = "", title = "Segundo Vertido final", durationSeconds = 40, waterAddedMl = waterMl - (50 + (waterMl - 50) / 2), waterAccumulatedMl = waterMl, intensity = "baja", gesture = "tap", stepNote = "Completa la secuencia.")
             )
         }
+    }
+
+    fun isBuiltInTechnique(id: String): Boolean = BrewTechniqueCatalog.isBuiltInTechnique(id)
+
+    fun methodIdForName(name: String): String? =
+        _state.value.allBrewMethods.firstOrNull { methodDisplayName(it).equals(name, true) }?.id
+            ?: BrewTechniqueCatalog.methodId(name)
+
+    private fun methodDisplayName(method: BrewMethod): String = when (method.code.lowercase()) {
+        "v60" -> "V60"
+        "aeropress" -> "AeroPress"
+        "espresso" -> "Espresso"
+        "french_press" -> "Prensa francesa"
+        "chemex" -> "Chemex"
+        "moka" -> "Moka"
+        "cold_brew" -> "Cold brew"
+        else -> method.nameKey.removePrefix("brew_method.").removeSuffix(".name")
     }
 
     // --- SNACKBAR & NOTIFICATION UTILITIES ---

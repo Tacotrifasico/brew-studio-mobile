@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import com.example.data.database.*
+import com.example.data.catalog.BrewTechniqueCatalog
 import com.example.data.engine.RecipeIngredientInput
 import kotlinx.coroutines.flow.Flow
 
@@ -55,6 +56,10 @@ class BrewRepository(
         return brewMethodDao?.getMethodById(id)
     }
 
+    suspend fun insertBrewMethod(method: BrewMethod) {
+        brewMethodDao?.insertMethod(method)
+    }
+
     suspend fun getOrCreateBrewMethodForInstrument(name: String): BrewMethod {
         val code = name.lowercase().replace(" ", "_").replace(Regex("[^a-z0-9_]"), "")
         val existing = brewMethodDao?.getMethodByCode(code)
@@ -67,6 +72,23 @@ class BrewRepository(
         )
         brewMethodDao?.insertMethod(newMethod)
         return newMethod
+    }
+
+    suspend fun ensureCoreCatalog() {
+        BrewTechniqueCatalog.methods.forEach { method ->
+            if (brewMethodDao?.getMethodById(method.id) == null) brewMethodDao?.insertMethod(method)
+        }
+        BrewTechniqueCatalog.preferences.forEach { preference ->
+            if (userMethodPreferenceDao?.getPreferenceByMethodId(preference.methodId) == null) {
+                userMethodPreferenceDao?.insertPreference(preference)
+            }
+        }
+        BrewTechniqueCatalog.techniques.forEach { template ->
+            if (techniqueDao.getTechniqueById(template.id) == null) {
+                val technique = BrewTechniqueCatalog.entity(template)
+                insertTechnique(technique, BrewTechniqueCatalog.steps(template, technique.waterMl))
+            }
+        }
     }
 
     // Counts

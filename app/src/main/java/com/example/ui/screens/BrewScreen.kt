@@ -150,6 +150,40 @@ fun BrewSetupView(
     state: com.example.ui.viewmodel.BaristaCalcState
 ) {
     val scrollState = rememberScrollState()
+    var showAddMethodDialog by remember { mutableStateOf(false) }
+    var newMethodName by remember { mutableStateOf("") }
+    var newMethodRatio by remember { mutableStateOf("16") }
+    val activeMethodId = viewModel.methodIdForName(state.activePrepMethod)
+    val matchingTechniques = state.techniquesList.filter { it.methodId == activeMethodId }
+
+    if (showAddMethodDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddMethodDialog = false },
+            title = { Text("Agregar método", fontWeight = FontWeight.Bold, color = TextPrincipal) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("El método aparecerá en la calculadora y en Preparar café con tres técnicas iniciales.", fontSize = 12.sp, color = TextSecundario)
+                    StyledOutlinedTextField(value = newMethodName, onValueChange = { newMethodName = it }, label = "Nombre", placeholder = "Ej. Kalita Wave")
+                    StyledOutlinedTextField(value = newMethodRatio, onValueChange = { newMethodRatio = it }, label = "Ratio inicial 1:", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                }
+            },
+            confirmButton = {
+                StyledPrimaryButton(
+                    text = "Agregar y seleccionar",
+                    onClick = {
+                        viewModel.addCustomMethod(newMethodName, newMethodRatio.replace(',', '.').toFloatOrNull() ?: 16f) { _ ->
+                            showAddMethodDialog = false
+                            newMethodName = ""
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            dismissButton = { TextButton(onClick = { showAddMethodDialog = false }) { Text("Cancelar", color = TextSecundario) } },
+            containerColor = SurfaceCard,
+            shape = RoundedCornerShape(22.dp)
+        )
+    }
 
     val (c1, c2) = when {
         state.activePrepRatio <= 6f -> Pair(Color(0xFF3D2817), Color(0xFF7A3B2E))
@@ -298,16 +332,23 @@ fun BrewSetupView(
 
         // Techniques library section
         Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = "CARGAR TÉCNICA DE LA BIBLIOTECA",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextSecundario,
-                letterSpacing = 1.sp
-            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "TÉCNICAS PARA ${state.activePrepMethod.uppercase(Locale.getDefault())}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextSecundario,
+                    letterSpacing = 1.sp
+                )
+                TextButton(onClick = { showAddMethodDialog = true }) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Método", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (state.techniquesList.isEmpty()) {
+            if (matchingTechniques.isEmpty()) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -337,13 +378,13 @@ fun BrewSetupView(
                             )
                         }
                         Text(
-                            text = "Biblioteca en vacío",
+                            text = "Aún no hay técnicas para ${state.activePrepMethod}",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrincipal
                         )
                         Text(
-                            text = "Los presets rápidos se cargan automáticamente al iniciar extracciones.",
+                            text = "Crea una técnica propia o agrega otro método.",
                             fontSize = 12.sp,
                             color = TextSecundario,
                             textAlign = TextAlign.Center
@@ -351,7 +392,7 @@ fun BrewSetupView(
                     }
                 }
             } else {
-                state.techniquesList.forEach { tech ->
+                matchingTechniques.forEach { tech ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -383,10 +424,12 @@ fun BrewSetupView(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(tech.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                                Text("${tech.doseG}g café • ${tech.waterMl}ml agua", fontSize = 11.sp, color = TextSecundario)
+                                Text("Usará ${state.activePrepCoffee}g • ${state.activePrepWater}ml • 1:${state.activePrepRatio}", fontSize = 11.sp, color = TextSecundario)
                             }
-                            IconButton(onClick = { viewModel.deleteTechnique(tech.id) }) {
-                                Icon(imageVector = Icons.Default.Delete, contentDescription = "Borrar", tint = Advertencia.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                            if (!viewModel.isBuiltInTechnique(tech.id)) {
+                                IconButton(onClick = { viewModel.deleteTechnique(tech.id) }) {
+                                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Borrar", tint = Advertencia.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                                }
                             }
                         }
                     }
@@ -640,7 +683,10 @@ fun CreateTechniqueFormView(
         com.example.data.domain.UserMethodItem("1", "11111111-1111-4000-8000-000000000001", "V60", "v60"),
         com.example.data.domain.UserMethodItem("2", "11111111-1111-4000-8000-000000000002", "AeroPress", "aeropress"),
         com.example.data.domain.UserMethodItem("3", "11111111-1111-4000-8000-000000000003", "Espresso", "espresso"),
-        com.example.data.domain.UserMethodItem("4", "11111111-1111-4000-8000-000000000004", "Prensa francesa", "french_press")
+        com.example.data.domain.UserMethodItem("4", "11111111-1111-4000-8000-000000000004", "Prensa francesa", "french_press"),
+        com.example.data.domain.UserMethodItem("5", "11111111-1111-4000-8000-000000000006", "Chemex", "chemex"),
+        com.example.data.domain.UserMethodItem("6", "11111111-1111-4000-8000-000000000007", "Moka", "moka"),
+        com.example.data.domain.UserMethodItem("7", "11111111-1111-4000-8000-000000000008", "Cold brew", "cold_brew")
     )
     var selectedMethodId by remember { mutableStateOf(availableMethods.firstOrNull()?.methodId ?: "11111111-1111-4000-8000-000000000001") }
     var methodDropdownExpanded by remember { mutableStateOf(false) }
@@ -853,9 +899,11 @@ fun CreateTechniqueFormView(
                                     text = "Guardar en Almacén",
                                     onClick = {
                                         if (newMethodInputName.isNotBlank()) {
-                                            viewModel.addEquipment(newMethodInputName, "BREWER_METHOD", "Método personalizado")
-                                            showAddMethodDialog = false
-                                            newMethodInputName = ""
+                                            viewModel.addCustomMethod(newMethodInputName) { createdMethod ->
+                                                selectedMethodId = createdMethod.id
+                                                showAddMethodDialog = false
+                                                newMethodInputName = ""
+                                            }
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth()

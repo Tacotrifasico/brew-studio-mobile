@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import com.example.data.database.*
@@ -80,6 +82,7 @@ fun StorageScreen(
     var selectedRecipeForDetail by remember { mutableStateOf<Recipe?>(null) }
     var showRecipeImporterDialog by remember { mutableStateOf(false) }
     var importedRecipeDraft by remember { mutableStateOf<RecipeDraft?>(null) }
+    var showTechniqueCreator by remember { mutableStateOf(false) }
 
     if (state.pendingPinDialogInstrument != null) {
         val inst = state.pendingPinDialogInstrument!!
@@ -161,10 +164,10 @@ fun StorageScreen(
 
             Button(
                 onClick = {
-                    if (selectedCategory == "Café") {
-                        isAddingNewBean = true
-                    } else {
-                        isAddingNewOther = !isAddingNewOther
+                    when (selectedCategory) {
+                        "Café" -> isAddingNewBean = true
+                        "Técnicas" -> showTechniqueCreator = true
+                        else -> isAddingNewOther = !isAddingNewOther
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = CafeCalidoOscuro),
@@ -198,7 +201,7 @@ fun StorageScreen(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            val categories = listOf("Café", "Molinos", "Equipos", "Recetas", "Tazas", "Ciencia")
+            val categories = listOf("Café", "Molinos", "Equipos", "Recetas", "Técnicas", "Tazas", "Ciencia")
             items(categories) { cat ->
                 val isSelected = selectedCategory == cat
                 Box(
@@ -225,7 +228,7 @@ fun StorageScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         // --- TAB CONTENT WORKFLOW ---
-        if (isAddingNewOther && selectedCategory != "Café") {
+        if (isAddingNewOther && selectedCategory != "Café" && selectedCategory != "Técnicas") {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -466,6 +469,38 @@ fun StorageScreen(
                         }
                     }
                 }
+                "Técnicas" -> {
+                    if (state.techniquesList.isEmpty()) {
+                        item {
+                            EmptyStateLayout(
+                                text = "No has guardado técnicas. Créala aquí, desde Preparar o guarda una calibración del Laboratorio.",
+                                actionText = "Crear Técnica",
+                                onActionClick = { showTechniqueCreator = true }
+                            )
+                        }
+                    } else {
+                        item {
+                            Text(
+                                text = "BIBLIOTECA DE PREPARACIÓN · ${state.techniquesList.size}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.sp,
+                                color = TextSecundario
+                            )
+                        }
+                        items(state.techniquesList, key = { it.id }) { technique ->
+                            val methodName = state.userMethods.firstOrNull { it.methodId == technique.methodId }?.name
+                                ?: technique.legacyMethodName
+                                ?: "Método guardado"
+                            TechniqueStorageItemCard(
+                                technique = technique,
+                                methodName = methodName,
+                                isBuiltIn = viewModel.isBuiltInTechnique(technique.id),
+                                onDelete = { viewModel.deleteTechnique(technique.id) }
+                            )
+                        }
+                    }
+                }
                 "Tazas" -> {
                     if (state.cupsList.isEmpty()) {
                         item {
@@ -574,6 +609,82 @@ fun StorageScreen(
                 selectedCategory = "Recetas"
             }
         )
+    }
+
+    if (showTechniqueCreator) {
+        Dialog(
+            onDismissRequest = { showTechniqueCreator = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MainBackground
+            ) {
+                CreateTechniqueFormView(
+                    viewModel = viewModel,
+                    onDone = { showTechniqueCreator = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TechniqueStorageItemCard(
+    technique: Technique,
+    methodName: String,
+    isBuiltIn: Boolean,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, BordeSuave, RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(AcentoPrincipal.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(V60Icon, contentDescription = null, tint = AcentoPrincipal)
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(technique.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal, modifier = Modifier.weight(1f))
+                    if (isBuiltIn) {
+                        Text("INCLUIDA", fontSize = 8.sp, fontWeight = FontWeight.Black, color = AcentoPrincipal)
+                    }
+                }
+                Text(
+                    "$methodName · ${technique.doseG} g → ${technique.waterMl} ml · 1:${technique.ratio}",
+                    fontSize = 11.sp,
+                    color = TextSecundario,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "${technique.totalTimeSeconds / 60}:${(technique.totalTimeSeconds % 60).toString().padStart(2, '0')} min · ${technique.executionMode.lowercase().replaceFirstChar { it.uppercase() }}",
+                    fontSize = 10.sp,
+                    color = AcentoSecundario
+                )
+            }
+            if (!isBuiltIn) {
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.DeleteOutline, contentDescription = "Eliminar técnica", tint = Advertencia)
+                }
+            } else {
+                Icon(Icons.Default.Lock, contentDescription = "Técnica incluida", tint = TextSecundario, modifier = Modifier.size(18.dp))
+            }
+        }
     }
 }
 

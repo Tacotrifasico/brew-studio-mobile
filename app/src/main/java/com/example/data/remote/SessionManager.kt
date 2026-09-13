@@ -7,6 +7,10 @@ class SessionManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("brew_studio_prefs", Context.MODE_PRIVATE)
 
     companion object {
+        // AXCIS-ONLINE P0: ampliar la sesión con refresh_token y expires_at,
+        // guardarlos mediante Android Keystore/EncryptedSharedPreferences y
+        // renovar antes de cada sincronización. Un access token persistido sin
+        // expiración hace que la UI parezca conectada aunque Supabase ya responda 401.
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_EMAIL = "user_email"

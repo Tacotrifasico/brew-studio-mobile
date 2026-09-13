@@ -8,7 +8,7 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk { version = release(37) { minorApiLevel = 0 } }
 
   defaultConfig {
     applicationId = "com.aistudio.brewstudio.tfcqwy"
@@ -65,6 +65,9 @@ android {
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
 // to match the convention used in Web projects.
+// AXCIS-ONLINE P0: Android y Cupa-Staging de iOS deben apuntar al MISMO proyecto
+// Supabase Staging. Mantener los valores reales en `.env` (ignorado por Git) y
+// usar únicamente la publishable/anon key; nunca incluir `service_role` aquí.
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"

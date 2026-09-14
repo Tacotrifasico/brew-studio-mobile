@@ -385,7 +385,8 @@ private struct RecipeEditorView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "equipmentType == 'BREWER_METHOD'"))) private var methods: FetchedResults<EquipmentRecord>
     let recipe: RecipeRecord?
     var initialDraft: RecipeDraftModel? = nil
-    @State private var draft = RecipeDraftModel(); @State private var loaded = false; @State private var errorMessage: String?
+    @State private var draft = RecipeDraftModel(); @State private var loaded = false; @State private var errorMessage: String?; @State private var isSaving = false
+    @SceneStorage("cupa.recipeEditorDraft.v1") private var storedDraft: Data?
 
     var body: some View {
         NavigationStack {
@@ -427,10 +428,11 @@ private struct RecipeEditorView: View {
             .environment(\.editMode, .constant(.active))
             .navigationTitle(recipe == nil ? "Nueva receta" : "Editar receta")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Guardar", action: save).disabled(!canSave) }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { storedDraft = nil; dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(isSaving ? "Guardando…" : "Guardar", action: save).disabled(!canSave || isSaving) }
             }
             .onAppear(perform: load)
+            .onChange(of: draft) { _, value in storedDraft = try? JSONEncoder().encode(value) }
             .alert("No se pudo guardar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "") }
         }
     }
@@ -438,12 +440,15 @@ private struct RecipeEditorView: View {
     private var canSave: Bool { !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.ingredients.contains { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty } && draft.steps.contains { !$0.instruction.trimmingCharacters(in: .whitespaces).isEmpty } }
     private func load() {
         guard !loaded else { return }; loaded = true
+        if let storedDraft, let restored = try? JSONDecoder().decode(RecipeDraftModel.self, from: storedDraft), recipe == nil || restored.id == recipe?.id { draft = restored; return }
         if let recipe { do { draft = try RecipeTechniqueRepository(context: context).recipeDraft(for: recipe) } catch { errorMessage = error.localizedDescription } }
         else if let initialDraft { draft = initialDraft }
     }
     private func save() {
+        guard !isSaving else { return }
+        isSaving = true
         if let selected = methods.first(where: { $0.id == draft.suggestedMethodId }) { draft.suggestedMethodName = selected.name }
-        do { _ = try RecipeTechniqueRepository(context: context).saveRecipe(draft); dismiss() } catch { errorMessage = error.localizedDescription }
+        do { _ = try RecipeTechniqueRepository(context: context).saveRecipe(draft); storedDraft = nil; dismiss() } catch { isSaving = false; errorMessage = error.localizedDescription }
     }
 }
 
@@ -485,6 +490,7 @@ private struct TechniqueEditorView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "equipmentType == 'BREWER_METHOD'"))) private var methods: FetchedResults<EquipmentRecord>
     let technique: TechniqueRecord?
     @State private var draft = TechniqueDraftModel(); @State private var loaded = false; @State private var errorMessage: String?; @State private var isSaving = false
+    @SceneStorage("cupa.techniqueEditorDraft.v1") private var storedDraft: Data?
 
     var body: some View {
         NavigationStack {
@@ -520,22 +526,27 @@ private struct TechniqueEditorView: View {
             .environment(\.editMode, .constant(.active))
             .navigationTitle(technique == nil ? "Nueva técnica" : "Editar técnica")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { storedDraft = nil; dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button(isSaving ? "Guardando…" : "Guardar", action: save).disabled(!canSave || isSaving) }
             }
             .onAppear(perform: load)
+            .onChange(of: draft) { _, value in storedDraft = try? JSONEncoder().encode(value) }
             .alert("No se pudo guardar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "") }
         }
     }
 
     private var validationMessage: String? { TechniqueDraftValidator.message(for: draft) }
     private var canSave: Bool { validationMessage == nil }
-    private func load() { guard !loaded else { return }; loaded = true; if let technique { do { draft = try RecipeTechniqueRepository(context: context).techniqueDraft(for: technique) } catch { errorMessage = error.localizedDescription } } }
+    private func load() {
+        guard !loaded else { return }; loaded = true
+        if let storedDraft, let restored = try? JSONDecoder().decode(TechniqueDraftModel.self, from: storedDraft), technique == nil || restored.id == technique?.id { draft = restored; return }
+        if let technique { do { draft = try RecipeTechniqueRepository(context: context).techniqueDraft(for: technique) } catch { errorMessage = error.localizedDescription } }
+    }
     private func save() {
         guard !isSaving else { return }
         isSaving = true
         if let method = methods.first(where: { $0.id == draft.methodId }) { draft.methodName = method.name }
-        do { _ = try RecipeTechniqueRepository(context: context).saveTechnique(draft); dismiss() } catch { isSaving = false; errorMessage = error.localizedDescription }
+        do { _ = try RecipeTechniqueRepository(context: context).saveTechnique(draft); storedDraft = nil; dismiss() } catch { isSaving = false; errorMessage = error.localizedDescription }
     }
     private func importRecipeQuantities() {
         guard let recipeId = draft.recipeId else { return }

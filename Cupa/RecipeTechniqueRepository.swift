@@ -1,15 +1,15 @@
 import CoreData
 import Foundation
 
-struct RecipeIngredientDraft: Identifiable, Equatable {
+struct RecipeIngredientDraft: Identifiable, Equatable, Codable {
     var id = UUID(); var name = ""; var amount = 0.0; var unit = "GRAMS"
 }
 
-struct RecipeStepDraft: Identifiable, Equatable {
+struct RecipeStepDraft: Identifiable, Equatable, Codable {
     var id = UUID(); var instruction = ""; var durationSeconds: Int?
 }
 
-struct RecipeDraftModel: Equatable {
+struct RecipeDraftModel: Equatable, Codable {
     var id = UUID(); var name = ""; var recipeKind = "BLACK_COFFEE"; var intention = ""
     var suggestedMethodId: UUID?; var suggestedMethodName = ""; var isFavorite = false; var tags = ""
     var ingredients: [RecipeIngredientDraft] = []; var steps: [RecipeStepDraft] = []
@@ -126,13 +126,13 @@ enum RecipeTextParser {
     private static func containsAny(_ text: String, _ values: [String]) -> Bool { values.contains(where: text.contains) }
 }
 
-struct TechniqueStepDraft: Identifiable, Equatable {
+struct TechniqueStepDraft: Identifiable, Equatable, Codable {
     var id = UUID(); var title = ""; var durationSeconds = 30; var waterAddedMl = 0
     var intensity = "MEDIUM"; var gesture = "CIRCULAR_POUR"; var note = ""
     var coverage: Double?; var flow: Double?; var secondaryAction: String?
 }
 
-struct TechniqueDraftModel: Equatable {
+struct TechniqueDraftModel: Equatable, Codable {
     var id = UUID(); var name = ""; var methodId: UUID?; var methodName = "V60"
     var recipeId: UUID?; var beanId: UUID?; var grinderId: UUID?
     var doseGrams = 15.0; var waterMl = 240; var ratio = 16.0; var temperatureC = 93

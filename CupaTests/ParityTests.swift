@@ -374,6 +374,13 @@ final class LocalPersistenceTests: XCTestCase {
 }
 
 final class RecipeTechniqueRepositoryTests: XCTestCase {
+    func testEditorDraftsRoundTripForSceneRecovery() throws {
+        let recipe = RecipeDraftModel(name: "Receta pendiente", ingredients: [.init(name: "Café", amount: 18)], steps: [.init(instruction: "Mezclar")])
+        XCTAssertEqual(try JSONDecoder().decode(RecipeDraftModel.self, from: JSONEncoder().encode(recipe)), recipe)
+        let technique = TechniqueDraftModel(name: "Técnica pendiente", steps: [.init(title: "Bloom", durationSeconds: 30, waterAddedMl: 240)])
+        XCTAssertEqual(try JSONDecoder().decode(TechniqueDraftModel.self, from: JSONEncoder().encode(technique)), technique)
+    }
+
     @MainActor func testTechniqueValidationRejectsWaterMismatchAndNormalizesRatio() throws {
         var draft = TechniqueDraftModel(name: "V60", doseGrams: 15, waterMl: 240, ratio: 99, temperatureC: 93, steps: [.init(title: "Bloom", durationSeconds: 30, waterAddedMl: 50)])
         XCTAssertThrowsError(try TechniqueDraftValidator.validate(draft)) { XCTAssertEqual($0 as? TechniqueDraftValidationError, .waterMismatch) }

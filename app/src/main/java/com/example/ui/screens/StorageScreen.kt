@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.validation.BrewInputRules
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import com.example.data.database.*
@@ -874,6 +875,7 @@ private fun TechniqueStorageEditorDialog(
     onDismiss: () -> Unit,
     onSave: (Technique, List<TechniqueStep>) -> Unit
 ) {
+    var isSaving by remember(technique.id) { mutableStateOf(false) }
     var name by remember(technique.id) { mutableStateOf(technique.name) }
     var coffee by remember(technique.id) { mutableStateOf(technique.doseG.toString()) }
     var water by remember(technique.id) { mutableStateOf(technique.waterMl.toString()) }
@@ -888,9 +890,15 @@ private fun TechniqueStorageEditorDialog(
     val waterValue = water.toIntOrNull()
     val temperatureValue = temperature.toIntOrNull()
     val stepWater = drafts.sumOf { it.water.toIntOrNull() ?: 0 }
-    val valid = name.trim().isNotEmpty() && coffeeValue != null && coffeeValue > 0f && waterValue != null && waterValue > 0 &&
-            temperatureValue != null && temperatureValue in 60..100 && drafts.isNotEmpty() &&
-            drafts.all { it.title.trim().isNotEmpty() && (it.duration.toIntOrNull() ?: 0) > 0 && (it.water.toIntOrNull() ?: -1) >= 0 } && stepWater == waterValue
+    val validationError = BrewInputRules.techniqueError(
+        name = name,
+        coffee = coffeeValue,
+        temperature = temperatureValue,
+        stepTitles = drafts.map { it.title },
+        stepDurations = drafts.map { it.duration.toIntOrNull() },
+        stepWaters = drafts.map { it.water.toIntOrNull() }
+    ) ?: if (stepWater != waterValue) "La suma del agua de los pasos debe coincidir con el agua total." else null
+    val valid = validationError == null
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MainBackground) {
@@ -935,13 +943,15 @@ private fun TechniqueStorageEditorDialog(
                         }
                     }
                 }
-                if (stepWater != (waterValue ?: 0)) {
-                    Text("Los vertidos suman $stepWater ml y deben coincidir con ${waterValue ?: 0} ml.", fontSize = 11.sp, color = Advertencia, modifier = Modifier.padding(bottom = 6.dp))
+                if (validationError != null) {
+                    Text(validationError, fontSize = 11.sp, color = Advertencia, modifier = Modifier.padding(bottom = 6.dp))
                 }
                 Button(
-                    enabled = valid,
+                    enabled = valid && !isSaving,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
+                        if (isSaving) return@Button
+                        isSaving = true
                         val total = waterValue ?: return@Button
                         var accumulated = 0
                         val steps = drafts.mapIndexed { index, draft ->
@@ -954,7 +964,7 @@ private fun TechniqueStorageEditorDialog(
                         }
                         onSave(technique.copy(name = name.trim(), doseG = coffeeValue ?: technique.doseG, waterMl = total, ratio = total / (coffeeValue ?: technique.doseG), temperatureC = temperatureValue ?: technique.temperatureC, notes = notes.trim(), totalTimeSeconds = steps.sumOf { it.durationSeconds }), steps)
                     }
-                ) { Text("Guardar cambios") }
+                ) { Text(if (isSaving) "Guardando…" else "Guardar cambios") }
             }
         }
     }

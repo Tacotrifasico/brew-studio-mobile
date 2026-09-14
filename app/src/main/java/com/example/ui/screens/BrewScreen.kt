@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.database.Technique
+import com.example.data.validation.BrewInputRules
 import com.example.ui.theme.*
 import com.example.ui.components.*
 import com.example.ui.viewmodel.BaristaCalcViewModel
@@ -676,7 +678,8 @@ fun CreateTechniqueFormView(
 ) {
     val state by viewModel.state.collectAsState()
 
-    var name by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var isSaving by rememberSaveable { mutableStateOf(false) }
     
     // Method Picker state
     val availableMethods = if (state.userMethods.isNotEmpty()) state.userMethods else listOf(
@@ -688,14 +691,14 @@ fun CreateTechniqueFormView(
         com.example.data.domain.UserMethodItem("6", "11111111-1111-4000-8000-000000000007", "Moka", "moka"),
         com.example.data.domain.UserMethodItem("7", "11111111-1111-4000-8000-000000000008", "Cold brew", "cold_brew")
     )
-    var selectedMethodId by remember { mutableStateOf(availableMethods.firstOrNull()?.methodId ?: "11111111-1111-4000-8000-000000000001") }
+    var selectedMethodId by rememberSaveable { mutableStateOf(availableMethods.firstOrNull()?.methodId ?: "11111111-1111-4000-8000-000000000001") }
     var methodDropdownExpanded by remember { mutableStateOf(false) }
     var showAddMethodDialog by remember { mutableStateOf(false) }
     var newMethodInputName by remember { mutableStateOf("") }
 
-    var coffee by remember { mutableStateOf("15.0") }
-    var water by remember { mutableStateOf("240") }
-    var temp by remember { mutableStateOf("93") }
+    var coffee by rememberSaveable { mutableStateOf("15.0") }
+    var water by rememberSaveable { mutableStateOf("240") }
+    var temp by rememberSaveable { mutableStateOf("93") }
 
     // Grinder Picker state
     val grinders = state.grindersList.ifEmpty { state.equipmentList.filter { it.type == "GRINDER" } }
@@ -704,21 +707,21 @@ fun CreateTechniqueFormView(
     var grinderDropdownExpanded by remember { mutableStateOf(false) }
     var showAddGrinderDialog by remember { mutableStateOf(false) }
 
-    var clicks by remember { mutableStateOf("24") }
-    var notes by remember { mutableStateOf("") }
+    var clicks by rememberSaveable { mutableStateOf("24") }
+    var notes by rememberSaveable { mutableStateOf("") }
 
     // Step lists
-    var stepTitle1 by remember { mutableStateOf("Preinfusión Bloom") }
-    var stepTime1 by remember { mutableStateOf("35") }
-    var stepWater1 by remember { mutableStateOf("50") }
+    var stepTitle1 by rememberSaveable { mutableStateOf("Preinfusión Bloom") }
+    var stepTime1 by rememberSaveable { mutableStateOf("35") }
+    var stepWater1 by rememberSaveable { mutableStateOf("50") }
 
-    var stepTitle2 by remember { mutableStateOf("Primer Vertido") }
-    var stepTime2 by remember { mutableStateOf("45") }
-    var stepWater2 by remember { mutableStateOf("90") }
+    var stepTitle2 by rememberSaveable { mutableStateOf("Primer Vertido") }
+    var stepTime2 by rememberSaveable { mutableStateOf("45") }
+    var stepWater2 by rememberSaveable { mutableStateOf("90") }
 
-    var stepTitle3 by remember { mutableStateOf("Segundo Vertido") }
-    var stepTime3 by remember { mutableStateOf("40") }
-    var stepWater3 by remember { mutableStateOf("100") }
+    var stepTitle3 by rememberSaveable { mutableStateOf("Segundo Vertido") }
+    var stepTime3 by rememberSaveable { mutableStateOf("40") }
+    var stepWater3 by rememberSaveable { mutableStateOf("100") }
 
     val scrollState = rememberScrollState()
 
@@ -736,6 +739,17 @@ fun CreateTechniqueFormView(
     } else {
         String.format(Locale.US, "%.1f", rawRatio)
     }
+    val stepTitles = listOf(stepTitle1, stepTitle2, stepTitle3)
+    val stepTimes = listOf(stepTime1, stepTime2, stepTime3).map { it.replace(',', '.').trim().toIntOrNull() }
+    val stepWaters = listOf(stepWater1, stepWater2, stepWater3).map { it.replace(',', '.').trim().toIntOrNull() }
+    val validationError = BrewInputRules.techniqueError(
+        name = name,
+        coffee = coffee.replace(',', '.').trim().toFloatOrNull(),
+        temperature = temp.replace(',', '.').trim().toIntOrNull(),
+        stepTitles = stepTitles,
+        stepDurations = stepTimes,
+        stepWaters = stepWaters
+    )
 
     if (showAddGrinderDialog) {
         var newBrand by remember { mutableStateOf("") }
@@ -1143,11 +1157,16 @@ fun CreateTechniqueFormView(
 
             // Action Buttons
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (validationError != null) {
+                    Text(validationError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
                 StyledPrimaryButton(
-                    text = "Guardar y Lista para Extraer",
+                    text = if (isSaving) "Guardando…" else "Guardar y lista para extraer",
                     icon = Icons.Default.Check,
+                    enabled = validationError == null && !isSaving,
                     onClick = {
-                        if (name.isNotBlank()) {
+                        if (validationError == null && !isSaving) {
+                            isSaving = true
                             val pCoffee = coffee.replace(',', '.').trim().toFloatOrNull() ?: 15.0f
                             val w1 = stepWater1.replace(',', '.').trim().toIntOrNull() ?: 50
                             val w2 = stepWater2.replace(',', '.').trim().toIntOrNull() ?: 90
@@ -1157,13 +1176,9 @@ fun CreateTechniqueFormView(
                             val pTemp = temp.replace(',', '.').trim().toIntOrNull() ?: 93
                             val pClicks = clicks.replace(',', '.').trim().toIntOrNull() ?: 24
                             
-                            val titles = listOf(stepTitle1, stepTitle2, stepTitle3)
-                            val times = listOf(
-                                stepTime1.replace(',', '.').trim().toIntOrNull() ?: 35,
-                                stepTime2.replace(',', '.').trim().toIntOrNull() ?: 45,
-                                stepTime3.replace(',', '.').trim().toIntOrNull() ?: 40
-                            )
-                            val waters = listOf(w1, w2, w3)
+                            val titles = stepTitles
+                            val times = stepTimes.filterNotNull()
+                            val waters = stepWaters.filterNotNull()
 
                             viewModel.createAndSaveTechnique(
                                 name = name,

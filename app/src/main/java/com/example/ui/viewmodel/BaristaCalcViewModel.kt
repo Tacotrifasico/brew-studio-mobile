@@ -7,6 +7,7 @@ import com.example.data.catalog.BrewTechniqueCatalog
 import com.example.data.database.*
 import com.example.data.engine.RecipeIngredientInput
 import com.example.data.repository.BrewRepository
+import com.example.data.validation.BrewInputRules
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -551,7 +552,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         val rawInput = input.replace(',', '.')
         _state.update { it.copy(coffeeInput = input) }
         val parsed = rawInput.toFloatOrNull()
-        if (parsed != null && parsed >= 1.0f) {
+        if (parsed != null && BrewInputRules.validCoffee(parsed)) {
             val calcWater = (parsed * _state.value.ratio).toInt()
             updateCalculatorAndPreparation { it.copy(
                 coffee = parsed,
@@ -566,7 +567,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         val rawInput = input.replace(',', '.')
         _state.update { it.copy(ratioInput = input) }
         val parsed = rawInput.toFloatOrNull()
-        if (parsed != null && parsed >= 1.0f) {
+        if (parsed != null && BrewInputRules.validRatio(parsed)) {
             updateSensoryCategory(parsed)
             val calcWater = (_state.value.coffee * parsed).toInt()
             updateCalculatorAndPreparation { it.copy(
@@ -581,7 +582,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     fun onWaterChanged(input: String) {
         _state.update { it.copy(waterInput = input) }
         val parsed = input.toIntOrNull()
-        if (parsed != null && parsed >= 1) {
+        if (parsed != null && BrewInputRules.validWater(parsed)) {
             val calcCoffee = Math.round((parsed / _state.value.ratio) * 10f) / 10f
             updateCalculatorAndPreparation { it.copy(
                 coffee = calcCoffee,
@@ -625,17 +626,17 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun adjustCoffee(amount: Float) {
-        val newVal = (_state.value.coffee + amount).coerceAtLeast(1.0f)
+        val newVal = (_state.value.coffee + amount).coerceIn(BrewInputRules.MIN_COFFEE_GRAMS, BrewInputRules.MAX_COFFEE_GRAMS)
         onCoffeeChanged(String.format(Locale.US, "%.1f", newVal))
     }
 
     fun adjustRatio(amount: Float) {
-        val newVal = (_state.value.ratio + amount).coerceAtLeast(1.0f)
+        val newVal = (_state.value.ratio + amount).coerceIn(BrewInputRules.MIN_RATIO, BrewInputRules.MAX_RATIO)
         onRatioChanged(String.format(Locale.US, "%.1f", newVal))
     }
 
     fun adjustWater(amount: Int) {
-        val newVal = (_state.value.water + amount).coerceAtLeast(1)
+        val newVal = (_state.value.water + amount).coerceIn(BrewInputRules.MIN_WATER_ML, BrewInputRules.MAX_WATER_ML)
         onWaterChanged(newVal.toString())
     }
 
@@ -646,22 +647,22 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun onCoffeeFocusLost() {
         val check = _state.value.coffeeInput.toFloatOrNull()
-        if (check == null || check < 1.0f) {
-            onCoffeeChanged("15.0")
+        if (check == null || !BrewInputRules.validCoffee(check)) {
+            _state.update { it.copy(coffeeInput = String.format(Locale.US, "%.1f", it.coffee), microcopy = "Usa entre 1 y 100 g de café.") }
         }
     }
 
     fun onRatioFocusLost() {
         val check = _state.value.ratioInput.toFloatOrNull()
-        if (check == null || check < 1.0f) {
-            onRatioChanged("15.0")
+        if (check == null || !BrewInputRules.validRatio(check)) {
+            _state.update { it.copy(ratioInput = String.format(Locale.US, "%.1f", it.ratio), microcopy = "Usa una proporción entre 1:1 y 1:40.") }
         }
     }
 
     fun onWaterFocusLost() {
         val check = _state.value.waterInput.toIntOrNull()
-        if (check == null || check < 1) {
-            onWaterChanged("240")
+        if (check == null || !BrewInputRules.validWater(check)) {
+            _state.update { it.copy(waterInput = it.water.toString(), microcopy = "Usa entre 10 y 2000 ml de agua.") }
         }
     }
 

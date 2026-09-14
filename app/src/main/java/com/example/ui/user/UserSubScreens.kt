@@ -70,21 +70,25 @@ fun FeedAndInboxTab(viewModel: SocialViewModel, state: SocialUiState) {
 
         Box(modifier = Modifier.weight(1f)) {
             if (subTab == 0) {
-                if (state.isFeedLoading) {
+                if (state.isFeedLoading && state.feed.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = AcentoPrincipal)
                     }
+                } else if (state.feedError != null && state.feed.isEmpty()) {
+                    RemoteLoadFailureView(message = state.feedError, onRetry = viewModel::fetchFeed)
                 } else if (state.feed.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("El muro está tranquilo hoy.\n¡Inventa y comparte algo nuevo!", textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = TextSecundario, fontSize = 13.sp)
                     }
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(state.feed) { share ->
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        state.feedError?.let { CachedOfflineBanner(it, viewModel::fetchFeed) }
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(state.feed) { share ->
                             ShareCard(
                                 share = share,
                                 currentUserId = state.userId,
@@ -102,24 +106,29 @@ fun FeedAndInboxTab(viewModel: SocialViewModel, state: SocialUiState) {
                                 }
                             )
                         }
+                        }
                     }
                 }
             } else {
-                if (state.isInboxLoading) {
+                if (state.isInboxLoading && state.inbox.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = AcentoPrincipal)
                     }
+                } else if (state.inboxError != null && state.inbox.isEmpty()) {
+                    RemoteLoadFailureView(message = state.inboxError, onRetry = viewModel::fetchInbox)
                 } else if (state.inbox.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Tu bandeja de correo está vacía.\nNo tienes transferencias directas.", textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = TextSecundario, fontSize = 13.sp)
                     }
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(state.inbox) { inboxItem ->
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        state.inboxError?.let { CachedOfflineBanner(it, viewModel::fetchInbox) }
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(state.inbox) { inboxItem ->
                             inboxItem.share?.let { share ->
                                 ShareCard(
                                     share = share,
@@ -139,6 +148,7 @@ fun FeedAndInboxTab(viewModel: SocialViewModel, state: SocialUiState) {
                                     isInboxView = true
                                 )
                             }
+                        }
                         }
                     }
                 }
@@ -160,6 +170,35 @@ fun FeedAndInboxTab(viewModel: SocialViewModel, state: SocialUiState) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun RemoteLoadFailureView(message: String, onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.CloudOff, contentDescription = null, tint = TextSecundario, modifier = Modifier.size(34.dp))
+        Spacer(Modifier.height(10.dp))
+        Text("Sin conexión al servicio", fontWeight = FontWeight.Bold, color = TextPrincipal)
+        Text(message, textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = TextSecundario, fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = onRetry) { Text("Reintentar") }
+    }
+}
+
+@Composable
+private fun CachedOfflineBanner(message: String, onRetry: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(AcentoSuave).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(Icons.Default.CloudOff, contentDescription = null, tint = AcentoPrincipal, modifier = Modifier.size(18.dp))
+        Text("Mostrando datos guardados. $message", modifier = Modifier.weight(1f), color = TextPrincipal, fontSize = 12.sp, maxLines = 2)
+        TextButton(onClick = onRetry) { Text("Reintentar") }
     }
 }
 
@@ -622,18 +661,22 @@ fun ShareComposerSheet(
 }
 
 @Composable
-fun ActivityTimelineTab(state: SocialUiState) {
-    if (state.activity.isEmpty()) {
+fun ActivityTimelineTab(viewModel: SocialViewModel, state: SocialUiState) {
+    if (state.activityError != null && state.activity.isEmpty()) {
+        RemoteLoadFailureView(message = state.activityError, onRetry = viewModel::fetchActivity)
+    } else if (state.activity.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Aún no tienes registro de actividades.", color = TextSecundario)
         }
     } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(state.activity) { log ->
+        Column(modifier = Modifier.fillMaxSize()) {
+            state.activityError?.let { CachedOfflineBanner(it, viewModel::fetchActivity) }
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(state.activity) { log ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = SurfaceCard),
@@ -670,4 +713,5 @@ fun ActivityTimelineTab(state: SocialUiState) {
             }
         }
     }
+}
 }

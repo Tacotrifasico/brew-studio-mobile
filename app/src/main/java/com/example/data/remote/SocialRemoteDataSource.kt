@@ -9,7 +9,7 @@ class SocialRemoteDataSource {
     private val api = SupabaseClientProvider.apiService
 
     suspend fun getFeed(): Result<List<RemoteShare>> {
-        if (!SupabaseClientProvider.isConfigured) return Result.success(emptyList())
+        if (!SupabaseClientProvider.isConfigured) return Result.failure(IOException("Backend no configurado. Tu contenido local sigue disponible offline."))
         return try {
             val response = api.getPublicFeed()
             if (response.isSuccessful) {
@@ -24,7 +24,7 @@ class SocialRemoteDataSource {
     }
 
     suspend fun getInbox(userId: String): Result<List<RemoteInboxItem>> {
-        if (!SupabaseClientProvider.isConfigured) return Result.success(emptyList())
+        if (!SupabaseClientProvider.isConfigured) return Result.failure(IOException("Backend no configurado. Tu bandeja se mostrará cuando Axcis conecte Supabase."))
         return try {
             val response = api.getInbox("eq.$userId")
             if (response.isSuccessful) {
@@ -132,7 +132,7 @@ class SocialRemoteDataSource {
     }
 
     suspend fun getActivityTimeline(userId: String): Result<List<RemoteActivityLog>> {
-        if (!SupabaseClientProvider.isConfigured) return Result.success(emptyList())
+        if (!SupabaseClientProvider.isConfigured) return Result.failure(IOException("Backend no configurado. La actividad remota aún no está disponible."))
         return try {
             val response = api.getActivityTimeline("eq.$userId")
             if (response.isSuccessful) {

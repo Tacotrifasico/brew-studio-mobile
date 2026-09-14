@@ -109,7 +109,7 @@ fun UserScreen(viewModel: SocialViewModel, onBack: () -> Unit) {
                             0 -> PersonalProfileTab(viewModel = viewModel, state = state)
                             1 -> FeedAndInboxTab(viewModel = viewModel, state = state)
                             2 -> MyLocalFormulasTab(viewModel = viewModel)
-                            3 -> ActivityTimelineTab(state = state)
+                            3 -> ActivityTimelineTab(viewModel = viewModel, state = state)
                         }
                     }
                 }

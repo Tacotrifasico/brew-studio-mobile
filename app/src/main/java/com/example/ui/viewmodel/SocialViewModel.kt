@@ -41,6 +41,7 @@ data class SocialUiState(
 
     // Activity log
     val activity: List<RemoteActivityLog> = emptyList(),
+    val activityError: String? = null,
 
     // Sync operations state
     val isSyncing: Boolean = false,
@@ -310,9 +311,12 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
     fun fetchActivity() {
         viewModelScope.launch {
             if (!authRepo.isLoggedIn()) return@launch
+            _uiState.update { it.copy(activityError = null) }
             val result = socialRepo.getActivityTimeline()
             if (result.isSuccess) {
-                _uiState.update { it.copy(activity = result.getOrThrow()) }
+                _uiState.update { it.copy(activity = result.getOrThrow(), activityError = null) }
+            } else {
+                _uiState.update { it.copy(activityError = result.exceptionOrNull()?.message ?: "No se pudo actualizar la actividad") }
             }
         }
     }

@@ -484,7 +484,7 @@ private struct TechniqueEditorView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "equipmentType == 'BREWER_METHOD'"))) private var methods: FetchedResults<EquipmentRecord>
     let technique: TechniqueRecord?
-    @State private var draft = TechniqueDraftModel(); @State private var loaded = false; @State private var errorMessage: String?
+    @State private var draft = TechniqueDraftModel(); @State private var loaded = false; @State private var errorMessage: String?; @State private var isSaving = false
 
     var body: some View {
         NavigationStack {
@@ -506,10 +506,14 @@ private struct TechniqueEditorView: View {
                     TextField("Descripción de molienda", text: $draft.grindDescription)
                     TextField("Notas", text: $draft.notes, axis: .vertical).lineLimit(2...5)
                 }
-                Section("Pasos") {
+                Section {
                     ForEach($draft.steps) { $step in TechniqueStepDraftEditor(step: $step) }
                         .onDelete { draft.steps.remove(atOffsets: $0) }.onMove { draft.steps.move(fromOffsets: $0, toOffset: $1) }
                     Button { draft.steps.append(.init()) } label: { Label("Agregar paso", systemImage: "plus") }
+                } header: {
+                    Text("Pasos")
+                } footer: {
+                    if let validationMessage { Text(validationMessage).foregroundStyle(.red) }
                 }
             }
             .brewScrollableCanvas()
@@ -517,18 +521,21 @@ private struct TechniqueEditorView: View {
             .navigationTitle(technique == nil ? "Nueva técnica" : "Editar técnica")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Guardar", action: save).disabled(!canSave) }
+                ToolbarItem(placement: .confirmationAction) { Button(isSaving ? "Guardando…" : "Guardar", action: save).disabled(!canSave || isSaving) }
             }
             .onAppear(perform: load)
             .alert("No se pudo guardar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "") }
         }
     }
 
-    private var canSave: Bool { !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.doseGrams > 0 && draft.waterMl > 0 && draft.steps.contains { !$0.title.trimmingCharacters(in: .whitespaces).isEmpty } }
+    private var validationMessage: String? { TechniqueDraftValidator.message(for: draft) }
+    private var canSave: Bool { validationMessage == nil }
     private func load() { guard !loaded else { return }; loaded = true; if let technique { do { draft = try RecipeTechniqueRepository(context: context).techniqueDraft(for: technique) } catch { errorMessage = error.localizedDescription } } }
     private func save() {
+        guard !isSaving else { return }
+        isSaving = true
         if let method = methods.first(where: { $0.id == draft.methodId }) { draft.methodName = method.name }
-        do { _ = try RecipeTechniqueRepository(context: context).saveTechnique(draft); dismiss() } catch { errorMessage = error.localizedDescription }
+        do { _ = try RecipeTechniqueRepository(context: context).saveTechnique(draft); dismiss() } catch { isSaving = false; errorMessage = error.localizedDescription }
     }
     private func importRecipeQuantities() {
         guard let recipeId = draft.recipeId else { return }

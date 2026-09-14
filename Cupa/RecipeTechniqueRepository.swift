@@ -140,6 +140,43 @@ struct TechniqueDraftModel: Equatable {
     var notes = ""; var techniqueDescription = ""; var steps: [TechniqueStepDraft] = []
 }
 
+enum TechniqueDraftValidationError: LocalizedError, Equatable {
+    case emptyName, invalidCoffee, invalidWater, invalidTemperature, missingStepTitle, invalidStepDuration, invalidStepWater, waterMismatch, invalidRatio
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyName: "Escribe un nombre para la técnica."
+        case .invalidCoffee: "El café debe estar entre 1 y 100 g."
+        case .invalidWater: "El agua total debe estar entre 10 y 2000 ml."
+        case .invalidTemperature: "La temperatura debe estar entre 60 y 100 °C."
+        case .missingStepTitle: "Todos los pasos necesitan un título."
+        case .invalidStepDuration: "Cada paso necesita una duración mayor a 0 segundos."
+        case .invalidStepWater: "El agua de cada paso debe ser 0 ml o más."
+        case .waterMismatch: "La suma del agua de los pasos debe coincidir con el agua total."
+        case .invalidRatio: "La proporción resultante debe estar entre 1:1 y 1:40."
+        }
+    }
+}
+
+enum TechniqueDraftValidator {
+    static func validate(_ draft: TechniqueDraftModel) throws {
+        if draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw TechniqueDraftValidationError.emptyName }
+        if !(1...100).contains(draft.doseGrams) { throw TechniqueDraftValidationError.invalidCoffee }
+        if !(10...2_000).contains(draft.waterMl) { throw TechniqueDraftValidationError.invalidWater }
+        if !(60...100).contains(draft.temperatureC) { throw TechniqueDraftValidationError.invalidTemperature }
+        if draft.steps.isEmpty || draft.steps.contains(where: { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) { throw TechniqueDraftValidationError.missingStepTitle }
+        if draft.steps.contains(where: { $0.durationSeconds <= 0 }) { throw TechniqueDraftValidationError.invalidStepDuration }
+        if draft.steps.contains(where: { $0.waterAddedMl < 0 }) { throw TechniqueDraftValidationError.invalidStepWater }
+        if draft.steps.reduce(0, { $0 + $1.waterAddedMl }) != draft.waterMl { throw TechniqueDraftValidationError.waterMismatch }
+        let ratio = Double(draft.waterMl) / draft.doseGrams
+        if !(1...40).contains(ratio) { throw TechniqueDraftValidationError.invalidRatio }
+    }
+
+    static func message(for draft: TechniqueDraftModel) -> String? {
+        do { try validate(draft); return nil } catch { return error.localizedDescription }
+    }
+}
+
 @MainActor
 final class RecipeTechniqueRepository {
     private let context: NSManagedObjectContext
@@ -217,6 +254,9 @@ final class RecipeTechniqueRepository {
     }
 
     @discardableResult func saveTechnique(_ draft: TechniqueDraftModel) throws -> TechniqueRecord {
+        try TechniqueDraftValidator.validate(draft)
+        var draft = draft
+        draft.ratio = Double(draft.waterMl) / draft.doseGrams
         let totalTime = draft.steps.reduce(0) { $0 + max(0, $1.durationSeconds) }
         let technique = try technique(id: draft.id) ?? TechniqueRecord(
             context: context, id: draft.id, name: draft.name, methodId: draft.methodId, methodName: draft.methodName,

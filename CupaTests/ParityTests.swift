@@ -138,6 +138,19 @@ final class CalculatorParityTests: XCTestCase {
         XCTAssertEqual(calculator.coffeeInput, "19.4")
     }
 
+    @MainActor func testCalculatorRejectsOutOfRangeValuesAndClampsGestures() throws {
+        let suite = "CalculatorBoundsTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let calculator = CalculatorModel(defaults: defaults)
+        calculator.changeCoffee("101"); calculator.changeRatio("41"); calculator.changeWater("2001")
+        calculator.validateInputs()
+        XCTAssertEqual(calculator.coffee, 15); XCTAssertEqual(calculator.ratio, 16); XCTAssertEqual(calculator.water, 240)
+        XCTAssertEqual(calculator.coffeeInput, "15.0"); XCTAssertEqual(calculator.ratioInput, "16.0"); XCTAssertEqual(calculator.waterInput, "240")
+        calculator.adjustCoffee(500); XCTAssertEqual(calculator.coffee, 100)
+        calculator.adjustRatio(500); XCTAssertEqual(calculator.ratio, 40)
+        calculator.adjustWater(5_000); XCTAssertEqual(calculator.water, 2_000)
+    }
+
     @MainActor func testAllReferenceMethodsUseExpectedRatios() throws {
         let suite = "CalculatorMethodsTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -361,6 +374,16 @@ final class LocalPersistenceTests: XCTestCase {
 }
 
 final class RecipeTechniqueRepositoryTests: XCTestCase {
+    @MainActor func testTechniqueValidationRejectsWaterMismatchAndNormalizesRatio() throws {
+        var draft = TechniqueDraftModel(name: "V60", doseGrams: 15, waterMl: 240, ratio: 99, temperatureC: 93, steps: [.init(title: "Bloom", durationSeconds: 30, waterAddedMl: 50)])
+        XCTAssertThrowsError(try TechniqueDraftValidator.validate(draft)) { XCTAssertEqual($0 as? TechniqueDraftValidationError, .waterMismatch) }
+        draft.steps.append(.init(title: "Vertido", durationSeconds: 90, waterAddedMl: 190))
+        XCTAssertNoThrow(try TechniqueDraftValidator.validate(draft))
+        let persistence = PersistenceController(inMemory: true)
+        let saved = try RecipeTechniqueRepository(context: persistence.container.viewContext).saveTechnique(draft)
+        XCTAssertEqual(saved.ratio, 16)
+    }
+
     @MainActor func testTechniqueDuplicationCreatesIndependentStepIdentifiers() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
@@ -481,6 +504,7 @@ final class RecipeTechniqueRepositoryTests: XCTestCase {
 
         draft.steps.swapAt(0, 2)
         draft.steps.remove(at: 1)
+        draft.waterMl = 140
         draft.steps[0].flow = 2.5
         _ = try repository.saveTechnique(draft)
         let editedSteps = try repository.techniqueSteps(techniqueId: technique.id)

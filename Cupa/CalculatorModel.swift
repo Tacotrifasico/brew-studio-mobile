@@ -38,6 +38,9 @@ private struct CalculatorStateSnapshot: Codable {
 
 @MainActor
 final class CalculatorModel: ObservableObject {
+    static let coffeeRange = 1.0...100.0
+    static let ratioRange = 1.0...40.0
+    static let waterRange = 10...2_000
     @Published var method = "V60"
     @Published private(set) var selectedMethodId: UUID?
     @Published var coffee = 15.0
@@ -128,7 +131,7 @@ final class CalculatorModel: ObservableObject {
         if let data = storedState as? Data,
            let restored = try? JSONDecoder().decode(CalculatorStateSnapshot.self, from: data),
            !restored.method.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           restored.coffee >= 1, restored.ratio >= 1, restored.water >= 1 {
+           Self.coffeeRange.contains(restored.coffee), Self.ratioRange.contains(restored.ratio), Self.waterRange.contains(restored.water) {
             method = restored.method; selectedMethodId = restored.methodId
             coffee = restored.coffee; ratio = restored.ratio; water = restored.water
             coffeeInput = format(restored.coffee, forceDecimal: true)
@@ -147,7 +150,7 @@ final class CalculatorModel: ObservableObject {
 
     func changeCoffee(_ input: String) {
         coffeeInput = input
-        guard let parsed = parseDecimal(input), parsed >= 1 else { return }
+        guard let parsed = parseDecimal(input), Self.coffeeRange.contains(parsed) else { return }
         coffee = parsed
         water = Int(parsed * ratio)
         waterInput = String(water)
@@ -157,7 +160,7 @@ final class CalculatorModel: ObservableObject {
 
     func changeRatio(_ input: String) {
         ratioInput = input
-        guard let parsed = parseDecimal(input), parsed >= 1 else { return }
+        guard let parsed = parseDecimal(input), Self.ratioRange.contains(parsed) else { return }
         ratio = parsed
         water = Int(coffee * parsed)
         waterInput = String(water)
@@ -167,7 +170,7 @@ final class CalculatorModel: ObservableObject {
 
     func changeWater(_ input: String) {
         waterInput = input
-        guard let parsed = Int(input), parsed >= 1 else { return }
+        guard let parsed = Int(input), Self.waterRange.contains(parsed) else { return }
         water = parsed
         coffee = ((Double(parsed) / ratio) * 10).rounded() / 10
         coffeeInput = format(coffee, forceDecimal: true)
@@ -206,9 +209,9 @@ final class CalculatorModel: ObservableObject {
         persistState()
     }
 
-    func adjustCoffee(_ amount: Double) { changeCoffee(format(max(1, coffee + amount), forceDecimal: true)) }
-    func adjustRatio(_ amount: Double) { changeRatio(format(max(1, ratio + amount), forceDecimal: true)) }
-    func adjustWater(_ amount: Int) { changeWater(String(max(1, water + amount))) }
+    func adjustCoffee(_ amount: Double) { changeCoffee(format(min(Self.coffeeRange.upperBound, max(Self.coffeeRange.lowerBound, coffee + amount)), forceDecimal: true)) }
+    func adjustRatio(_ amount: Double) { changeRatio(format(min(Self.ratioRange.upperBound, max(Self.ratioRange.lowerBound, ratio + amount)), forceDecimal: true)) }
+    func adjustWater(_ amount: Int) { changeWater(String(min(Self.waterRange.upperBound, max(Self.waterRange.lowerBound, water + amount)))) }
 
     func resetRatio() {
         changeRatio(format(baseRatios[method] ?? customMethodRatios[method] ?? 16, forceDecimal: true))
@@ -216,9 +219,15 @@ final class CalculatorModel: ObservableObject {
     }
 
     func validateInputs() {
-        if parseDecimal(coffeeInput) == nil { changeCoffee("15.0") }
-        if parseDecimal(ratioInput) == nil { changeRatio("15.0") }
-        if Int(waterInput) == nil { changeWater("240") }
+        if parseDecimal(coffeeInput).map(Self.coffeeRange.contains) != true {
+            coffeeInput = format(coffee, forceDecimal: true); microcopy = "Usa entre 1 y 100 g de café."
+        }
+        if parseDecimal(ratioInput).map(Self.ratioRange.contains) != true {
+            ratioInput = format(ratio, forceDecimal: true); microcopy = "Usa una proporción entre 1:1 y 1:40."
+        }
+        if Int(waterInput).map(Self.waterRange.contains) != true {
+            waterInput = String(water); microcopy = "Usa entre 10 y 2000 ml de agua."
+        }
     }
 
     func toggleFavorite() {

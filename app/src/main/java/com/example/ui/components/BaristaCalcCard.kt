@@ -35,6 +35,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -338,6 +342,11 @@ fun BaristaCalcCard(
                             .clip(RoundedCornerShape(20.dp))
                             .background(Brush.verticalGradient(listOf(SurfaceCard, MainBackgroundAlt.copy(alpha = 0.35f))))
                             .border(1.dp, BordeSuave, RoundedCornerShape(20.dp))
+                            .semantics {
+                                contentDescription = "Café"
+                                stateDescription = "${state.coffeeInput} gramos"
+                                setProgress { target -> onCoffeeChanged(target.coerceIn(1f, 100f).toString()); true }
+                            }
                             .pointerInput(Unit) {
                                 detectDragGestures(
                                     onDragStart = { accumulatedCoffeeY.value = 0f },
@@ -429,6 +438,11 @@ fun BaristaCalcCard(
                             .clip(RoundedCornerShape(20.dp))
                             .background(Brush.verticalGradient(listOf(SurfaceCard, MainBackgroundLight.copy(alpha = 0.3f))))
                             .border(1.dp, BordeSuave, RoundedCornerShape(20.dp))
+                            .semantics {
+                                contentDescription = "Proporción"
+                                stateDescription = "Uno a ${state.ratioInput}"
+                                setProgress { target -> onRatioChanged(target.coerceIn(1f, 40f).toString()); true }
+                            }
                             .pointerInput(Unit) {
                                 detectTapGestures(
                                     onDoubleTap = { onResetRatio() }
@@ -525,6 +539,11 @@ fun BaristaCalcCard(
                             .clip(RoundedCornerShape(20.dp))
                             .background(Brush.verticalGradient(listOf(SurfaceCard, AcentoSuave.copy(alpha = 0.35f))))
                             .border(1.dp, BordeSuave, RoundedCornerShape(20.dp))
+                            .semantics {
+                                contentDescription = "Agua"
+                                stateDescription = "${state.waterInput} mililitros"
+                                setProgress { target -> onWaterChanged(target.toInt().coerceIn(10, 2000).toString()); true }
+                            }
                             .pointerInput(Unit) {
                                 detectDragGestures(
                                     onDragStart = { accumulatedWaterY.value = 0f },

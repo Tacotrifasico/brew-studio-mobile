@@ -42,7 +42,8 @@ class RecipeRepositoryImpl(
             originalAuthorName = recipe.originalAuthorName ?: recipe.attribution?.originalAuthorName,
             originalEntityId = recipe.originalEntityId ?: recipe.attribution?.originalEntityId,
             importedFromShareId = recipe.attribution?.importedFromShareId ?: recipe.socialSource?.shareId,
-            copyMode = recipe.attribution?.mode?.name ?: recipe.socialSource?.copyMode?.name ?: "ORIGINAL"
+            copyMode = recipe.attribution?.mode?.name ?: recipe.socialSource?.copyMode?.name ?: "ORIGINAL",
+            syncStatus = "PENDING_CREATE"
         )
         recipeDao.insertRecipe(roomRecipe)
 

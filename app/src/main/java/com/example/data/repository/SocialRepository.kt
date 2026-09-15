@@ -155,159 +155,40 @@ class SocialRepository(
         return result
     }
 
-    suspend fun importShare(share: RemoteShare): Result<String> {
+    suspend fun syncImportedShare(share: RemoteShare, localEntityId: String): Result<String> {
+        val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para importar"))
         val isRecipe = share.entityType == "recipe"
         val flowResult = remoteSource.importShare(share.id, isRecipe)
-        if (flowResult.isSuccess) {
-            val copyRemoteId = flowResult.getOrThrow()
-            val snap = share.payloadSnapshotJson
-            if (isRecipe) {
-                val r = Recipe(
-                    name = snap["name"] as? String ?: share.name,
-                    recipeKind = snap["recipeKind"] as? String ?: "BLACK_COFFEE",
-                    intention = snap["intention"] as? String ?: "",
-                    suggestedMethodId = snap["suggestedMethodId"] as? String,
-                    ingredientsSummary = snap["ingredientsSummary"] as? String ?: "",
-                    stepsSummary = snap["stepsSummary"] as? String ?: "",
-                    tags = snap["tags"] as? String ?: "",
-                    ownerUserId = share.fromUserId,
-                    ownerDisplayName = share.fromName,
-                    visibility = "PRIVATE",
-                    isShared = false,
-                    originalAuthorUserId = share.originalAuthorUserId ?: share.fromUserId,
-                    originalAuthorName = share.originalAuthorName ?: share.fromName,
-                    originalEntityId = share.originalEntityId ?: share.entityId,
-                    importedFromShareId = share.id,
-                    copyMode = "ORIGINAL",
-                    remoteId = copyRemoteId,
-                    syncStatus = "SYNCED"
-                )
-                recipeDao.insertRecipe(r)
-            } else {
-                val defaultMethodUuid = "11111111-1111-4000-8000-000000000001"
-                val t = Technique(
-                    name = snap["name"] as? String ?: share.name,
-                    methodId = snap["methodId"] as? String ?: defaultMethodUuid,
-                    doseG = (snap["doseG"] as? Number)?.toFloat() ?: 15f,
-                    waterMl = (snap["waterMl"] as? Number)?.toInt() ?: 240,
-                    ratio = (snap["ratio"] as? Number)?.toFloat() ?: 16f,
-                    temperatureC = (snap["temperatureC"] as? Number)?.toInt() ?: 93,
-                    grindValue = (snap["grindValue"] as? Number)?.toDouble() ?: 18.0,
-                    grindDescription = snap["grindDescription"] as? String ?: "18 Clicks",
-                    notes = snap["notes"] as? String ?: "Técnica importada",
-                    totalTimeSeconds = 180,
-                    ownerUserId = share.fromUserId,
-                    ownerDisplayName = share.fromName,
-                    visibility = "PRIVATE",
-                    isShared = false,
-                    originalAuthorUserId = share.originalAuthorUserId ?: share.fromUserId,
-                    originalAuthorName = share.originalAuthorName ?: share.fromName,
-                    originalEntityId = share.originalEntityId ?: share.entityId,
-                    importedFromShareId = share.id,
-                    copyMode = "ORIGINAL",
-                    remoteId = copyRemoteId,
-                    syncStatus = "SYNCED"
-                )
-                techniqueDao.insertTechnique(t)
-                val localTechId = t.id
-
-                val stepsObj = snap["steps"] as? List<Map<String, Any>> ?: emptyList()
-                val techSteps = stepsObj.mapIndexed { idx, item ->
-                    TechniqueStep(
-                        techniqueId = localTechId,
-                        stepNumber = (item["step_order"] as? Number)?.toInt() ?: (idx + 1),
-                        title = item["title"] as? String ?: "Paso",
-                        durationSeconds = (item["duration_sec"] as? Number)?.toInt() ?: 30,
-                        waterAddedMl = (item["water_add_ml"] as? Number)?.toInt() ?: 50,
-                        waterAccumulatedMl = (item["target_water_ml"] as? Number)?.toInt() ?: 50,
-                        intensity = item["intensity"] as? String ?: "MEDIUM",
-                        gesture = item["gesture"] as? String ?: "CIRCULAR_POUR",
-                        stepNote = item["note"] as? String ?: "",
-                        syncStatus = "SYNCED"
-                    )
-                }
-                techniqueStepDao.insertSteps(techSteps)
+        flowResult.getOrNull()?.let { remoteId ->
+            if (!markLocalCopySynced(localEntityId, remoteId, isRecipe, uid)) {
+                return Result.failure(Exception("La copia remota se creó, pero el registro local no pertenece a la sesión actual"))
             }
         }
         return flowResult
     }
 
-    suspend fun forkShare(share: RemoteShare): Result<String> {
-        val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para forquear"))
+    suspend fun syncForkedShare(share: RemoteShare, localEntityId: String): Result<String> {
+        val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para crear una variante"))
         val isRecipe = share.entityType == "recipe"
-
         val flowResult = remoteSource.forkShare(share.id, isRecipe)
-        if (flowResult.isSuccess) {
-            val forkRemoteId = flowResult.getOrThrow()
-            val snap = share.payloadSnapshotJson
-            if (isRecipe) {
-                val r = Recipe(
-                    name = (snap["name"] as? String ?: share.name) + " (Fork)",
-                    recipeKind = snap["recipeKind"] as? String ?: "BLACK_COFFEE",
-                    intention = snap["intention"] as? String ?: "",
-                    suggestedMethodId = snap["suggestedMethodId"] as? String,
-                    ingredientsSummary = snap["ingredientsSummary"] as? String ?: "",
-                    stepsSummary = snap["stepsSummary"] as? String ?: "",
-                    tags = snap["tags"] as? String ?: "",
-                    ownerUserId = uid,
-                    ownerDisplayName = authRepo.getCachedDisplayName(),
-                    visibility = "PRIVATE",
-                    isShared = false,
-                    originalAuthorUserId = share.originalAuthorUserId ?: share.fromUserId,
-                    originalAuthorName = share.originalAuthorName ?: share.fromName,
-                    originalEntityId = share.originalEntityId ?: share.entityId,
-                    importedFromShareId = share.id,
-                    copyMode = "FORK",
-                    remoteId = forkRemoteId,
-                    syncStatus = "SYNCED"
-                )
-                recipeDao.insertRecipe(r)
-            } else {
-                val defaultMethodUuid = "11111111-1111-4000-8000-000000000001"
-                val t = Technique(
-                    name = (snap["name"] as? String ?: share.name) + " (Fork)",
-                    methodId = snap["methodId"] as? String ?: defaultMethodUuid,
-                    doseG = (snap["doseG"] as? Number)?.toFloat() ?: 15f,
-                    waterMl = (snap["waterMl"] as? Number)?.toInt() ?: 240,
-                    ratio = (snap["ratio"] as? Number)?.toFloat() ?: 16f,
-                    temperatureC = (snap["temperatureC"] as? Number)?.toInt() ?: 93,
-                    grindValue = (snap["grindValue"] as? Number)?.toDouble() ?: 18.0,
-                    grindDescription = snap["grindDescription"] as? String ?: "18 Clicks",
-                    notes = snap["notes"] as? String ?: "Fork de rutina",
-                    totalTimeSeconds = 180,
-                    ownerUserId = uid,
-                    ownerDisplayName = authRepo.getCachedDisplayName(),
-                    visibility = "PRIVATE",
-                    isShared = false,
-                    originalAuthorUserId = share.originalAuthorUserId ?: share.fromUserId,
-                    originalAuthorName = share.originalAuthorName ?: share.fromName,
-                    originalEntityId = share.originalEntityId ?: share.entityId,
-                    importedFromShareId = share.id,
-                    copyMode = "FORK",
-                    remoteId = forkRemoteId,
-                    syncStatus = "SYNCED"
-                )
-                techniqueDao.insertTechnique(t)
-                val localTechId = t.id
-
-                val stepsObj = snap["steps"] as? List<Map<String, Any>> ?: emptyList()
-                val techSteps = stepsObj.mapIndexed { idx, item ->
-                    TechniqueStep(
-                        techniqueId = localTechId,
-                        stepNumber = (item["step_order"] as? Number)?.toInt() ?: (idx + 1),
-                        title = item["title"] as? String ?: "Paso",
-                        durationSeconds = (item["duration_sec"] as? Number)?.toInt() ?: 30,
-                        waterAddedMl = (item["water_add_ml"] as? Number)?.toInt() ?: 50,
-                        waterAccumulatedMl = (item["target_water_ml"] as? Number)?.toInt() ?: 50,
-                        intensity = item["intensity"] as? String ?: "MEDIUM",
-                        gesture = item["gesture"] as? String ?: "CIRCULAR_POUR",
-                        stepNote = item["note"] as? String ?: "",
-                        syncStatus = "SYNCED"
-                    )
-                }
-                techniqueStepDao.insertSteps(techSteps)
+        flowResult.getOrNull()?.let { remoteId ->
+            if (!markLocalCopySynced(localEntityId, remoteId, isRecipe, uid)) {
+                return Result.failure(Exception("La variante remota se creó, pero el registro local no pertenece a la sesión actual"))
             }
         }
         return flowResult
+    }
+
+    private suspend fun markLocalCopySynced(localEntityId: String, remoteId: String, isRecipe: Boolean, uid: String): Boolean {
+        if (isRecipe) {
+            val local = recipeDao.getRecipeById(localEntityId) ?: return false
+            if (local.ownerUserId != uid) return false
+            recipeDao.insertRecipe(local.copy(remoteId = remoteId, syncStatus = "SYNCED", lastSyncedAt = com.example.data.database.currentIso8601()))
+        } else {
+            val local = techniqueDao.getTechniqueById(localEntityId) ?: return false
+            if (local.ownerUserId != uid) return false
+            techniqueDao.insertTechnique(local.copy(remoteId = remoteId, syncStatus = "SYNCED", lastSyncedAt = com.example.data.database.currentIso8601()))
+        }
+        return true
     }
 }

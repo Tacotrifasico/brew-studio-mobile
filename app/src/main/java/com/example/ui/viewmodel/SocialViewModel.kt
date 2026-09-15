@@ -373,15 +373,20 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
             val isRecipe = share.entityType == "recipe"
             val result = if (isRecipe) {
-                importRecipeShareUseCase(share.id)
+                importRecipeShareUseCase(share.id).map { it.id }
             } else {
-                importTechniqueShareUseCase(share.id)
+                importTechniqueShareUseCase(share.id).map { it.id }
             }
 
             if (result.isSuccess) {
-                // Also trigger remote import for backend syncing
-                socialRepo.importShare(share)
-                onResult(true, "Copia registrada exitosamente en tu biblioteca.")
+                val localId = result.getOrThrow()
+                val syncResult = socialRepo.syncImportedShare(share, localId)
+                val message = if (syncResult.isSuccess) {
+                    "Copia guardada y sincronizada en tu biblioteca."
+                } else {
+                    "Copia guardada en este dispositivo. Quedó pendiente de sincronizar."
+                }
+                onResult(true, message)
                 fetchActivity()
             } else {
                 onResult(false, result.exceptionOrNull()?.message ?: "Error al importar copia")
@@ -396,17 +401,23 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
             val isRecipe = share.entityType == "recipe"
             val result = if (isRecipe) {
-                forkRecipeShareUseCase(share.id)
+                forkRecipeShareUseCase(share.id).map { it.id }
             } else {
-                forkTechniqueShareUseCase(share.id)
+                forkTechniqueShareUseCase(share.id).map { it.id }
             }
 
             if (result.isSuccess) {
-                socialRepo.forkShare(share)
-                onResult(true, "Variante editable (Fork) guardada exitosamente en tu biblioteca.")
+                val localId = result.getOrThrow()
+                val syncResult = socialRepo.syncForkedShare(share, localId)
+                val message = if (syncResult.isSuccess) {
+                    "Variante editable guardada y sincronizada en tu biblioteca."
+                } else {
+                    "Variante editable guardada en este dispositivo. Quedó pendiente de sincronizar."
+                }
+                onResult(true, message)
                 fetchActivity()
             } else {
-                onResult(false, result.exceptionOrNull()?.message ?: "Error al forquear entidad")
+                onResult(false, result.exceptionOrNull()?.message ?: "No se pudo crear la variante")
             }
         }
     }

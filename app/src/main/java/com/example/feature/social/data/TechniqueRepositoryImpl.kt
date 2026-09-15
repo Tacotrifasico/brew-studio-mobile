@@ -44,7 +44,8 @@ class TechniqueRepositoryImpl(
             originalAuthorName = technique.originalAuthorName ?: technique.attribution?.originalAuthorName,
             originalEntityId = technique.originalEntityId ?: technique.attribution?.originalEntityId,
             importedFromShareId = technique.attribution?.importedFromShareId ?: technique.socialSource?.shareId,
-            copyMode = technique.attribution?.mode?.name ?: technique.socialSource?.copyMode?.name ?: "ORIGINAL"
+            copyMode = technique.attribution?.mode?.name ?: technique.socialSource?.copyMode?.name ?: "ORIGINAL",
+            syncStatus = "PENDING_CREATE"
         )
         techniqueDao.insertTechnique(roomTech)
 

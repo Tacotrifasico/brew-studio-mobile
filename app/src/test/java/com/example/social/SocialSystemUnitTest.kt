@@ -238,6 +238,7 @@ class SocialSystemUnitTest {
 
         // Verify it is saved in Ana's RecipeRepository
         assertNotNull(recipeRepo.get(importedRecipe.id))
+        assertEquals("Debe existir el original y una sola copia importada", 2, recipeRepo.recipes.size)
     }
 
     @Test
@@ -331,6 +332,7 @@ class SocialSystemUnitTest {
 
         // Check that technique is saved in TechniqueRepository
         assertNotNull(techniqueRepo.get(importedTech.id))
+        assertEquals("Debe existir la original y una sola copia importada", 2, techniqueRepo.techniques.size)
     }
 
     @Test

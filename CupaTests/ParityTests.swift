@@ -601,6 +601,29 @@ final class PreparationModelTests: XCTestCase {
 }
 
 final class TastingModelTests: XCTestCase {
+    @MainActor func testPreparationLinkPreservesDraftAndStartsFreshAfterSavedTasting() throws {
+        let suite = "TastingPreparationLinkTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = TastingModel(defaults: defaults)
+        let firstBrewId = UUID()
+        model.state.freeNotes = "Borrador sin perder"
+        model.state.selectedFlavorNotes = ["Cacao"]
+        model.linkToPreparation(firstBrewId)
+        XCTAssertEqual(model.state.brewSessionId, firstBrewId)
+        XCTAssertEqual(model.state.freeNotes, "Borrador sin perder")
+        XCTAssertEqual(model.state.selectedFlavorNotes, ["Cacao"])
+
+        model.markSaved()
+        let savedTastingId = model.state.id
+        let secondBrewId = UUID()
+        model.linkToPreparation(secondBrewId)
+        XCTAssertNotEqual(model.state.id, savedTastingId)
+        XCTAssertEqual(model.state.brewSessionId, secondBrewId)
+        XCTAssertTrue(model.state.freeNotes.isEmpty)
+        XCTAssertEqual(model.state.coolingStatus, .ready)
+    }
+
     @MainActor func testCoolingStageBoundariesResetAndCompletedGuards() throws {
         let suite = "TastingCoolingBoundariesTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }

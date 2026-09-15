@@ -171,6 +171,8 @@ private struct WorkshopMetric: View {
 
 struct BrewView: View {
     @ObservedObject var preparation: PreparationModel
+    @ObservedObject var tasting: TastingModel
+    @Binding var selection: CupaTab
 
     var body: some View {
         ZStack {
@@ -178,7 +180,10 @@ struct BrewView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     SectionHeader(eyebrow: "Secuencia de extracción", title: "Preparar café", subtitle: "Elige una técnica para los datos calculados y sigue cada paso.")
-                    PreparationExecutionView(model: preparation)
+                    PreparationExecutionView(model: preparation) { brewSessionId in
+                        tasting.linkToPreparation(brewSessionId)
+                        selection = .tasting
+                    }
                 }
                 .padding()
             }

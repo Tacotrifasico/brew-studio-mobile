@@ -11,7 +11,7 @@ struct TastingView: View {
     @Binding var selection: CupaTab
     @State private var message: String?; @State private var editingExisting = false
     @State private var selectedTasting: TastingRecord?; @State private var pendingEdit: TastingRecord?
-    @State private var confirmingCoolingReset = false
+    @State private var confirmingCoolingReset = false; @State private var isSaving = false
 
     var body: some View {
         ZStack {
@@ -158,8 +158,8 @@ struct TastingView: View {
 
     private var actions: some View {
         HStack {
-            Button(saveButtonTitle, action: save).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
-                .disabled(!editingExisting && model.state.coolingStatus == .completed)
+            Button(isSaving ? "Guardando…" : saveButtonTitle, action: save).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
+                .disabled(isSaving || (!editingExisting && model.state.coolingStatus == .completed))
                 .accessibilityIdentifier("tasting.save")
             Button("Nueva") { model.newTasting(); editingExisting = false }.buttonStyle(.bordered)
             Button("Llevar al Laboratorio") {
@@ -205,6 +205,9 @@ struct TastingView: View {
     }
     private func toggle(_ note: String) { if let index = model.state.selectedFlavorNotes.firstIndex(of: note) { model.state.selectedFlavorNotes.remove(at: index) } else { model.state.selectedFlavorNotes.append(note) } }
     private func save() {
+        guard !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
         if model.state.coolingStatus == .running { model.pause() }
         let brew = brews.first { $0.id == model.state.brewSessionId }
         do { _ = try TastingRepository(context: context).save(model.state, brew: brew); model.markSaved(); editingExisting = false; message = "Cata, observaciones y taza guardadas offline." }

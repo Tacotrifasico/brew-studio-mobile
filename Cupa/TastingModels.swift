@@ -125,6 +125,14 @@ final class TastingModel: ObservableObject {
     func newTasting(linkedBrewSessionId: UUID? = nil) {
         timer?.invalidate(); timer = nil; state = TastingState(brewSessionId: linkedBrewSessionId)
     }
+    func linkToPreparation(_ brewSessionId: UUID) {
+        if state.coolingStatus == .completed {
+            newTasting(linkedBrewSessionId: brewSessionId)
+        } else {
+            state.brewSessionId = brewSessionId
+            state.updatedAt = .now
+        }
+    }
     func markSaved() { timer?.invalidate(); timer = nil; state.coolingStatus = .completed; state.lastTickAt = nil; state.updatedAt = .now; defaults.removeObject(forKey: key) }
 
     private func scheduleTimer() {

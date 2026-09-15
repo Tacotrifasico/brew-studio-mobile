@@ -8,8 +8,14 @@ struct PreparationExecutionView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
     @ObservedObject var model: PreparationModel
+    let onFinished: ((UUID) -> Void)?
     @State private var selectedTechniqueKey: String?; @State private var errorMessage: String?; @State private var savedConfirmation = false
-    @State private var confirmingReset = false
+    @State private var confirmingReset = false; @State private var isSaving = false
+
+    init(model: PreparationModel, onFinished: ((UUID) -> Void)? = nil) {
+        self.model = model
+        self.onFinished = onFinished
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -97,7 +103,8 @@ struct PreparationExecutionView: View {
                 .disabled(model.state.steps.isEmpty)
         }
         if model.state.elapsedSeconds > 0 && model.state.savedAt == nil {
-            Button(model.state.status == .completed ? "Guardar sesión finalizada" : "Finalizar y guardar sesión", action: finish).buttonStyle(.bordered).tint(CupaTheme.forest)
+            Button(isSaving ? "Guardando…" : (model.state.status == .completed ? "Guardar sesión finalizada" : "Finalizar y guardar sesión"), action: finish)
+                .buttonStyle(.bordered).tint(CupaTheme.forest).disabled(isSaving)
                 .accessibilityIdentifier("preparation.finish")
         }
     }
@@ -121,12 +128,23 @@ struct PreparationExecutionView: View {
         }
     }
     private func finish() {
+        guard !isSaving, model.state.savedAt == nil else { return }
+        isSaving = true
         if model.state.status == .running { model.pause() }
         let recipeName = recipes.first(where: { $0.id == model.state.recipeId })?.name ?? ""
         let beanName = beans.first(where: { $0.id == model.state.beanId })?.name ?? ""
         let grinderName = grinders.first(where: { $0.id == model.state.grinderId })?.name ?? ""
-        _ = BrewSessionRecord(context: context, state: model.state, recipeName: recipeName, beanName: beanName, grinderName: grinderName)
-        do { try context.save(); model.markSaved(); savedConfirmation = true } catch { context.rollback(); errorMessage = error.localizedDescription }
+        let brew = BrewSessionRecord(context: context, state: model.state, recipeName: recipeName, beanName: beanName, grinderName: grinderName)
+        do {
+            try context.save()
+            model.markSaved()
+            isSaving = false
+            if let onFinished { onFinished(brew.id) } else { savedConfirmation = true }
+        } catch {
+            context.rollback()
+            isSaving = false
+            errorMessage = error.localizedDescription
+        }
     }
     private func timeString(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }
 }

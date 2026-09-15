@@ -1284,7 +1284,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 conclusionNotes = ""
             )
             repository.insertExperiment(exp)
-            showToast("Experimento guardado en el archivo del Laboratorios.")
+            showToast("Experimento guardado en el archivo del Laboratorio.")
         }
     }
 
@@ -1304,10 +1304,11 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     fun saveLabAsTechnique(techniqueName: String) {
         viewModelScope.launch {
             val s = _state.value
-            val defaultMethodUuid = "11111111-1111-4000-8000-000000000001"
+            val selectedMethodId = methodIdForName(s.labMethod)
+                ?: "11111111-1111-4000-8000-000000000001"
             val technique = Technique(
                 name = techniqueName,
-                methodId = defaultMethodUuid,
+                methodId = selectedMethodId,
                 doseG = s.labCoffee,
                 waterMl = s.labWater,
                 ratio = s.labRatio,
@@ -1708,18 +1709,22 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         BrewTechniqueCatalog.firstTechniqueFor(method)?.let { return BrewTechniqueCatalog.steps(it, waterMl) }
         return when (method) {
             "Espresso" -> listOf(
-                TechniqueStep(stepNumber = 1, techniqueId = "", title = "Extracción de Presión", durationSeconds = 30, waterAddedMl = waterMl, waterAccumulatedMl = waterMl, intensity = "alta", gesture = "tap", stepNote = "Manten la presión uniforme.")
+                TechniqueStep(stepNumber = 1, techniqueId = "", title = "Extracción de presión", durationSeconds = 30, waterAddedMl = waterMl, waterAccumulatedMl = waterMl, intensity = "alta", gesture = "tap", stepNote = "Mantén la presión uniforme.")
             )
             "AeroPress" -> listOf(
-                TechniqueStep(stepNumber = 1, techniqueId = "", title = "Preinfusión (Bloom)", durationSeconds = 30, waterAddedMl = 40, waterAccumulatedMl = 40, intensity = "alta", gesture = "tap", stepNote = "Remueve por 10 segundos."),
-                TechniqueStep(stepNumber = 2, techniqueId = "", title = "Vertido de volumen", durationSeconds = 40, waterAddedMl = waterMl - 40, waterAccumulatedMl = waterMl, intensity = "media", gesture = "tap", stepNote = "Pon el émbolo para vacío."),
+                TechniqueStep(stepNumber = 1, techniqueId = "", title = "Preinfusión (bloom)", durationSeconds = 30, waterAddedMl = minOf(40, waterMl), waterAccumulatedMl = minOf(40, waterMl), intensity = "alta", gesture = "tap", stepNote = "Remueve por 10 segundos."),
+                TechniqueStep(stepNumber = 2, techniqueId = "", title = "Vertido de volumen", durationSeconds = 40, waterAddedMl = (waterMl - 40).coerceAtLeast(0), waterAccumulatedMl = waterMl, intensity = "media", gesture = "tap", stepNote = "Pon el émbolo para crear vacío."),
                 TechniqueStep(stepNumber = 3, techniqueId = "", title = "Presión continua", durationSeconds = 30, waterAddedMl = 0, waterAccumulatedMl = waterMl, intensity = "alta", gesture = "tap", stepNote = "Presiona despacio.")
             )
-            else -> listOf(
-                TechniqueStep(stepNumber = 1, techniqueId = "", title = "Preinfusión Bloom", durationSeconds = 35, waterAddedMl = 50, waterAccumulatedMl = 50, intensity = "alta", gesture = "tap", stepNote = "Moja todo el grano uniformemente."),
-                TechniqueStep(stepNumber = 2, techniqueId = "", title = "Primer Vertido", durationSeconds = 45, waterAddedMl = (waterMl - 50) / 2, waterAccumulatedMl = 50 + (waterMl - 50) / 2, intensity = "media", gesture = "tap", stepNote = "Vierte en círculos suaves."),
-                TechniqueStep(stepNumber = 3, techniqueId = "", title = "Segundo Vertido final", durationSeconds = 40, waterAddedMl = waterMl - (50 + (waterMl - 50) / 2), waterAccumulatedMl = waterMl, intensity = "baja", gesture = "tap", stepNote = "Completa la secuencia.")
-            )
+            else -> {
+                val bloom = minOf(50, waterMl)
+                val firstPour = (waterMl - bloom) / 2
+                listOf(
+                    TechniqueStep(stepNumber = 1, techniqueId = "", title = "Preinfusión (bloom)", durationSeconds = 35, waterAddedMl = bloom, waterAccumulatedMl = bloom, intensity = "alta", gesture = "tap", stepNote = "Moja todo el café uniformemente."),
+                    TechniqueStep(stepNumber = 2, techniqueId = "", title = "Primer vertido", durationSeconds = 45, waterAddedMl = firstPour, waterAccumulatedMl = bloom + firstPour, intensity = "media", gesture = "tap", stepNote = "Vierte en círculos suaves."),
+                    TechniqueStep(stepNumber = 3, techniqueId = "", title = "Vertido final", durationSeconds = 40, waterAddedMl = waterMl - bloom - firstPour, waterAccumulatedMl = waterMl, intensity = "baja", gesture = "tap", stepNote = "Completa la secuencia.")
+                )
+            }
         }
     }
 

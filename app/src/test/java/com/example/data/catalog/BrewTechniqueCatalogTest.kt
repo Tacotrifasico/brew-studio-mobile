@@ -45,4 +45,13 @@ class BrewTechniqueCatalogTest {
         assertEquals(375, scaled.sumOf { it.waterAddedMl })
         assertEquals(375, scaled.last().waterAccumulatedMl)
     }
+
+    @Test
+    fun everyLabMethodResolvesToItsOwnStorageMethod() {
+        BrewTechniqueCatalog.methods.forEach { method ->
+            assertEquals(method.id, BrewTechniqueCatalog.methodId(method.nameKey))
+            val template = BrewTechniqueCatalog.firstTechniqueFor(method.nameKey)
+            assertEquals(method.id, template?.methodId)
+        }
+    }
 }

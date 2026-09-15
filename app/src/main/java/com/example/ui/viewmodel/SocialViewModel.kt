@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
 import com.example.data.database.Recipe
 import com.example.data.database.Technique
+import com.example.data.engine.CopyOperationGate
 import com.example.data.remote.*
 import com.example.data.remote.models.RemoteInboxItem
 import com.example.data.remote.models.RemoteShare
@@ -60,6 +61,7 @@ data class SocialUiState(
 class SocialViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getDatabase(application)
+    private val copyOperationGate = CopyOperationGate()
     private val sessionManager = SessionManager(application)
     
     private val authRemoteSource = AuthRemoteDataSource()
@@ -366,58 +368,74 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun importShare(share: RemoteShare, onResult: (Boolean, String) -> Unit) {
+        if (!copyOperationGate.tryStart("IMPORT", share.id)) {
+            onResult(false, "Esta copia ya se está guardando. Espera un momento.")
+            return
+        }
         viewModelScope.launch {
-            // Register in domain social repository first to ensure share payload is available
-            val brewShare = mapRemoteShareToBrewShare(share)
-            domainSocialRepo.publish(brewShare)
+            try {
+                // Register in domain social repository first to ensure share payload is available
+                val brewShare = mapRemoteShareToBrewShare(share)
+                domainSocialRepo.publish(brewShare)
 
-            val isRecipe = share.entityType == "recipe"
-            val result = if (isRecipe) {
-                importRecipeShareUseCase(share.id).map { it.id }
-            } else {
-                importTechniqueShareUseCase(share.id).map { it.id }
-            }
-
-            if (result.isSuccess) {
-                val localId = result.getOrThrow()
-                val syncResult = socialRepo.syncImportedShare(share, localId)
-                val message = if (syncResult.isSuccess) {
-                    "Copia guardada y sincronizada en tu biblioteca."
+                val isRecipe = share.entityType == "recipe"
+                val result = if (isRecipe) {
+                    importRecipeShareUseCase(share.id).map { it.id }
                 } else {
-                    "Copia guardada en este dispositivo. Quedó pendiente de sincronizar."
+                    importTechniqueShareUseCase(share.id).map { it.id }
                 }
-                onResult(true, message)
-                fetchActivity()
-            } else {
-                onResult(false, result.exceptionOrNull()?.message ?: "Error al importar copia")
+
+                if (result.isSuccess) {
+                    val localId = result.getOrThrow()
+                    val syncResult = socialRepo.syncImportedShare(share, localId)
+                    val message = if (syncResult.isSuccess) {
+                        "Copia guardada y sincronizada en tu biblioteca."
+                    } else {
+                        "Copia guardada en este dispositivo. Quedó pendiente de sincronizar."
+                    }
+                    onResult(true, message)
+                    fetchActivity()
+                } else {
+                    onResult(false, result.exceptionOrNull()?.message ?: "Error al importar copia")
+                }
+            } finally {
+                copyOperationGate.finish("IMPORT", share.id)
             }
         }
     }
 
     fun forkShare(share: RemoteShare, onResult: (Boolean, String) -> Unit) {
+        if (!copyOperationGate.tryStart("FORK", share.id)) {
+            onResult(false, "Esta variante ya se está guardando. Espera un momento.")
+            return
+        }
         viewModelScope.launch {
-            val brewShare = mapRemoteShareToBrewShare(share)
-            domainSocialRepo.publish(brewShare)
+            try {
+                val brewShare = mapRemoteShareToBrewShare(share)
+                domainSocialRepo.publish(brewShare)
 
-            val isRecipe = share.entityType == "recipe"
-            val result = if (isRecipe) {
-                forkRecipeShareUseCase(share.id).map { it.id }
-            } else {
-                forkTechniqueShareUseCase(share.id).map { it.id }
-            }
-
-            if (result.isSuccess) {
-                val localId = result.getOrThrow()
-                val syncResult = socialRepo.syncForkedShare(share, localId)
-                val message = if (syncResult.isSuccess) {
-                    "Variante editable guardada y sincronizada en tu biblioteca."
+                val isRecipe = share.entityType == "recipe"
+                val result = if (isRecipe) {
+                    forkRecipeShareUseCase(share.id).map { it.id }
                 } else {
-                    "Variante editable guardada en este dispositivo. Quedó pendiente de sincronizar."
+                    forkTechniqueShareUseCase(share.id).map { it.id }
                 }
-                onResult(true, message)
-                fetchActivity()
-            } else {
-                onResult(false, result.exceptionOrNull()?.message ?: "No se pudo crear la variante")
+
+                if (result.isSuccess) {
+                    val localId = result.getOrThrow()
+                    val syncResult = socialRepo.syncForkedShare(share, localId)
+                    val message = if (syncResult.isSuccess) {
+                        "Variante editable guardada y sincronizada en tu biblioteca."
+                    } else {
+                        "Variante editable guardada en este dispositivo. Quedó pendiente de sincronizar."
+                    }
+                    onResult(true, message)
+                    fetchActivity()
+                } else {
+                    onResult(false, result.exceptionOrNull()?.message ?: "No se pudo crear la variante")
+                }
+            } finally {
+                copyOperationGate.finish("FORK", share.id)
             }
         }
     }

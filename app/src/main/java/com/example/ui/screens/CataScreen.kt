@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,10 +40,11 @@ fun CataScreen(
     val state by viewModel.state.collectAsState()
     val scrollState = rememberScrollState()
 
-    var rating by remember { mutableStateOf(4.0f) }
-    var notesFoundInput by remember { mutableStateOf("") }
-    var expectedNotesInput by remember { mutableStateOf("Frutas Rojas, Chocolate, Panela") }
-    var commentsInput by remember { mutableStateOf("") }
+    var rating by rememberSaveable { mutableStateOf(4.0f) }
+    var notesFoundInput by rememberSaveable { mutableStateOf("") }
+    var expectedNotesInput by rememberSaveable { mutableStateOf("Frutas rojas, chocolate, panela") }
+    var commentsInput by rememberSaveable { mutableStateOf("") }
+    var isSaving by rememberSaveable { mutableStateOf(false) }
 
     // Start simulated cup cooling timer when screen loads
     DisposableEffect(Unit) {
@@ -453,15 +455,23 @@ fun CataScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
+                    enabled = !isSaving,
                     onClick = {
+                        if (isSaving) return@Button
+                        isSaving = true
                         viewModel.saveCup(
                             notesFound = notesFoundInput,
                             notesExpected = expectedNotesInput,
                             score = rating,
-                            comment = commentsInput
+                            comment = commentsInput,
+                            onCompleted = { success ->
+                                if (success) {
+                                    notesFoundInput = ""
+                                    commentsInput = ""
+                                }
+                                isSaving = false
+                            }
                         )
-                        notesFoundInput = ""
-                        commentsInput = ""
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -471,7 +481,7 @@ fun CataScreen(
                 ) {
                     Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Guardar Taza")
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Guardar Taza Catada", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(if (isSaving) "Guardando…" else "Guardar taza catada", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
 
                 Button(

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.catalog.BrewTechniqueCatalog
 import com.example.data.database.*
 import com.example.data.engine.RecipeIngredientInput
+import com.example.data.engine.CataDraftEncoding
 import com.example.data.repository.BrewRepository
 import com.example.data.validation.BrewInputRules
 import kotlinx.coroutines.Job
@@ -1056,42 +1057,48 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun saveCup(notesFound: String, notesExpected: String, score: Float, comment: String) {
+    fun saveCup(notesFound: String, notesExpected: String, score: Float, comment: String, onCompleted: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            val cupId = UUID.randomUUID().toString()
-            val cup = Cup(
-                id = cupId,
-                executedDoseG = _state.value.activePrepCoffee,
-                executedWaterMl = _state.value.activePrepWater,
-                executedRatio = _state.value.activePrepRatio,
-                executedTemperatureC = _state.value.activePrepTemp,
-                executedGrindSetting = _state.value.activePrepClicks.toString(),
-                executedDurationSeconds = _state.value.elapsedSeconds.coerceAtLeast(120),
-                cupLifeSeconds = _state.value.cataMinutesElapsed * 60,
-                cupLifeState = "FRESH",
-                rating = score.toDouble(),
-                comment = comment,
-                beanNameSnapshot = _state.value.activePrepBean.ifBlank { "Grano de la Casa" },
-                recipeNameSnapshot = "Personal V60",
-                techniqueNameSnapshot = _state.value.activePrepTechniqueName
-            )
-            repository.insertCup(cup)
-            val cata = Cata(
-                id = UUID.randomUUID().toString(),
-                cupId = cupId,
-                activeFlavorFamily = "FRUITY",
-                selectedFlavorNotesJson = notesFound,
-                sensoryWheelDescriptorsJson = "[]",
-                textureLevel = "MEDIUM",
-                cleanlinessLevel = "HIGH",
-                persistenceLevel = "MEDIUM",
-                overallScore = score.toDouble(),
-                totalScaScore = score.toDouble() * 20.0,
-                evaluatorNotes = comment,
-                evaluatedAt = currentIso8601()
-            )
-            repository.insertCata(cata)
-            showToast("Cup/Taza catada con éxito y registrada en el Almacén.")
+            try {
+                val cupId = UUID.randomUUID().toString()
+                val methodName = _state.value.activePrepMethod.ifBlank { "Método manual" }
+                val cup = Cup(
+                    id = cupId,
+                    executedDoseG = _state.value.activePrepCoffee,
+                    executedWaterMl = _state.value.activePrepWater,
+                    executedRatio = _state.value.activePrepRatio,
+                    executedTemperatureC = _state.value.activePrepTemp,
+                    executedGrindSetting = _state.value.activePrepClicks.toString(),
+                    executedDurationSeconds = _state.value.elapsedSeconds.coerceAtLeast(120),
+                    cupLifeSeconds = _state.value.cataMinutesElapsed * 60,
+                    cupLifeState = "FRESH",
+                    rating = score.toDouble(),
+                    comment = comment,
+                    beanNameSnapshot = _state.value.activePrepBean.ifBlank { "Grano de la Casa" },
+                    recipeNameSnapshot = "Preparación $methodName",
+                    techniqueNameSnapshot = _state.value.activePrepTechniqueName
+                )
+                val cata = Cata(
+                    id = UUID.randomUUID().toString(),
+                    cupId = cupId,
+                    activeFlavorFamily = "FRUITY",
+                    selectedFlavorNotesJson = CataDraftEncoding.flavorNotesJson(notesFound),
+                    sensoryWheelDescriptorsJson = CataDraftEncoding.descriptorsJson(notesExpected),
+                    textureLevel = CataDraftEncoding.sensoryLevel(_state.value.cataTexture),
+                    cleanlinessLevel = CataDraftEncoding.sensoryLevel(_state.value.cataCleanliness),
+                    persistenceLevel = CataDraftEncoding.sensoryLevel(_state.value.cataPersistence),
+                    overallScore = score.toDouble(),
+                    totalScaScore = score.toDouble() * 20.0,
+                    evaluatorNotes = comment,
+                    evaluatedAt = currentIso8601()
+                )
+                repository.insertCupWithCata(cup, cata)
+                showToast("Taza catada con éxito y registrada en el Almacén.")
+                onCompleted(true)
+            } catch (_: Exception) {
+                showToast("No se pudo guardar la cata. Tus datos siguen en pantalla para reintentar.")
+                onCompleted(false)
+            }
         }
     }
 

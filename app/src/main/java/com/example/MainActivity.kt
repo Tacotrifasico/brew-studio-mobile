@@ -175,7 +175,14 @@ fun BrewStudioAppShell(viewModel: BaristaCalcViewModel) {
                 )
             }
             composable(Screen.Brew.route) {
-                BrewScreen(viewModel = viewModel)
+                BrewScreen(
+                    viewModel = viewModel,
+                    onNavigateToCata = {
+                        navController.navigate(Screen.CataScreenConfig().route) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
             }
             composable(Screen.CataScreenConfig().route) {
                 CataScreen(

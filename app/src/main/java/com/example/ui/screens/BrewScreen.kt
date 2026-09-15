@@ -40,6 +40,7 @@ import java.util.Locale
 @Composable
 fun BrewScreen(
     viewModel: BaristaCalcViewModel,
+    onNavigateToCata: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
@@ -130,7 +131,7 @@ fun BrewScreen(
         ) { timerRunning ->
             if (timerRunning) {
                 // ACTIVE EXTRACTOR TIMER DISPLAY
-                ActiveBrewTimerView(viewModel = viewModel, state = state)
+                ActiveBrewTimerView(viewModel = viewModel, state = state, onNavigateToCata = onNavigateToCata)
             } else if (isCreatingCustom) {
                 // CREATION FORM VIEW
                 CreateTechniqueFormView(
@@ -444,7 +445,8 @@ fun BrewSetupView(
 @Composable
 fun ActiveBrewTimerView(
     viewModel: BaristaCalcViewModel,
-    state: com.example.ui.viewmodel.BaristaCalcState
+    state: com.example.ui.viewmodel.BaristaCalcState,
+    onNavigateToCata: () -> Unit
 ) {
     val steps = state.activePrepSteps
     val currentIndex = state.activeStepIndex
@@ -656,7 +658,10 @@ fun ActiveBrewTimerView(
         // Finish action button
         item {
             Button(
-                onClick = { viewModel.stopTimer() },
+                onClick = {
+                    viewModel.stopTimer()
+                    onNavigateToCata()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -665,7 +670,7 @@ fun ActiveBrewTimerView(
             ) {
                 Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Completado")
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Completar Extracción e ir a Cata", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("Completar extracción e ir a Cata", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

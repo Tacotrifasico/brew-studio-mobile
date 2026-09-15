@@ -281,6 +281,15 @@ interface CupDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCup(cup: Cup)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCataForCup(cata: Cata)
+
+    @Transaction
+    suspend fun insertCupWithCata(cup: Cup, cata: Cata) {
+        insertCup(cup)
+        insertCataForCup(cata)
+    }
+
     @Delete
     suspend fun deleteCup(cup: Cup)
 

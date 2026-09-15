@@ -29,6 +29,7 @@ struct HubView: View {
     @State private var shareDraft: HubShareDraft?
     @State private var reportShare: SocialShare?
     @State private var blockShare: SocialShare?
+    @State private var copyOperationsInFlight: Set<String> = []
 
     init(account: AccountModel, initialTab: Int = 0) {
         self.account = account
@@ -244,7 +245,9 @@ struct HubView: View {
             HStack {
                 Menu {
                     Button("Registrar copia") { copyShare(share, mode: .imported) }
+                        .disabled(copyOperationsInFlight.contains(copyOperationKey(share, mode: .imported)))
                     Button("Crear variante") { copyShare(share, mode: .forked) }
+                        .disabled(copyOperationsInFlight.contains(copyOperationKey(share, mode: .forked)))
                 } label: { Label("Añadir", systemImage: "square.and.arrow.down") }
                 if inboxItem == nil {
                     Button { toggleLike(share) } label: { Image(systemName: likedShareIds.contains(share.id) ? "heart.fill" : "heart").accessibilityLabel(likedShareIds.contains(share.id) ? "Quitar Me gusta" : "Me gusta") }
@@ -358,19 +361,40 @@ struct HubView: View {
         } catch { self.message = error.localizedDescription }
     }
     private func copyShare(_ share: SocialShare, mode: SocialCopyMode) {
+        let operationKey = copyOperationKey(share, mode: mode)
+        guard copyOperationsInFlight.insert(operationKey).inserted else {
+            message = mode == .forked ? "Esta variante ya se está guardando." : "Esta copia ya se está guardando."
+            return
+        }
         do {
             try SocialService(configuration: account.configuration).importShare(share, mode: mode, context: context)
-            message = mode == .forked ? "Variante creada con atribución." : "Fórmula copiada con atribución."
+            message = mode == .forked
+                ? "Variante guardada en este iPhone. Sincronizando…"
+                : "Fórmula guardada en este iPhone. Sincronizando…"
             Task {
-                try? await account.authenticated { token in
-                    let service = SocialService(configuration: account.configuration)
-                    try await service.save(shareId: share.id, accessToken: token)
-                    try await service.logActivity(action: mode == .forked ? "fork_share" : "import_share", entityType: share.entityType, entityId: share.entityId, shareId: share.id, note: mode == .forked ? "Creaste una variante de \(share.name)" : "Registraste una copia de \(share.name)", accessToken: token)
+                do {
+                    try await account.authenticated { token in
+                        let service = SocialService(configuration: account.configuration)
+                        try await service.save(shareId: share.id, accessToken: token)
+                        try await service.logActivity(action: mode == .forked ? "fork_share" : "import_share", entityType: share.entityType, entityId: share.entityId, shareId: share.id, note: mode == .forked ? "Creaste una variante de \(share.name)" : "Registraste una copia de \(share.name)", accessToken: token)
+                    }
+                    message = mode == .forked
+                        ? "Variante guardada y sincronizada con atribución."
+                        : "Fórmula guardada y sincronizada con atribución."
+                } catch {
+                    message = mode == .forked
+                        ? "Variante guardada en este iPhone; quedó pendiente de sincronizar."
+                        : "Fórmula guardada en este iPhone; quedó pendiente de sincronizar."
                 }
+                copyOperationsInFlight.remove(operationKey)
                 await loadSocialData()
             }
-        } catch { message = error.localizedDescription }
+        } catch {
+            copyOperationsInFlight.remove(operationKey)
+            message = error.localizedDescription
+        }
     }
+    private func copyOperationKey(_ share: SocialShare, mode: SocialCopyMode) -> String { "\(mode.rawValue):\(share.id.uuidString)" }
     private func block(_ share: SocialShare) { socialAction(successMessage: "Usuario bloqueado.") { try await $0.block(userId: share.ownerId, accessToken: $1) } }
     private func unblock(_ userId: UUID) { socialAction(successMessage: "Usuario desbloqueado.") { try await $0.unblock(userId: userId, accessToken: $1) } }
     private func toggleLike(_ share: SocialShare) {

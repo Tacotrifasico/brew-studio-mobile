@@ -3,8 +3,8 @@ package com.example
 import android.content.Context
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.SupportSQLiteDatabase
-import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.data.database.AppDatabase
 import com.example.data.database.MIGRATION_5_6
@@ -12,13 +12,10 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import java.time.Instant
 import java.util.UUID
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@RunWith(AndroidJUnit4::class)
 class RoomMigrationTest {
 
     private val uuidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
@@ -26,8 +23,7 @@ class RoomMigrationTest {
     @get:Rule
     val helper: MigrationTestHelper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),
-        AppDatabase::class.java.canonicalName,
-        FrameworkSQLiteOpenHelperFactory()
+        AppDatabase::class.java
     )
 
     @Test
@@ -398,4 +394,3 @@ class RoomMigrationTest {
         """.trimIndent())
     }
 }
-

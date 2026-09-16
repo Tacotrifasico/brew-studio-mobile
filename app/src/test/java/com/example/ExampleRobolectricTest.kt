@@ -81,7 +81,9 @@ class ExampleRobolectricTest {
       stockGrams = 250f
     )
     viewModel.selectBeanForLab(bean)
+    viewModel.selectMethodForLab("11111111-1111-4000-8000-000000000002", "AeroPress")
     assertEquals("AeroPress", viewModel.state.value.labMethod)
+    assertEquals("11111111-1111-4000-8000-000000000002", viewModel.state.value.labMethodId)
     assertEquals(18f, viewModel.state.value.labCoffee, 0.001f)
     assertEquals(bean.id, viewModel.state.value.labBeanId)
 

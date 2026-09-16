@@ -229,6 +229,9 @@ data class BaristaCalcState(
 
     // Active Lab Playground States
     val labMethod: String = "V60",
+    val labMethodId: String? = "11111111-1111-4000-8000-000000000001",
+    val labRecipeId: String? = null,
+    val labTechniqueId: String? = null,
     val labCoffee: Float = 15f,
     val labWater: Int = 240,
     val labRatio: Float = 16f,
@@ -698,6 +701,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         // Envia variables a Laboratorio
         _state.update { it.copy(
             labMethod = it.method,
+            labMethodId = methodIdForName(it.method),
+            labRecipeId = null,
+            labTechniqueId = null,
             labCoffee = it.coffee,
             labWater = it.water,
             labRatio = it.ratio,
@@ -1175,6 +1181,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         // Transfers cata read settings to Lab Screen variables
         _state.update { it.copy(
             labMethod = it.activePrepMethod,
+            labMethodId = it.activePrepMethodId,
+            labRecipeId = null,
+            labTechniqueId = it.activePrepTechniqueId,
             labCoffee = it.activePrepCoffee,
             labWater = it.activePrepWater,
             labRatio = it.activePrepRatio,
@@ -1233,6 +1242,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         _state.update { current ->
             current.copy(
                 labMethod = method ?: current.labMethod,
+                labMethodId = method?.let(::methodIdForName) ?: current.labMethodId,
                 labCoffee = coffee ?: current.labCoffee,
                 labWater = water ?: current.labWater,
                 labRatio = ratio ?: current.labRatio,
@@ -1246,6 +1256,98 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 labCityName = cityName ?: current.labCityName
             )
         }
+        calculateOfflineLabHypothesis()
+    }
+
+    fun selectMethodForLab(methodId: String?, methodName: String) {
+        _state.update {
+            it.copy(
+                labMethod = methodName,
+                labMethodId = methodId ?: methodIdForName(methodName),
+                labTechniqueId = null
+            )
+        }
+        calculateOfflineLabHypothesis()
+    }
+
+    fun selectRecipeForLab(recipeId: String?) {
+        if (recipeId == null) {
+            _state.update { it.copy(labRecipeId = null) }
+            return
+        }
+        viewModelScope.launch {
+            val recipe = _state.value.recipesList.firstOrNull { it.id == recipeId } ?: return@launch
+            val ingredients = database.recipeIngredientDao().getIngredientsForRecipeSync(recipeId)
+            val coffee = ingredients.firstOrNull {
+                it.name.contains("café", true) || it.name.contains("coffee", true) || it.unit.contains("GRAM", true)
+            }?.amount
+            val water = ingredients.firstOrNull {
+                it.name.contains("agua", true) || it.name.contains("water", true) || it.unit.contains("MILLILIT", true) || it.unit.equals("ml", true)
+            }?.amount?.toInt()
+            val methodId = recipe.suggestedMethodId
+            val methodName = methodId?.let { id ->
+                _state.value.allBrewMethods.firstOrNull { it.id == id }?.let(::methodDisplayName)
+                    ?: BrewTechniqueCatalog.methodName(id)
+            }
+            _state.update { current ->
+                val dose = coffee?.takeIf { it > 0f } ?: current.labCoffee
+                val totalWater = water?.takeIf { it > 0 } ?: current.labWater
+                current.copy(
+                    labRecipeId = recipe.id,
+                    labTechniqueId = null,
+                    labMethodId = methodId ?: current.labMethodId,
+                    labMethod = methodName ?: current.labMethod,
+                    labCoffee = dose,
+                    labWater = totalWater,
+                    labRatio = if (dose > 0f) totalWater / dose else current.labRatio
+                )
+            }
+            calculateOfflineLabHypothesis()
+        }
+    }
+
+    fun selectTechniqueForLab(techniqueId: String?) {
+        if (techniqueId == null) {
+            _state.update { it.copy(labTechniqueId = null) }
+            return
+        }
+        val technique = _state.value.techniquesList.firstOrNull { it.id == techniqueId } ?: return
+        val methodName = _state.value.allBrewMethods.firstOrNull { it.id == technique.methodId }?.let(::methodDisplayName)
+            ?: BrewTechniqueCatalog.methodName(technique.methodId)
+        _state.update { current ->
+            current.copy(
+                labTechniqueId = technique.id,
+                labRecipeId = technique.recipeId,
+                labMethodId = technique.methodId,
+                labMethod = methodName,
+                labBeanId = technique.beanId,
+                labBean = current.beansList.firstOrNull { it.id == technique.beanId }?.name ?: current.labBean,
+                labGrinderId = technique.grinderId,
+                labGrinder = current.grindersList.firstOrNull { it.id == technique.grinderId }?.name
+                    ?: technique.grindDescription.orEmpty().ifBlank { current.labGrinder },
+                labCoffee = technique.doseG,
+                labWater = technique.waterMl,
+                labRatio = technique.ratio,
+                labTemp = technique.temperatureC,
+                labClicks = (technique.grindValue ?: current.labClicks.toDouble()).toInt(),
+                labEstTimeSeconds = technique.totalTimeSeconds,
+                labNotes = technique.notes
+            )
+        }
+        calculateOfflineLabHypothesis()
+    }
+
+    fun selectGrinderForLab(grinder: Instrument?) {
+        _state.update {
+            it.copy(
+                labGrinderId = grinder?.id,
+                labGrinder = grinder?.name ?: "Sin molino seleccionado"
+            )
+        }
+    }
+
+    fun clearBeanForLab() {
+        _state.update { it.copy(labBeanId = null, labBean = "Sin café seleccionado") }
         calculateOfflineLabHypothesis()
     }
 
@@ -1334,8 +1436,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             activePrepRatio = it.labRatio,
             activePrepTemp = it.labTemp,
             activePrepTechniqueName = "Idea de Laboratorio",
-            activePrepTechniqueId = null,
-            activePrepMethodId = methodIdForName(it.labMethod),
+            activePrepTechniqueId = it.labTechniqueId,
+            activePrepMethodId = it.labMethodId ?: methodIdForName(it.labMethod),
             activePrepGrinder = it.labGrinder.ifBlank { "Manual" },
             activePrepGrinderId = it.labGrinderId,
             activePrepClicks = it.labClicks,
@@ -1350,6 +1452,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             val s = _state.value
             val exp = LabExperiment(
+                methodId = s.labMethodId,
+                beanId = s.labBeanId,
+                grinderId = s.labGrinderId,
+                techniqueId = s.labTechniqueId,
                 coffeeGrams = s.labCoffee,
                 waterMl = s.labWater,
                 ratio = s.labRatio,
@@ -1375,6 +1481,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 name = recipeName,
                 recipeKind = "BLACK_COFFEE",
                 intention = "Fórmula calibrada en laboratorio: ${s.labNotes}",
+                suggestedMethodId = s.labMethodId,
                 ownerUserId = activeOwnerId.value,
                 syncStatus = "PENDING_CREATE"
             )
@@ -1386,7 +1493,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     fun saveLabAsTechnique(techniqueName: String) {
         viewModelScope.launch {
             val s = _state.value
-            val selectedMethodId = methodIdForName(s.labMethod)
+            val selectedMethodId = s.labMethodId ?: methodIdForName(s.labMethod)
                 ?: "11111111-1111-4000-8000-000000000001"
             val technique = Technique(
                 name = techniqueName,
@@ -1413,6 +1520,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     fun resetLabVariables() {
         _state.update { it.copy(
             labMethod = "V60",
+            labMethodId = "11111111-1111-4000-8000-000000000001",
+            labRecipeId = null,
+            labTechniqueId = null,
             labCoffee = 15f,
             labWater = 240,
             labRatio = 16f,

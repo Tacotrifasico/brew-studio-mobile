@@ -188,6 +188,8 @@ fun LabScreen(
     var selectedCategory by remember { mutableStateOf(LabCategory.Extraccion) }
     var isFahrenheit by remember { mutableStateOf(false) }
     var showInfoSheet by remember { mutableStateOf(false) }
+    var showContextSheet by remember { mutableStateOf(false) }
+    var methodMenuExpanded by remember { mutableStateOf(false) }
 
     var showRecipeDialog by remember { mutableStateOf(false) }
     var showTechniqueDialog by remember { mutableStateOf(false) }
@@ -373,6 +375,9 @@ fun LabScreen(
     if (showInfoSheet) {
         LabInfoSheet(onDismissRequest = { showInfoSheet = false })
     }
+    if (showContextSheet) {
+        LabContextSheet(state = state, viewModel = viewModel, onDismissRequest = { showContextSheet = false })
+    }
 
     Box(
         modifier = modifier
@@ -437,18 +442,36 @@ fun LabScreen(
                             fontWeight = FontWeight.Bold,
                             color = TextPrincipal
                         )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(AcentoSuave)
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = state.labMethod.uppercase(),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = AcentoPrincipal
-                            )
+                        Box {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(AcentoSuave)
+                                    .clickable { methodMenuExpanded = true }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(state.labMethod.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Cambiar método de extracción", tint = AcentoPrincipal, modifier = Modifier.size(14.dp))
+                            }
+                            DropdownMenu(expanded = methodMenuExpanded, onDismissRequest = { methodMenuExpanded = false }) {
+                                state.allBrewMethods.forEach { method ->
+                                    val methodName = when (method.code.lowercase()) {
+                                        "v60" -> "V60"; "aeropress" -> "AeroPress"; "espresso" -> "Espresso"
+                                        "french_press" -> "Prensa francesa"; "chemex" -> "Chemex"; "moka" -> "Moka"; "cold_brew" -> "Cold brew"
+                                        else -> method.nameKey.removePrefix("brew_method.").removeSuffix(".name")
+                                    }
+                                    DropdownMenuItem(
+                                        text = { Text(methodName) },
+                                        onClick = {
+                                            viewModel.selectMethodForLab(method.id, methodName)
+                                            methodMenuExpanded = false
+                                        },
+                                        leadingIcon = { if (method.id == state.labMethodId) Icon(Icons.Default.Check, contentDescription = null) }
+                                    )
+                                }
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(2.dp))
@@ -464,6 +487,15 @@ fun LabScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    FilledTonalButton(
+                        onClick = { showContextSheet = true },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier.height(38.dp)
+                    ) {
+                        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Contexto", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
                     Box(
                         modifier = Modifier
                             .size(38.dp)
@@ -1691,6 +1723,142 @@ fun LabInfoSheet(onDismissRequest: () -> Unit) {
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("Entendido", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LabContextSheet(
+    state: com.example.ui.viewmodel.BaristaCalcState,
+    viewModel: BaristaCalcViewModel,
+    onDismissRequest: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        containerColor = MainBackground,
+        contentColor = TextPrincipal
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text("Contexto del experimento", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Conecta la hipótesis con el método, la receta, la técnica y tu equipo. Estas relaciones viajarán a Preparar, Cata y Almacén.",
+                fontSize = 13.sp,
+                color = TextSecundario
+            )
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                border = BorderStroke(1.dp, BordeSuave),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LabContextDropdown(
+                        label = "Método de extracción",
+                        emptyLabel = "Selecciona un método",
+                        selectedId = state.labMethodId,
+                        selectedLabel = state.labMethod,
+                        options = state.allBrewMethods.map { method ->
+                            method.id to when (method.code.lowercase()) {
+                                "v60" -> "V60"; "aeropress" -> "AeroPress"; "espresso" -> "Espresso"
+                                "french_press" -> "Prensa francesa"; "chemex" -> "Chemex"; "moka" -> "Moka"; "cold_brew" -> "Cold brew"
+                                else -> method.nameKey.removePrefix("brew_method.").removeSuffix(".name")
+                            }
+                        },
+                        allowEmpty = false,
+                        onSelect = { id ->
+                            state.allBrewMethods.firstOrNull { it.id == id }?.let { method ->
+                                val name = when (method.code.lowercase()) {
+                                    "v60" -> "V60"; "aeropress" -> "AeroPress"; "espresso" -> "Espresso"
+                                    "french_press" -> "Prensa francesa"; "chemex" -> "Chemex"; "moka" -> "Moka"; "cold_brew" -> "Cold brew"
+                                    else -> method.nameKey.removePrefix("brew_method.").removeSuffix(".name")
+                                }
+                                viewModel.selectMethodForLab(method.id, name)
+                            }
+                        }
+                    )
+                    LabContextDropdown(
+                        label = "Receta base",
+                        emptyLabel = "Sin receta base",
+                        selectedId = state.labRecipeId,
+                        selectedLabel = state.recipesList.firstOrNull { it.id == state.labRecipeId }?.name,
+                        options = state.recipesList.map { it.id to it.name },
+                        onSelect = viewModel::selectRecipeForLab
+                    )
+                    LabContextDropdown(
+                        label = "Técnica base",
+                        emptyLabel = "Modo libre, sin técnica base",
+                        selectedId = state.labTechniqueId,
+                        selectedLabel = state.techniquesList.firstOrNull { it.id == state.labTechniqueId }?.name,
+                        options = state.techniquesList.map { it.id to it.name },
+                        onSelect = viewModel::selectTechniqueForLab
+                    )
+                    LabContextDropdown(
+                        label = "Café",
+                        emptyLabel = "Sin café seleccionado",
+                        selectedId = state.labBeanId,
+                        selectedLabel = state.beansList.firstOrNull { it.id == state.labBeanId }?.name,
+                        options = state.beansList.map { it.id to it.name },
+                        onSelect = { id ->
+                            if (id == null) viewModel.clearBeanForLab()
+                            else state.beansList.firstOrNull { it.id == id }?.let(viewModel::selectBeanForLab)
+                        }
+                    )
+                    LabContextDropdown(
+                        label = "Molino",
+                        emptyLabel = "Sin molino seleccionado",
+                        selectedId = state.labGrinderId,
+                        selectedLabel = state.grindersList.firstOrNull { it.id == state.labGrinderId }?.name,
+                        options = state.grindersList.map { it.id to it.name },
+                        onSelect = { id -> viewModel.selectGrinderForLab(state.grindersList.firstOrNull { it.id == id }) }
+                    )
+                }
+            }
+            Button(onClick = onDismissRequest, modifier = Modifier.fillMaxWidth()) { Text("Listo") }
+        }
+    }
+}
+
+@Composable
+private fun LabContextDropdown(
+    label: String,
+    emptyLabel: String,
+    selectedId: String?,
+    selectedLabel: String?,
+    options: List<Pair<String, String>>,
+    allowEmpty: Boolean = true,
+    onSelect: (String?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecundario)
+        Box {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(selectedLabel ?: emptyLabel, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(Icons.Default.ArrowDropDown, contentDescription = "Cambiar $label")
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                if (allowEmpty) {
+                    DropdownMenuItem(
+                        text = { Text(emptyLabel) },
+                        onClick = { onSelect(null); expanded = false },
+                        leadingIcon = { if (selectedId == null) Icon(Icons.Default.Check, contentDescription = null) }
+                    )
+                }
+                options.forEach { (id, name) ->
+                    DropdownMenuItem(
+                        text = { Text(name) },
+                        onClick = { onSelect(id); expanded = false },
+                        leadingIcon = { if (selectedId == id) Icon(Icons.Default.Check, contentDescription = null) }
+                    )
+                }
             }
         }
     }

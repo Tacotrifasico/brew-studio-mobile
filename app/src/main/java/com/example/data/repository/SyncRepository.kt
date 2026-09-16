@@ -29,6 +29,8 @@ class SyncRepository(
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para sincronizar"))
 
         try {
+            val syncErrors = mutableListOf<String>()
+
             // 1. Synchronize recipes to remote
             val unsyncedRecipes = recipeDao.getAllRecipes().first().filter { 
                 OwnerScopeRules.canSync(it.ownerUserId, uid) && (it.syncStatus != "SYNCED" || it.remoteId == null)
@@ -73,6 +75,9 @@ class SyncRepository(
                         lastSyncedAt = com.example.data.database.currentIso8601()
                     ))
                     recipesPushed++
+                } else {
+                    recipeDao.insertRecipe(localRecipe.copy(syncStatus = "ERROR"))
+                    syncErrors += "No se pudo subir la receta \"${localRecipe.name}\""
                 }
             }
 
@@ -129,24 +134,37 @@ class SyncRepository(
                     }
 
                     val stepsResult = techniqueRemoteSource.insertTechniqueSteps(remoteSteps)
-                    if (stepsResult.isSuccess) {
+                    val allStepsSaved = if (stepsResult.isSuccess) {
                         val savedRemoteSteps = stepsResult.getOrThrow()
                         localSteps.forEachIndexed { index, step ->
                             val parsedId = savedRemoteSteps.getOrNull(index)?.id
                             techniqueStepDao.insertStep(step.copy(
                                 remoteId = parsedId,
-                                syncStatus = "SYNCED"
+                                syncStatus = if (parsedId != null || localSteps.isEmpty()) "SYNCED" else "ERROR"
                             ))
                         }
+                        savedRemoteSteps.size == localSteps.size && savedRemoteSteps.all { it.id != null }
+                    } else {
+                        localSteps.forEach { step ->
+                            techniqueStepDao.insertStep(step.copy(syncStatus = "ERROR"))
+                        }
+                        false
                     }
 
                     techniqueDao.insertTechnique(localTech.copy(
                         remoteId = remoteTechId,
                         ownerUserId = localTech.ownerUserId ?: uid,
-                        syncStatus = "SYNCED",
-                        lastSyncedAt = com.example.data.database.currentIso8601()
+                        syncStatus = if (allStepsSaved) "SYNCED" else "ERROR",
+                        lastSyncedAt = if (allStepsSaved) com.example.data.database.currentIso8601() else localTech.lastSyncedAt
                     ))
-                    techniquesPushed++
+                    if (allStepsSaved) {
+                        techniquesPushed++
+                    } else {
+                        syncErrors += "La técnica \"${localTech.name}\" se subió, pero sus pasos quedaron pendientes"
+                    }
+                } else {
+                    techniqueDao.insertTechnique(localTech.copy(syncStatus = "ERROR"))
+                    syncErrors += "No se pudo subir la técnica \"${localTech.name}\""
                 }
             }
 
@@ -184,6 +202,8 @@ class SyncRepository(
                         recipesPulled++
                     }
                 }
+            } else {
+                syncErrors += "No se pudieron descargar las recetas"
             }
 
             // 4. Pull cloud techniques down to offline cache (Room)
@@ -241,13 +261,22 @@ class SyncRepository(
                                 )
                             }
                             techniqueStepDao.insertSteps(localMappedSteps)
+                        } else {
+                            syncErrors += "No se pudieron descargar los pasos de \"${remote.name}\""
                         }
                         techniquesPulled++
                     }
                 }
+            } else {
+                syncErrors += "No se pudieron descargar las técnicas"
             }
 
-            return Result.success("Sincronización completa: $recipesPushed subidas, $techniquesPushed técnicas subidas. $recipesPulled recetas descargadas, $techniquesPulled técnicas descargadas.")
+            val summary = "$recipesPushed recetas y $techniquesPushed técnicas subidas; $recipesPulled recetas y $techniquesPulled técnicas descargadas."
+            return if (syncErrors.isEmpty()) {
+                Result.success("Sincronización completa: $summary")
+            } else {
+                Result.failure(Exception("Sincronización parcial: $summary ${syncErrors.joinToString(". ")}"))
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Uncaught error during synchronization", e)
             return Result.failure(e)

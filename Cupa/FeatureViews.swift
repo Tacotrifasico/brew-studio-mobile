@@ -29,6 +29,11 @@ struct HomeView: View {
     var body: some View {
         ZStack {
             CupaTheme.background.ignoresSafeArea()
+            LinearGradient(
+                colors: [CupaTheme.card.opacity(0.72), CupaTheme.background.opacity(0)],
+                startPoint: .top,
+                endPoint: .center
+            ).ignoresSafeArea().allowsHitTesting(false)
             ScrollView {
                 VStack(spacing: 20) {
                     HStack {
@@ -725,8 +730,8 @@ struct LabView: View {
                     ForEach(methods) { Text($0.name).tag(Optional($0.id)) }
                 }
                 HStack {
-                    Picker("Grano", selection: binding(\.beanId)) { Text("Sin asignar").tag(Optional<UUID>.none); ForEach(beans) { Text($0.name).tag(Optional($0.id)) } }
-                    Picker("Molino", selection: binding(\.grinderId)) { Text("Sin asignar").tag(Optional<UUID>.none); ForEach(grinders) { Text($0.name).tag(Optional($0.id)) } }
+                    Picker("Café", selection: binding(\.beanId)) { Text("Sin café seleccionado").tag(Optional<UUID>.none); ForEach(beans) { Text($0.name).tag(Optional($0.id)) } }
+                    Picker("Molino", selection: binding(\.grinderId)) { Text("Sin molino seleccionado").tag(Optional<UUID>.none); ForEach(grinders) { Text($0.name).tag(Optional($0.id)) } }
                 }
             }
         }
@@ -853,13 +858,16 @@ struct LabView: View {
     }
 
     private var compactHypothesis: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(primaryOutcome).font(.subheadline.bold())
-                Text(model.profile.summary).font(.caption2).lineLimit(2)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(primaryOutcome).font(.subheadline.bold()).fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Text(String(format: "%.2f×", model.profile.extractionIndex)).font(.headline.monospacedDigit())
             }
-            Spacer()
-            Text(String(format: "%.2fx", model.profile.extractionIndex)).font(.headline.monospacedDigit())
+            Text(model.profile.summary).font(.caption2).fixedSize(horizontal: false, vertical: true)
+            Text("Índice relativo de extracción · 1.00× es la referencia; menos indica subextracción y más, mayor extracción.")
+                .font(.system(size: 9, weight: .semibold)).foregroundStyle(CupaTheme.onAccent.opacity(0.84))
+                .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(CupaTheme.onAccent)
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -917,6 +925,7 @@ struct LabView: View {
                         Text("°C").tag(TemperatureUnit.celsius); Text("°F").tag(TemperatureUnit.fahrenheit)
                     }.pickerStyle(.segmented).accessibilityIdentifier("lab.temperature.unit")
                     labSlider("Temperatura", value: bindingInt(\.temperatureC), range: 80...98, step: 1, display: temperatureText)
+                    temperatureCalibrationBand
                     labSlider("Clicks de molienda", value: bindingInt(\.grindClicks), range: 6...36, step: 1, display: "\(model.state.grindClicks) clicks")
                 case .bean:
                     Picker("Frescura", selection: binding(\.freshness)) {
@@ -1063,6 +1072,39 @@ struct LabView: View {
             : "\(Int(roundf(LabEngine.fahrenheit(fromCelsius: Float(experiment.temperatureC))))) °F"
     }
     private var formattedTime: String { String(format: "%d:%02d min", model.state.timeSeconds / 60, model.state.timeSeconds % 60) }
+    private var temperatureCalibrationBand: some View {
+        VStack(spacing: 3) {
+            GeometryReader { proxy in
+                let usableWidth = max(0, proxy.size.width - 4)
+                HStack(spacing: 2) {
+                    Capsule().fill(Color.blue.opacity(0.55)).frame(width: usableWidth * 10 / 18)
+                    Capsule().fill(CupaTheme.forest.opacity(0.82)).frame(width: usableWidth * 6 / 18)
+                    Capsule().fill(CupaTheme.terracotta.opacity(0.78)).frame(width: usableWidth * 2 / 18)
+                }
+                .overlay(alignment: .topLeading) {
+                    HStack(spacing: 0) {
+                        Color.clear.frame(width: proxy.size.width * 10 / 18)
+                        Rectangle().fill(CupaTheme.text.opacity(0.6)).frame(width: 1, height: 10)
+                        Color.clear.frame(width: proxy.size.width * 6 / 18)
+                        Rectangle().fill(CupaTheme.text.opacity(0.6)).frame(width: 1, height: 10)
+                    }
+                }
+            }
+            .frame(height: 10)
+            HStack(alignment: .top) {
+                Text("80–89°\nMás acidez").frame(maxWidth: .infinity, alignment: .leading)
+                Text("90–96°\nZona útil").frame(maxWidth: .infinity)
+                Text("97–98°\nMás amargor").frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .font(.system(size: 9, weight: .semibold)).foregroundStyle(CupaTheme.secondaryText)
+            if isTemperatureCapped {
+                Text("En \(model.state.cityName), el límite físico es \(boilingText).")
+                    .font(.caption2.bold()).foregroundStyle(.orange).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Guía de temperatura: de 80 a 89 grados favorece acidez; de 90 a 96 es la zona útil; de 97 a 98 aumenta el amargor")
+    }
     private var primaryOutcome: String {
         let p = model.profile
         if p.bitterness > 65 { return "Intensa y con cuerpo" }

@@ -56,18 +56,30 @@ struct PreparationExecutionView: View {
             VStack(spacing: 14) {
                 HStack {
                     VStack(alignment: .leading) {
-                        Text(model.state.techniqueName).font(.headline)
+                        Text("TÉCNICA ACTIVA").font(.caption2.bold()).tracking(1.1).opacity(0.82)
+                        Text(model.state.techniqueName).font(.title3.bold())
                         Text("\(model.state.methodName) · \(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(model.state.waterMl) ml")
-                            .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            .font(.caption).opacity(0.9)
                         if let bean = beans.first(where: { $0.id == model.state.beanId }) {
-                            Label(bean.name, systemImage: "leaf").font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
+                            Label(bean.name, systemImage: "leaf.fill").font(.caption.bold())
                         }
                     }
                     Spacer()
-                    Text("1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))").font(.subheadline.bold()).foregroundStyle(CupaTheme.forestText)
+                    Text("1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))")
+                        .font(.title3.bold().monospacedDigit())
                 }
-                Text(timeString(model.state.elapsedSeconds)).font(.system(.largeTitle, design: .rounded, weight: .bold)).monospacedDigit()
+                .foregroundStyle(CupaTheme.onAccent)
+                .padding(14)
+                .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+                Text(timeString(model.state.elapsedSeconds)).font(.system(.largeTitle, design: .rounded, weight: .black)).monospacedDigit()
                     .minimumScaleFactor(0.6).accessibilityLabel("Tiempo transcurrido").accessibilityValue(timeString(model.state.elapsedSeconds))
+                    .foregroundStyle(CupaTheme.espressoText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(CupaTheme.backgroundAlt.opacity(0.82))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 if let step = model.activeStep {
                     VStack(spacing: 8) {
                         Text("PASO \(step.number) DE \(model.state.steps.count)").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
@@ -77,6 +89,10 @@ struct PreparationExecutionView: View {
                         if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText).multilineTextAlignment(.center) }
                         ProgressView(value: Double(min(model.stepElapsed, max(1, step.durationSeconds))), total: Double(max(1, step.durationSeconds))).tint(CupaTheme.terracotta)
                     }
+                    .padding(12)
+                    .background(LinearGradient(colors: [CupaTheme.terracotta.opacity(0.12), CupaTheme.forest.opacity(0.08)], startPoint: .leading, endPoint: .trailing))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(CupaTheme.border, lineWidth: 1) }
                 } else { Text("Selecciona una técnica para comenzar.").font(.caption).foregroundStyle(CupaTheme.secondaryText) }
                 controls
             }.frame(maxWidth: .infinity)

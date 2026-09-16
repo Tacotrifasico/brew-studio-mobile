@@ -506,8 +506,8 @@ private struct TechniqueEditorView: View {
                 Section("Preparación") {
                     HStack { TextField("Café (g)", value: $draft.doseGrams, format: .number).keyboardType(.decimalPad); TextField("Agua (ml)", value: $draft.waterMl, format: .number).keyboardType(.numberPad) }
                     HStack { TextField("Ratio", value: $draft.ratio, format: .number).keyboardType(.decimalPad); TextField("Temperatura °C", value: $draft.temperatureC, format: .number).keyboardType(.numberPad) }
-                    Picker("Grano", selection: $draft.beanId) { Text("Sin asignar").tag(Optional<UUID>.none); ForEach(beans) { Text($0.name).tag(Optional($0.id)) } }
-                    Picker("Molino", selection: $draft.grinderId) { Text("Sin asignar").tag(Optional<UUID>.none); ForEach(grinders) { Text($0.name).tag(Optional($0.id)) } }
+                    Picker("Café", selection: $draft.beanId) { Text("Sin café seleccionado").tag(Optional<UUID>.none); ForEach(beans) { Text($0.name).tag(Optional($0.id)) } }
+                    Picker("Molino", selection: $draft.grinderId) { Text("Sin molino seleccionado").tag(Optional<UUID>.none); ForEach(grinders) { Text($0.name).tag(Optional($0.id)) } }
                     HStack { TextField("Valor molienda", value: $draft.grindValue, format: .number).keyboardType(.decimalPad); Picker("Unidad", selection: $draft.grindUnit) { ForEach(grindUnits, id: \.self) { Text($0.capitalized).tag($0) } } }
                     TextField("Descripción de molienda", text: $draft.grindDescription)
                     TextField("Notas", text: $draft.notes, axis: .vertical).lineLimit(2...5)

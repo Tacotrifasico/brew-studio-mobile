@@ -408,12 +408,24 @@ final class RecipeTechniqueRepositoryTests: XCTestCase {
             ]
         ))
         let originalSteps = try repository.techniqueSteps(techniqueId: original.id)
+        let originalAuthorId = UUID(); let importedShareId = UUID()
+        original.originalAuthorUserId = originalAuthorId
+        original.originalAuthorName = "Ana"
+        original.importedFromShareId = importedShareId
+        original.copyMode = "IMPORT"
+        try context.save()
 
         let copy = try repository.duplicateTechnique(original)
         let copiedSteps = try repository.techniqueSteps(techniqueId: copy.id)
 
         XCTAssertNotEqual(copy.id, original.id)
         XCTAssertEqual(copy.name, "Copia de V60 de prueba")
+        XCTAssertEqual(copy.originalEntityId, original.id)
+        XCTAssertEqual(copy.rootEntityId, original.id)
+        XCTAssertEqual(copy.copyMode, "FORK")
+        XCTAssertEqual(copy.originalAuthorUserId, originalAuthorId)
+        XCTAssertEqual(copy.originalAuthorName, "Ana")
+        XCTAssertEqual(copy.importedFromShareId, importedShareId)
         XCTAssertEqual(copiedSteps.map(\.title), originalSteps.map(\.title))
         XCTAssertTrue(Set(copiedSteps.map(\.id)).isDisjoint(with: Set(originalSteps.map(\.id))))
         copiedSteps[0].title = "Bloom editado"

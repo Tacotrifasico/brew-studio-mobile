@@ -314,12 +314,21 @@ final class RecipeTechniqueRepository {
     }
 
     @discardableResult func duplicateTechnique(_ technique: TechniqueRecord) throws -> TechniqueRecord {
+        let sourceId = technique.id
         var draft = try techniqueDraft(for: technique)
         draft.id = UUID(); draft.name = "Copia de \(draft.name)"
         draft.steps = draft.steps.map { step in
             var copy = step; copy.id = UUID(); return copy
         }
-        return try saveTechnique(draft)
+        let copy = try saveTechnique(draft)
+        copy.originalAuthorUserId = technique.originalAuthorUserId
+        copy.originalAuthorName = technique.originalAuthorName
+        copy.originalEntityId = technique.originalEntityId ?? sourceId
+        copy.rootEntityId = technique.rootEntityId ?? technique.originalEntityId ?? sourceId
+        copy.importedFromShareId = technique.importedFromShareId
+        copy.copyMode = "FORK"
+        try saveContext()
+        return copy
     }
 
     func deleteTechnique(_ technique: TechniqueRecord) throws {

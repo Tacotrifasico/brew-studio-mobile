@@ -238,24 +238,9 @@ private struct BaristaCalculatorCard: View {
                     .foregroundStyle(categoryTextColor)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
-                HStack(spacing: 8) {
-                    calculatorInput("CAFÉ (g)", identifier: "calculator.coffee", text: Binding(
-                        get: { calculator.coffeeInput },
-                        set: { calculator.changeCoffee($0) }
-                    ), dragAxis: .vertical, dragStep: $coffeeDragStep,
-                    adjust: { adjustCoffee(Double($0)) })
-
-                    calculatorInput("RATIO (1:x)", identifier: "calculator.ratio", text: Binding(
-                        get: { calculator.ratioInput },
-                        set: { calculator.changeRatio($0) }
-                    ), dragAxis: .horizontal, dragStep: $ratioDragStep,
-                    adjust: { adjustRatio(Double($0) * 0.1) })
-
-                    calculatorInput("AGUA (ml)", identifier: "calculator.water", text: Binding(
-                        get: { calculator.waterInput },
-                        set: { calculator.changeWater($0) }
-                    ), dragAxis: .vertical, dragStep: $waterDragStep,
-                    adjust: { adjustWater($0 * 10) })
+                ViewThatFits(in: .horizontal) {
+                    calculatorInputs(axis: .horizontal)
+                    calculatorInputs(axis: .vertical)
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -320,6 +305,7 @@ private struct BaristaCalculatorCard: View {
                 }
             }
         }
+        .brewKeyboardDismissToolbar()
         .sheet(isPresented: $showingMethodManager) {
             CalculatorMethodManager(
                 calculator: calculator,
@@ -330,6 +316,36 @@ private struct BaristaCalculatorCard: View {
         .alert("No se pudo actualizar el método", isPresented: Binding(get: { methodError != nil }, set: { if !$0 { methodError = nil } })) {
             Button("Aceptar") {}
         } message: { Text(methodError ?? "") }
+    }
+
+    private func calculatorInputs(axis: Axis) -> some View {
+        Group {
+            if axis == .horizontal {
+                HStack(spacing: 8) { calculatorInputContent }
+            } else {
+                VStack(spacing: 8) { calculatorInputContent }
+            }
+        }
+    }
+
+    @ViewBuilder private var calculatorInputContent: some View {
+        calculatorInput("CAFÉ (g)", identifier: "calculator.coffee", text: Binding(
+            get: { calculator.coffeeInput },
+            set: { calculator.changeCoffee($0) }
+        ), dragAxis: .vertical, dragStep: $coffeeDragStep,
+        adjust: { adjustCoffee(Double($0)) })
+
+        calculatorInput("RATIO (1:x)", identifier: "calculator.ratio", text: Binding(
+            get: { calculator.ratioInput },
+            set: { calculator.changeRatio($0) }
+        ), dragAxis: .horizontal, dragStep: $ratioDragStep,
+        adjust: { adjustRatio(Double($0) * 0.1) })
+
+        calculatorInput("AGUA (ml)", identifier: "calculator.water", text: Binding(
+            get: { calculator.waterInput },
+            set: { calculator.changeWater($0) }
+        ), dragAxis: .vertical, dragStep: $waterDragStep,
+        adjust: { adjustWater($0 * 10) })
     }
 
     private var calculatorActions: some View {

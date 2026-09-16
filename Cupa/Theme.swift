@@ -68,6 +68,24 @@ extension View {
     func brewScrollableCanvas() -> some View {
         scrollContentBackground(.hidden)
             .background(CupaTheme.background)
+            .brewKeyboardDismissToolbar()
+    }
+
+    func brewKeyboardDismissToolbar() -> some View {
+        toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Listo") {
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil,
+                        from: nil,
+                        for: nil
+                    )
+                }
+                .accessibilityLabel("Cerrar teclado")
+            }
+        }
     }
 }
 

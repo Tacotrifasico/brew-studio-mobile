@@ -8,6 +8,7 @@ import com.example.data.remote.TechniqueRemoteDataSource
 import com.example.data.remote.models.RemoteRecipe
 import com.example.data.remote.models.RemoteTechnique
 import com.example.data.remote.models.RemoteTechniqueStep
+import com.example.data.validation.OwnerScopeRules
 import kotlinx.coroutines.flow.first
 
 class SyncRepository(
@@ -30,7 +31,7 @@ class SyncRepository(
         try {
             // 1. Synchronize recipes to remote
             val unsyncedRecipes = recipeDao.getAllRecipes().first().filter { 
-                it.syncStatus != "SYNCED" || it.remoteId == null 
+                OwnerScopeRules.canSync(it.ownerUserId, uid) && (it.syncStatus != "SYNCED" || it.remoteId == null)
             }
             var recipesPushed = 0
             for (localRecipe in unsyncedRecipes) {
@@ -67,6 +68,7 @@ class SyncRepository(
                     val savedRemote = result.getOrThrow()
                     recipeDao.insertRecipe(localRecipe.copy(
                         remoteId = savedRemote.id,
+                        ownerUserId = localRecipe.ownerUserId ?: uid,
                         syncStatus = "SYNCED",
                         lastSyncedAt = com.example.data.database.currentIso8601()
                     ))
@@ -76,7 +78,7 @@ class SyncRepository(
 
             // 2. Synchronize techniques to remote
             val unsyncedTechs = techniqueDao.getAllTechniques().first().filter { 
-                it.syncStatus != "SYNCED" || it.remoteId == null 
+                OwnerScopeRules.canSync(it.ownerUserId, uid) && (it.syncStatus != "SYNCED" || it.remoteId == null)
             }
             var techniquesPushed = 0
             for (localTech in unsyncedTechs) {
@@ -140,6 +142,7 @@ class SyncRepository(
 
                     techniqueDao.insertTechnique(localTech.copy(
                         remoteId = remoteTechId,
+                        ownerUserId = localTech.ownerUserId ?: uid,
                         syncStatus = "SYNCED",
                         lastSyncedAt = com.example.data.database.currentIso8601()
                     ))
@@ -152,7 +155,7 @@ class SyncRepository(
             var recipesPulled = 0
             if (pullRecipesRes.isSuccess) {
                 val remoteRecipes = pullRecipesRes.getOrThrow()
-                val localRecipes = recipeDao.getAllRecipes().first()
+                val localRecipes = recipeDao.getAllRecipes().first().filter { OwnerScopeRules.isVisible(it.ownerUserId, uid) }
 
                 for (remote in remoteRecipes) {
                     val matchedLocal = localRecipes.find { it.remoteId == remote.id }
@@ -165,7 +168,7 @@ class SyncRepository(
                             ingredientsSummary = "",
                             stepsSummary = "",
                             tags = "",
-                            ownerUserId = remote.ownerUserId,
+                            ownerUserId = remote.ownerUserId ?: remote.userId ?: uid,
                             ownerDisplayName = remote.ownerDisplayName,
                             visibility = remote.visibility ?: "PRIVATE",
                             isShared = remote.isShared ?: false,
@@ -188,7 +191,7 @@ class SyncRepository(
             var techniquesPulled = 0
             if (pullTechsRes.isSuccess) {
                 val remoteTechs = pullTechsRes.getOrThrow()
-                val localTechs = techniqueDao.getAllTechniques().first()
+                val localTechs = techniqueDao.getAllTechniques().first().filter { OwnerScopeRules.isVisible(it.ownerUserId, uid) }
                 val defaultMethodUuid = "11111111-1111-4000-8000-000000000001"
 
                 for (remote in remoteTechs) {
@@ -205,7 +208,7 @@ class SyncRepository(
                             grindDescription = remote.grindClicks?.let { "$it Clicks" } ?: "18 Clicks",
                             notes = remote.notes ?: "",
                             totalTimeSeconds = 180,
-                            ownerUserId = remote.ownerUserId,
+                            ownerUserId = remote.ownerUserId ?: remote.userId ?: uid,
                             ownerDisplayName = remote.ownerDisplayName,
                             visibility = remote.visibility ?: "PRIVATE",
                             isShared = remote.isShared ?: false,

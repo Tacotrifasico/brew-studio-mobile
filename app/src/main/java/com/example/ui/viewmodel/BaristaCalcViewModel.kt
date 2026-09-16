@@ -7,13 +7,18 @@ import com.example.data.catalog.BrewTechniqueCatalog
 import com.example.data.database.*
 import com.example.data.engine.RecipeIngredientInput
 import com.example.data.engine.CataDraftEncoding
+import com.example.data.remote.SessionManager
 import com.example.data.repository.BrewRepository
 import com.example.data.validation.BrewInputRules
+import com.example.data.validation.OwnerScopeRules
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -263,6 +268,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     private var favoriteSelectionRestored = false
 
     private val database = AppDatabase.getDatabase(application)
+    private val sessionManager = SessionManager(application)
+    private val activeOwnerId = sessionManager.observeUserId()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, sessionManager.getUserId())
     private val repository = BrewRepository(
         ratioPresetDao = database.ratioPresetDao(),
         ratioLastUsedDao = database.ratioLastUsedDao(),
@@ -333,51 +341,53 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
         viewModelScope.launch {
-            repository.allBeans.collect { list ->
-                _state.update { it.copy(beansList = list) }
+            combine(repository.allBeans, activeOwnerId) { list, ownerId -> list.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) } }.collect { list ->
+                _state.update { it.copy(beansList = list, beansCount = list.size) }
             }
         }
         viewModelScope.launch {
-            repository.allInstruments.collect { list ->
-                _state.update { it.copy(equipmentList = list) }
+            combine(repository.allInstruments, activeOwnerId) { list, ownerId -> list.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) } }.collect { list ->
+                _state.update { it.copy(equipmentList = list, equipmentCount = list.size) }
             }
         }
         viewModelScope.launch {
-            repository.allGrinders.collect { list ->
-                _state.update { it.copy(grindersList = list) }
+            combine(repository.allGrinders, activeOwnerId) { list, ownerId -> list.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) } }.collect { list ->
+                _state.update { it.copy(grindersList = list, grindersCount = list.size) }
             }
         }
         viewModelScope.launch {
-            repository.allTechniques.collect { list ->
-                _state.update { it.copy(techniquesList = list) }
+            combine(repository.allTechniques, activeOwnerId) { list, ownerId -> list.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) } }.collect { list ->
+                _state.update { it.copy(techniquesList = list, techniquesCount = list.size) }
             }
         }
         viewModelScope.launch {
-            repository.allRecipes.collect { list ->
-                _state.update { it.copy(recipesList = list) }
+            combine(repository.allRecipes, activeOwnerId) { list, ownerId -> list.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) } }.collect { list ->
+                _state.update { it.copy(recipesList = list, recipesCount = list.size) }
             }
         }
         viewModelScope.launch {
-            repository.allCatas.collect { list ->
+            combine(repository.allCatas, activeOwnerId) { list, ownerId -> list.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) } }.collect { list ->
                 _state.update { it.copy(catasList = list) }
             }
         }
         viewModelScope.launch {
-            repository.allCups.collect { list ->
-                _state.update { it.copy(cupsList = list) }
+            combine(repository.allCups, activeOwnerId) { list, ownerId -> list.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) } }.collect { list ->
+                _state.update { it.copy(cupsList = list, cupsCount = list.size) }
             }
         }
         viewModelScope.launch {
-            repository.allExperiments.collect { list ->
-                _state.update { it.copy(experimentsList = list) }
+            combine(repository.allExperiments, activeOwnerId) { list, ownerId -> list.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) } }.collect { list ->
+                _state.update { it.copy(experimentsList = list, experimentsCount = list.size) }
             }
         }
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
                 repository.allBrewMethods,
                 repository.userMethodPreferences,
-                repository.allInstruments
-            ) { brewMethods, prefs, instruments ->
+                repository.allInstruments,
+                activeOwnerId
+            ) { brewMethods, prefs, instruments, ownerId ->
+                val scopedInstruments = instruments.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) }
                 val userItems = mutableListOf<com.example.data.domain.UserMethodItem>()
                 val existingPrefMethodIds = mutableSetOf<String>()
                 val existingInstrumentIds = mutableSetOf<String?>()
@@ -416,7 +426,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 }
 
                 // Also include any equipment saved in Storage (Almacén) of method type
-                instruments.forEach { inst ->
+                scopedInstruments.forEach { inst ->
                     val isMethodType = inst.type.equals("BREWER_METHOD", ignoreCase = true) ||
                             inst.type.equals("BREW_METHOD", ignoreCase = true) ||
                             inst.type.contains("metodo", ignoreCase = true) ||
@@ -449,26 +459,6 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     pinnedMethods = pinned
                 ) }
             }.collect {}
-        }
-
-        // Collect counts
-        viewModelScope.launch {
-            repository.beansCount.collect { c -> _state.update { it.copy(beansCount = c) } }
-        }
-        viewModelScope.launch {
-            repository.instrumentsCount.collect { c -> _state.update { it.copy(equipmentCount = c, grindersCount = c) } }
-        }
-        viewModelScope.launch {
-            repository.techniquesCount.collect { c -> _state.update { it.copy(techniquesCount = c) } }
-        }
-        viewModelScope.launch {
-            repository.recipesCount.collect { c -> _state.update { it.copy(recipesCount = c) } }
-        }
-        viewModelScope.launch {
-            repository.cupsCount.collect { c -> _state.update { it.copy(cupsCount = c) } }
-        }
-        viewModelScope.launch {
-            repository.experimentsCount.collect { c -> _state.update { it.copy(experimentsCount = c) } }
         }
 
         // Populate Demo Data on Startup if empty
@@ -919,6 +909,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             val copy = source.copy(
                 id = copyId,
                 name = "Copia de ${source.name}",
+                ownerUserId = activeOwnerId.value,
                 isShared = false,
                 originalEntityId = source.originalEntityId ?: source.id,
                 rootEntityId = source.rootEntityId ?: source.originalEntityId ?: source.id,
@@ -1003,7 +994,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 grindValue = clicks.toDouble(),
                 grindDescription = grinderName.ifBlank { "$clicks Clicks" },
                 notes = notes,
-                totalTimeSeconds = sumTime
+                totalTimeSeconds = sumTime,
+                ownerUserId = activeOwnerId.value
             )
             var accumulated = 0
             val steps = stepTitles.mapIndexed { idx, title ->
@@ -1076,7 +1068,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     comment = comment,
                     beanNameSnapshot = _state.value.activePrepBean.ifBlank { "Grano de la Casa" },
                     recipeNameSnapshot = "Preparación $methodName",
-                    techniqueNameSnapshot = _state.value.activePrepTechniqueName
+                    techniqueNameSnapshot = _state.value.activePrepTechniqueName,
+                    ownerUserId = activeOwnerId.value
                 )
                 val cata = Cata(
                     id = UUID.randomUUID().toString(),
@@ -1090,7 +1083,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     overallScore = score.toDouble(),
                     totalScaScore = score.toDouble() * 20.0,
                     evaluatorNotes = comment,
-                    evaluatedAt = currentIso8601()
+                    evaluatedAt = currentIso8601(),
+                    ownerUserId = activeOwnerId.value
                 )
                 repository.insertCupWithCata(cup, cata)
                 showToast("Taza catada con éxito y registrada en el Almacén.")
@@ -1288,7 +1282,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 estimatedTimeSeconds = s.labEstTimeSeconds,
                 experimentHypothesis = s.labPreviewExtraction,
                 experimentNotes = "Intensidad: ${s.labPreviewIntensity}. Notas: ${s.labNotes}",
-                conclusionNotes = ""
+                conclusionNotes = "",
+                ownerUserId = activeOwnerId.value
             )
             repository.insertExperiment(exp)
             showToast("Experimento guardado en el archivo del Laboratorio.")
@@ -1301,7 +1296,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             val recipe = Recipe(
                 name = recipeName,
                 recipeKind = "BLACK_COFFEE",
-                intention = "Fórmula calibrada en laboratorio: ${s.labNotes}"
+                intention = "Fórmula calibrada en laboratorio: ${s.labNotes}",
+                ownerUserId = activeOwnerId.value
             )
             repository.insertRecipe(recipe)
             showToast("Receta '$recipeName' guardada en favoritos.")
@@ -1323,7 +1319,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 grindValue = s.labClicks.toDouble(),
                 grindDescription = s.labGrinder.ifBlank { "Manual" },
                 notes = "Diseñada en Laboratorio. Hipótesis: ${s.labPreviewExtraction}.",
-                totalTimeSeconds = s.labEstTimeSeconds
+                totalTimeSeconds = s.labEstTimeSeconds,
+                ownerUserId = activeOwnerId.value
             )
             val steps = generateQuickSteps(s.labMethod, s.labWater)
             repository.insertTechnique(technique, steps)
@@ -1382,7 +1379,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 firstUseDate = firstUseDate,
                 notes = notes,
                 status = status,
-                stockGrams = stockGrams
+                stockGrams = stockGrams,
+                ownerUserId = _state.value.beansList.firstOrNull { it.id == id }?.ownerUserId
+                    ?: activeOwnerId.value
             )
             repository.insertBean(bean)
             if (id == null) {
@@ -1520,7 +1519,12 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     type.contains("metodo", ignoreCase = true) ||
                     type.contains("método", ignoreCase = true)
             val normalizedType = if (isMethodType) "BREWER_METHOD" else type
-            val inst = Instrument(name = name, type = normalizedType, notes = notes)
+            val inst = Instrument(
+                name = name,
+                type = normalizedType,
+                notes = notes,
+                ownerUserId = activeOwnerId.value
+            )
             repository.insertInstrument(inst)
             if (isMethodType) {
                 val bm = repository.getOrCreateBrewMethodForInstrument(name)
@@ -1541,7 +1545,12 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         val cleanName = name.trim()
         if (cleanName.isBlank()) return
         viewModelScope.launch {
-            val inst = Instrument(name = cleanName, type = "BREWER_METHOD", notes = "Método personalizado")
+            val inst = Instrument(
+                name = cleanName,
+                type = "BREWER_METHOD",
+                notes = "Método personalizado",
+                ownerUserId = activeOwnerId.value
+            )
             repository.insertInstrument(inst)
             val method = repository.getOrCreateBrewMethodForInstrument(cleanName).let {
                 if (it.defaultRatio == defaultRatio) it else it.copy(defaultRatio = defaultRatio)
@@ -1579,8 +1588,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             val technique = Technique(
                 id = techId, name = variant.first, methodId = method.id, doseG = dose,
                 waterMl = water, ratio = ratio, temperatureC = 93,
-                grindDescription = "Ajuste inicial", notes = "Técnica inicial editable para ${method.nameKey}.",
-                totalTimeSeconds = variant.third.sum()
+                grindDescription = "Ajuste inicial",
+                notes = "Técnica inicial editable para ${method.nameKey}.",
+                totalTimeSeconds = variant.third.sum(),
+                ownerUserId = activeOwnerId.value
             )
             val totalWeight = variant.second.sum()
             var accumulated = 0
@@ -1610,7 +1621,14 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun addGrinder(brand: String, model: String, clicks: String, calibracion: String, onCreated: ((Instrument) -> Unit)? = null) {
         viewModelScope.launch {
-            val inst = Instrument(name = "$brand $model".trim(), type = "GRINDER", brand = brand, model = model, notes = calibracion)
+            val inst = Instrument(
+                name = "$brand $model".trim(),
+                type = "GRINDER",
+                brand = brand,
+                model = model,
+                notes = calibracion,
+                ownerUserId = activeOwnerId.value
+            )
             repository.insertInstrument(inst)
             showToast("Molino '$model' guardado.")
             onCreated?.invoke(inst)
@@ -1647,7 +1665,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 intention = intention,
                 suggestedMethodId = if (suggestedMethod.isNotBlank()) suggestedMethod else null,
                 tags = tags,
-                isFavorite = isFavorite
+                isFavorite = isFavorite,
+                ownerUserId = _state.value.recipesList.firstOrNull { it.id == recipeId }?.ownerUserId
+                    ?: activeOwnerId.value
             )
             repository.insertRecipe(recipe, ingredientsList)
             if (isEdit) {
@@ -1664,6 +1684,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             val cloned = recipe.copy(
                 id = java.util.UUID.randomUUID().toString(),
                 name = clonedName,
+                ownerUserId = activeOwnerId.value,
                 createdAt = com.example.data.database.currentIso8601()
             )
             repository.insertRecipe(cloned)
@@ -1697,7 +1718,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 estimatedTimeSeconds = 180,
                 experimentHypothesis = "Prueba de extracción",
                 experimentNotes = notes,
-                conclusionNotes = ""
+                conclusionNotes = "",
+                ownerUserId = activeOwnerId.value
             )
             repository.insertExperiment(exp)
             showToast("Experimento archivado en el Almacén.")

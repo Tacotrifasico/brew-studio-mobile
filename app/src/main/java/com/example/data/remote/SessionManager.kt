@@ -2,6 +2,10 @@ package com.example.data.remote
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 class SessionManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("brew_studio_prefs", Context.MODE_PRIVATE)
@@ -63,6 +67,15 @@ class SessionManager(context: Context) {
     fun getAvatarColor(): String = prefs.getString(KEY_AVATAR_COLOR, "#3F7A63") ?: "#3F7A63"
 
     fun isLoggedIn(): Boolean = !getAccessToken().isNullOrBlank()
+
+    fun observeUserId(): Flow<String?> = callbackFlow {
+        trySend(getUserId())
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_USER_ID) trySend(getUserId())
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }.distinctUntilChanged()
 
     init {
         // Automatically restore token in provider on init

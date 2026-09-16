@@ -28,6 +28,7 @@ import com.example.data.database.Recipe
 import com.example.data.database.Technique
 import com.example.data.database.TechniqueStep
 import com.example.data.remote.models.RemoteShare
+import com.example.data.validation.OwnerScopeRules
 import com.example.ui.components.V60Icon
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.SocialViewModel
@@ -408,10 +409,13 @@ fun MyLocalFormulasTab(viewModel: SocialViewModel) {
     val database = remember { AppDatabase.getDatabase(context) }
     
     val recipesFlow = remember { database.recipeDao().getAllRecipes() }
-    val recipes by recipesFlow.collectAsState(initial = emptyList())
+    val allRecipes by recipesFlow.collectAsState(initial = emptyList())
     
     val techFlow = remember { database.techniqueDao().getAllTechniques() }
-    val techniques by techFlow.collectAsState(initial = emptyList())
+    val allTechniques by techFlow.collectAsState(initial = emptyList())
+    val socialState by viewModel.uiState.collectAsState()
+    val recipes = allRecipes.filter { OwnerScopeRules.isVisible(it.ownerUserId, socialState.userId) }
+    val techniques = allTechniques.filter { OwnerScopeRules.isVisible(it.ownerUserId, socialState.userId) }
 
     var activeViewMode by remember { mutableStateOf(0) } // 0 = Recipes, 1 = Techniques
     

@@ -155,4 +155,29 @@ class BrewAggregateRoomTest {
         assertEquals(ownerId, storedTasting?.ownerUserId)
         assertEquals(1, database.cataDao().getAllCatas().first().count { it.cupId == cupId })
     }
+
+    @Test
+    fun `migration six to seven recreates method preferences without duplicates`() {
+        val sqlite = database.openHelper.writableDatabase
+        sqlite.execSQL("DROP TABLE user_method_preferences")
+
+        MIGRATION_6_7.migrate(sqlite)
+        MIGRATION_6_7.migrate(sqlite)
+
+        sqlite.query(
+            "SELECT id, userId, methodId, isPinnedToCalculator, isActive, addedAt " +
+                "FROM user_method_preferences ORDER BY id"
+        ).use { cursor ->
+            assertEquals(5, cursor.count)
+            var pinnedCount = 0
+            while (cursor.moveToNext()) {
+                assertEquals("local_user", cursor.getString(1))
+                assertTrue(cursor.getString(2).matches(Regex("^[0-9a-f-]{36}$")))
+                if (cursor.getInt(3) == 1) pinnedCount++
+                assertEquals(1, cursor.getInt(4))
+                assertTrue(cursor.getString(5).endsWith("Z"))
+            }
+            assertEquals(4, pinnedCount)
+        }
+    }
 }

@@ -714,6 +714,7 @@ private fun TechniqueStorageItemCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
+    var confirmDelete by remember(technique.id) { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -760,13 +761,28 @@ private fun TechniqueStorageItemCard(
                 )
             }
             if (!isBuiltIn) {
-                IconButton(onClick = onDelete) {
+                IconButton(onClick = { confirmDelete = true }) {
                     Icon(Icons.Default.DeleteOutline, contentDescription = "Eliminar técnica", tint = Advertencia)
                 }
             } else {
                 Icon(Icons.Default.Lock, contentDescription = "Técnica incluida", tint = TextSecundario, modifier = Modifier.size(18.dp))
             }
         }
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("¿Eliminar ${technique.name}?") },
+            text = { Text("Se quitará del Almacén. Las preparaciones y catas ya guardadas conservarán su historial.") },
+            confirmButton = {
+                Button(
+                    onClick = { confirmDelete = false; onDelete() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Advertencia)
+                ) { Text("Eliminar") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") } },
+            containerColor = SurfaceCard
+        )
     }
 }
 

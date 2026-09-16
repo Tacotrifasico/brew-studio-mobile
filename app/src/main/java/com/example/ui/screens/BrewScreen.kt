@@ -429,11 +429,12 @@ fun BrewSetupView(
                                 Text(tech.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
                                 Text("Usará ${state.activePrepCoffee} g • ${state.activePrepWater} ml • 1:${state.activePrepRatio}", fontSize = 11.sp, color = TextSecundario)
                             }
-                            if (!viewModel.isBuiltInTechnique(tech.id)) {
-                                IconButton(onClick = { viewModel.deleteTechnique(tech.id) }) {
-                                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Borrar", tint = Advertencia.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-                                }
-                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Seleccionar técnica ${tech.name}",
+                                tint = TextSecundario,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }

@@ -75,6 +75,28 @@ fun parseDateDaysDiff(dateStr: String): Int? {
     }
 }
 
+internal fun Technique.forkedCopy(
+    copyId: String,
+    ownerUserId: String?,
+    timestamp: String
+): Technique = copy(
+    id = copyId,
+    name = "Copia de $name",
+    ownerUserId = ownerUserId,
+    isShared = false,
+    originalEntityId = originalEntityId ?: id,
+    rootEntityId = rootEntityId ?: originalEntityId ?: id,
+    importedFromShareId = importedFromShareId,
+    copyMode = "FORK",
+    remoteId = null,
+    syncStatus = "PENDING_CREATE",
+    serverVersion = 1,
+    expectedVersion = 1,
+    lastSyncedAt = null,
+    createdAt = timestamp,
+    updatedAt = timestamp
+)
+
 fun calculateProgress(days: Int): Float {
     if (days < 0) return 0f
     return when {
@@ -928,23 +950,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             val source = _state.value.techniquesList.firstOrNull { it.id == techId } ?: return@launch
             val sourceSteps = repository.getStepsForTechniqueSync(techId)
             val copyId = UUID.randomUUID().toString()
-            val copy = source.copy(
-                id = copyId,
-                name = "Copia de ${source.name}",
-                ownerUserId = activeOwnerId.value,
-                isShared = false,
-                originalEntityId = source.originalEntityId ?: source.id,
-                rootEntityId = source.rootEntityId ?: source.originalEntityId ?: source.id,
-                importedFromShareId = null,
-                copyMode = "ORIGINAL",
-                remoteId = null,
-                syncStatus = "PENDING_CREATE",
-                serverVersion = 1,
-                expectedVersion = 1,
-                lastSyncedAt = null,
-                createdAt = currentIso8601(),
-                updatedAt = currentIso8601()
-            )
+            val copy = source.forkedCopy(copyId, activeOwnerId.value, currentIso8601())
             val copiedSteps = sourceSteps.mapIndexed { index, step ->
                 step.copy(
                     id = UUID.randomUUID().toString(),
@@ -1910,6 +1916,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 originalAuthorName = source?.originalAuthorName ?: source?.ownerDisplayName,
                 originalEntityId = source?.originalEntityId ?: source?.id,
                 rootEntityId = source?.rootEntityId ?: source?.originalEntityId ?: source?.id,
+                importedFromShareId = source?.importedFromShareId,
                 copyMode = if (source == null) "ORIGINAL" else "FORK",
                 syncStatus = "PENDING_CREATE"
             )

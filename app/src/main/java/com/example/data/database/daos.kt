@@ -210,8 +210,27 @@ interface RecipeDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRecipe(recipe: Recipe)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRecipeIngredients(ingredients: List<RecipeIngredient>)
+
+    @Query("DELETE FROM recipe_ingredients WHERE recipeId = :recipeId")
+    suspend fun deleteRecipeIngredients(recipeId: String)
+
+    @Transaction
+    suspend fun saveRecipeWithIngredients(recipe: Recipe, ingredients: List<RecipeIngredient>) {
+        insertRecipe(recipe)
+        deleteRecipeIngredients(recipe.id)
+        if (ingredients.isNotEmpty()) insertRecipeIngredients(ingredients)
+    }
+
     @Delete
     suspend fun deleteRecipe(recipe: Recipe)
+
+    @Transaction
+    suspend fun deleteRecipeWithIngredients(recipe: Recipe) {
+        deleteRecipeIngredients(recipe.id)
+        deleteRecipe(recipe)
+    }
 
     @Query("SELECT COUNT(*) FROM recipes")
     fun getRecipesCount(): Flow<Int>

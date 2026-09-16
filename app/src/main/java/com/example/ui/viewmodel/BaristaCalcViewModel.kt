@@ -284,7 +284,6 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         cataDao = database.cataDao(),
         cupDao = database.cupDao(),
         labExperimentDao = database.labExperimentDao(),
-        recipeIngredientDao = database.recipeIngredientDao(),
         brewMethodDao = database.brewMethodDao(),
         userMethodPreferenceDao = database.userMethodPreferenceDao()
     )
@@ -967,9 +966,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     technique.copy(
                         waterMl = normalized.waterMl,
                         ratio = normalized.ratio,
-                        totalTimeSeconds = normalized.totalTimeSeconds,
-                        updatedAt = currentIso8601(),
-                        syncStatus = "PENDING_UPDATE"
+                    totalTimeSeconds = normalized.totalTimeSeconds,
+                    updatedAt = currentIso8601(),
+                    syncStatus = if (technique.remoteId == null) "PENDING_CREATE" else "PENDING_UPDATE"
                     ),
                     steps.mapIndexed { index, step ->
                         step.copy(
@@ -1033,7 +1032,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 grindDescription = grinderName.ifBlank { "$clicks Clicks" },
                 notes = notes,
                 totalTimeSeconds = normalized.totalTimeSeconds,
-                ownerUserId = activeOwnerId.value
+                ownerUserId = activeOwnerId.value,
+                syncStatus = "PENDING_CREATE"
             )
             val steps = stepTitles.mapIndexed { idx, title ->
                 TechniqueStep(
@@ -1045,7 +1045,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     waterAccumulatedMl = normalized.accumulatedWaterMl[idx],
                     intensity = if (idx == 0) "alta" else "media",
                     gesture = "tap",
-                    stepNote = "Paso manual de extracción"
+                    stepNote = "Paso manual de extracción",
+                    syncStatus = "PENDING_CREATE"
                 )
             }
             try {
@@ -1339,7 +1340,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 name = recipeName,
                 recipeKind = "BLACK_COFFEE",
                 intention = "Fórmula calibrada en laboratorio: ${s.labNotes}",
-                ownerUserId = activeOwnerId.value
+                ownerUserId = activeOwnerId.value,
+                syncStatus = "PENDING_CREATE"
             )
             repository.insertRecipe(recipe)
             showToast("Receta '$recipeName' guardada en favoritos.")
@@ -1362,9 +1364,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 grindDescription = s.labGrinder.ifBlank { "Manual" },
                 notes = "Diseñada en Laboratorio. Hipótesis: ${s.labPreviewExtraction}.",
                 totalTimeSeconds = s.labEstTimeSeconds,
-                ownerUserId = activeOwnerId.value
+                ownerUserId = activeOwnerId.value,
+                syncStatus = "PENDING_CREATE"
             )
-            val steps = generateQuickSteps(s.labMethod, s.labWater)
+            val steps = generateQuickSteps(s.labMethod, s.labWater).map { it.copy(syncStatus = "PENDING_CREATE") }
             repository.insertTechnique(technique, steps)
             showToast("Técnica '$techniqueName' registrada en el Almacén.")
         }
@@ -1633,7 +1636,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 grindDescription = "Ajuste inicial",
                 notes = "Técnica inicial editable para ${method.nameKey}.",
                 totalTimeSeconds = variant.third.sum(),
-                ownerUserId = activeOwnerId.value
+                ownerUserId = activeOwnerId.value,
+                syncStatus = "PENDING_CREATE"
             )
             val totalWeight = variant.second.sum()
             var accumulated = 0
@@ -1647,7 +1651,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     title = if (stepIndex == 0) "Inicio y saturación" else "Fase ${stepIndex + 1}",
                     durationSeconds = variant.third[stepIndex], waterAddedMl = added,
                     waterAccumulatedMl = accumulated, gesture = if (stepIndex == 0) "BLOOM" else "CIRCULAR_POUR",
-                    stepNote = "Ajusta este paso después de probar tu método."
+                    stepNote = "Ajusta este paso después de probar tu método.",
+                    syncStatus = "PENDING_CREATE"
                 )
             }
             repository.insertTechnique(technique, steps)
@@ -1694,49 +1699,65 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         tags: String = "",
         isFavorite: Boolean = false,
         ingredientsList: List<RecipeIngredientInput> = emptyList(),
-        recipeId: String? = null
+        recipeId: String? = null,
+        sourceRecipeId: String? = null,
+        onCompleted: (Boolean) -> Unit = {}
     ) {
         viewModelScope.launch {
-            val isEdit = recipeId != null
-            val recipe = Recipe(
+            val existing = _state.value.recipesList.firstOrNull { it.id == recipeId }
+            val source = _state.value.recipesList.firstOrNull { it.id == sourceRecipeId }
+            val isEdit = existing != null
+            val recipe = existing?.copy(
+                name = name,
+                recipeKind = recipeKind,
+                ingredientsSummary = ingredientsSummary,
+                stepsSummary = stepsSummary,
+                intention = intention,
+                suggestedMethodId = suggestedMethod.takeIf { it.isNotBlank() },
+                tags = tags,
+                isFavorite = isFavorite,
+                syncStatus = if (existing.remoteId == null) "PENDING_CREATE" else "PENDING_UPDATE",
+                updatedAt = currentIso8601()
+            ) ?: Recipe(
                 id = recipeId ?: java.util.UUID.randomUUID().toString(),
                 name = name,
                 recipeKind = recipeKind,
                 ingredientsSummary = ingredientsSummary,
                 stepsSummary = stepsSummary,
                 intention = intention,
-                suggestedMethodId = if (suggestedMethod.isNotBlank()) suggestedMethod else null,
+                suggestedMethodId = suggestedMethod.takeIf { it.isNotBlank() },
                 tags = tags,
                 isFavorite = isFavorite,
-                ownerUserId = _state.value.recipesList.firstOrNull { it.id == recipeId }?.ownerUserId
-                    ?: activeOwnerId.value
-            )
-            repository.insertRecipe(recipe, ingredientsList)
-            if (isEdit) {
-                showToast("Receta '$name' actualizada.")
-            } else {
-                showToast("Receta '$name' guardada en el Almacén.")
-            }
-        }
-    }
-
-    fun cloneRecipe(recipe: Recipe) {
-        viewModelScope.launch {
-            val clonedName = "Copia de ${recipe.name}"
-            val cloned = recipe.copy(
-                id = java.util.UUID.randomUUID().toString(),
-                name = clonedName,
                 ownerUserId = activeOwnerId.value,
-                createdAt = com.example.data.database.currentIso8601()
+                originalAuthorUserId = source?.originalAuthorUserId ?: source?.ownerUserId,
+                originalAuthorName = source?.originalAuthorName ?: source?.ownerDisplayName,
+                originalEntityId = source?.originalEntityId ?: source?.id,
+                rootEntityId = source?.rootEntityId ?: source?.originalEntityId ?: source?.id,
+                copyMode = if (source == null) "ORIGINAL" else "FORK",
+                syncStatus = "PENDING_CREATE"
             )
-            repository.insertRecipe(cloned)
-            showToast("Receta clonada como '$clonedName'.")
+            try {
+                repository.insertRecipe(recipe, ingredientsList, replaceIngredients = true)
+                if (isEdit) {
+                    showToast("Receta '$name' actualizada.")
+                } else {
+                    showToast("Receta '$name' guardada en el Almacén.")
+                }
+                onCompleted(true)
+            } catch (_: Exception) {
+                showToast("No se pudo guardar la receta. Tus datos siguen en pantalla para reintentar.")
+                onCompleted(false)
+            }
         }
     }
 
     fun toggleRecipeFavorite(recipe: Recipe) {
         viewModelScope.launch {
-            repository.insertRecipe(recipe.copy(isFavorite = !recipe.isFavorite))
+            repository.insertRecipe(recipe.copy(
+                isFavorite = !recipe.isFavorite,
+                syncStatus = if (recipe.remoteId == null) "PENDING_CREATE" else "PENDING_UPDATE",
+                updatedAt = currentIso8601()
+            ))
         }
     }
 

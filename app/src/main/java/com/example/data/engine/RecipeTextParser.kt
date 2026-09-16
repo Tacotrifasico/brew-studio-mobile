@@ -16,6 +16,7 @@ data class RecipeStepInput(
 
 data class RecipeDraft(
     val id: String = UUID.randomUUID().toString(),
+    val sourceRecipeId: String? = null,
     val name: String = "",
     val recipeKind: String = "BLACK_COFFEE", // BLACK_COFFEE, MILK_DRINK, COLD_DRINK, SIGNATURE, DESSERT, OTHER
     val intention: String = "",

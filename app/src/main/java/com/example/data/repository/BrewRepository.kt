@@ -18,7 +18,6 @@ class BrewRepository(
     private val cataDao: CataDao,
     private val cupDao: CupDao,
     private val labExperimentDao: LabExperimentDao,
-    private val recipeIngredientDao: RecipeIngredientDao? = null,
     private val brewMethodDao: BrewMethodDao? = null,
     private val userMethodPreferenceDao: UserMethodPreferenceDao? = null
 ) {
@@ -139,27 +138,28 @@ class BrewRepository(
         techniqueStepDao.getStepsForTechniqueSync(techId)
 
     // Recipes
-    suspend fun insertRecipe(recipe: Recipe, ingredients: List<RecipeIngredientInput> = emptyList()) {
-        recipeDao.insertRecipe(recipe)
-        if (ingredients.isNotEmpty() && recipeIngredientDao != null) {
-            recipeIngredientDao.deleteIngredientsForRecipe(recipe.id)
-            val entities = ingredients.filter { it.name.isNotBlank() }.mapIndexed { idx, ing ->
-                RecipeIngredient(
-                    recipeId = recipe.id,
-                    name = ing.name.trim(),
-                    amount = ing.amount.toFloatOrNull() ?: 0f,
-                    unit = ing.unit.trim(),
-                    orderIndex = idx
-                )
-            }
-            if (entities.isNotEmpty()) {
-                recipeIngredientDao.insertIngredients(entities)
-            }
+    suspend fun insertRecipe(
+        recipe: Recipe,
+        ingredients: List<RecipeIngredientInput> = emptyList(),
+        replaceIngredients: Boolean = false
+    ) {
+        if (!replaceIngredients) {
+            recipeDao.insertRecipe(recipe)
+            return
         }
+        val entities = ingredients.filter { it.name.isNotBlank() }.mapIndexed { idx, ing ->
+            RecipeIngredient(
+                recipeId = recipe.id,
+                name = ing.name.trim(),
+                amount = ing.amount.toFloatOrNull() ?: 0f,
+                unit = ing.unit.trim(),
+                orderIndex = idx
+            )
+        }
+        recipeDao.saveRecipeWithIngredients(recipe, entities)
     }
     suspend fun deleteRecipe(recipe: Recipe) {
-        recipeDao.deleteRecipe(recipe)
-        recipeIngredientDao?.deleteIngredientsForRecipe(recipe.id)
+        recipeDao.deleteRecipeWithIngredients(recipe)
     }
 
     // Catas

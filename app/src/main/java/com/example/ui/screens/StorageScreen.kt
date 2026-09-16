@@ -740,6 +740,9 @@ private fun TechniqueStorageItemCard(
                         Text("INCLUIDA", fontSize = 8.sp, fontWeight = FontWeight.Black, color = AcentoPrincipal)
                     }
                 }
+                if (!isBuiltIn && (technique.remoteId == null || technique.syncStatus != "SYNCED")) {
+                    LocalSyncStatusLabel(technique.syncStatus)
+                }
                 Text(
                     "$methodName · ${technique.doseG} g → ${technique.waterMl} ml · 1:${technique.ratio}",
                     fontSize = 11.sp,
@@ -1964,6 +1967,7 @@ fun Recipe.toRecipeDraft(isClone: Boolean = false): RecipeDraft {
 
     return RecipeDraft(
         id = if (isClone) java.util.UUID.randomUUID().toString() else this.id,
+        sourceRecipeId = if (isClone) this.id else null,
         name = if (isClone) "Copia de ${this.name}" else this.name,
         recipeKind = this.recipeKind,
         intention = this.intention,
@@ -2050,6 +2054,9 @@ fun RecipeItemCard(
                         color = kindColor,
                         fontWeight = FontWeight.Bold
                     )
+                    if (recipe.remoteId == null || recipe.syncStatus != "SYNCED") {
+                        LocalSyncStatusLabel(recipe.syncStatus)
+                    }
                 }
 
                 if (onFavoriteToggle != null) {
@@ -2160,6 +2167,26 @@ fun RecipeItemCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LocalSyncStatusLabel(syncStatus: String) {
+    val label = when (syncStatus) {
+        "ERROR", "CONFLICT" -> "Requiere reintento"
+        "PENDING_UPDATE" -> "Cambios pendientes"
+        "PENDING_DELETE" -> "Eliminación pendiente"
+        else -> "Pendiente de sincronizar"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = if (syncStatus == "ERROR" || syncStatus == "CONFLICT") Icons.Default.SyncProblem else Icons.Default.CloudUpload,
+            contentDescription = null,
+            tint = AcentoPrincipal,
+            modifier = Modifier.size(11.dp)
+        )
+        Spacer(Modifier.width(3.dp))
+        Text(label, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = AcentoPrincipal)
     }
 }
 
@@ -2657,6 +2684,7 @@ fun AddingFormSelector(
                     }
                 }
                 "Recetas" -> {
+                    var isSaving by remember(initialDraft) { mutableStateOf(false) }
                     var name by remember(initialDraft) { mutableStateOf(initialDraft?.name ?: "") }
                     var recipeKind by remember(initialDraft) { mutableStateOf(initialDraft?.recipeKind ?: "BLACK_COFFEE") }
                     var intention by remember(initialDraft) { mutableStateOf(initialDraft?.intention ?: "") }
@@ -2995,10 +3023,12 @@ fun AddingFormSelector(
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         StyledPrimaryButton(
-                            text = if (isEditingExisting) "Guardar" else "Guardar Receta",
+                            text = if (isSaving) "Guardando…" else if (isEditingExisting) "Guardar" else "Guardar Receta",
                             icon = Icons.Default.Check,
+                            enabled = name.isNotBlank() && !isSaving,
                             onClick = {
-                                if (name.isNotBlank()) {
+                                if (name.isNotBlank() && !isSaving) {
+                                    isSaving = true
                                     val ingSummary = ingredientsList
                                         .filter { it.name.isNotBlank() }
                                         .joinToString(", ") { ing ->
@@ -3027,9 +3057,13 @@ fun AddingFormSelector(
                                         tags = tagsText,
                                         isFavorite = isFavorite,
                                         ingredientsList = ingredientsList.filter { it.name.isNotBlank() },
-                                        recipeId = if (isEditingExisting) initialDraft?.id else null
+                                        recipeId = if (isEditingExisting) initialDraft?.id else null,
+                                        sourceRecipeId = initialDraft?.sourceRecipeId,
+                                        onCompleted = { success ->
+                                            isSaving = false
+                                            if (success) onCompleted()
+                                        }
                                     )
-                                    onCompleted()
                                 }
                             }
                         )

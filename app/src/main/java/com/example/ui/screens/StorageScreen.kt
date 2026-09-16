@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,6 +61,7 @@ import com.example.ui.theme.*
 import com.example.ui.viewmodel.BaristaCalcViewModel
 import com.example.ui.viewmodel.FreshnessResult
 import com.example.ui.viewmodel.FreshnessState
+import com.example.ui.viewmodel.SocialUiState
 import com.example.ui.viewmodel.calculateBeanFreshness
 import java.text.SimpleDateFormat
 import java.util.*
@@ -69,6 +71,8 @@ import java.util.*
 fun StorageScreen(
     viewModel: BaristaCalcViewModel,
     modifier: Modifier = Modifier,
+    syncState: SocialUiState = SocialUiState(),
+    onRetrySync: () -> Unit = {},
     onNavigateToPreparation: () -> Unit = {},
     onNavigateToCommunity: () -> Unit = {}
 ) {
@@ -94,6 +98,13 @@ fun StorageScreen(
     var selectedTechniqueSteps by remember { mutableStateOf<List<TechniqueStep>>(emptyList()) }
     var editingTechnique by remember { mutableStateOf<Technique?>(null) }
     var showShareExplanation by remember { mutableStateOf(false) }
+    val pendingSyncableCount = state.beansList.count { it.syncStatus != "SYNCED" } +
+        state.recipesList.count { it.syncStatus != "SYNCED" } +
+        state.techniquesList.count { !viewModel.isBuiltInTechnique(it.id) && it.syncStatus != "SYNCED" }
+    val pendingBackendCount = state.grindersList.count { it.syncStatus != "SYNCED" } +
+        state.equipmentList.count { it.syncStatus != "SYNCED" } +
+        state.cupsList.count { it.syncStatus != "SYNCED" } +
+        state.experimentsList.count { it.syncStatus != "SYNCED" }
 
     LaunchedEffect(selectedTechnique?.id, editingTechnique?.id) {
         val id = editingTechnique?.id ?: selectedTechnique?.id
@@ -205,6 +216,56 @@ fun StorageScreen(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        if (pendingSyncableCount > 0 || pendingBackendCount > 0 || syncState.syncMessage != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                border = BorderStroke(1.dp, BordeSuave),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        if (syncState.isSyncing) Icons.Default.Sync else Icons.Default.CloudUpload,
+                        contentDescription = null,
+                        tint = AcentoPrincipal,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            when {
+                                syncState.isSyncing -> "Sincronizando cambios…"
+                                pendingSyncableCount > 0 -> "$pendingSyncableCount ${if (pendingSyncableCount == 1) "elemento local pendiente" else "elementos locales pendientes"}"
+                                else -> "Estado de sincronización"
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrincipal
+                        )
+                        Text(
+                            syncState.syncMessage ?: if (pendingBackendCount > 0) {
+                                "$pendingBackendCount ${if (pendingBackendCount == 1) "registro espera" else "registros esperan"} la integración de backend de Axcis. Siguen seguros en este dispositivo."
+                            } else "Tus datos siguen disponibles aunque no haya conexión.",
+                            fontSize = 9.sp,
+                            color = TextSecundario,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (pendingSyncableCount > 0) {
+                        TextButton(
+                            enabled = !syncState.isSyncing,
+                            onClick = if (syncState.isLoggedIn) onRetrySync else onNavigateToCommunity
+                        ) { Text(if (syncState.isLoggedIn) "Reintentar" else "Ingresar", fontSize = 10.sp) }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         // --- DASHBOARD SUMMARY CARDS FOR COFFEE BEANS ---
         if (selectedCategory == "Café") {
@@ -1907,7 +1968,7 @@ fun GrinderItemCard(grinder: Instrument, onDelete: () -> Unit) {
                     Text(grinder.notes, fontSize = 11.sp, color = TextSecundario)
                 }
                 if (grinder.syncStatus != "SYNCED") {
-                    LocalSyncStatusLabel(grinder.syncStatus)
+                    LocalSyncStatusLabel(grinder.syncStatus, retrySupported = false)
                 }
             }
             IconButton(onClick = onDelete) {
@@ -1944,7 +2005,7 @@ fun EquipmentItemCard(
                     Text(eq.notes, fontSize = 11.sp, color = TextSecundario)
                 }
                 if (eq.syncStatus != "SYNCED") {
-                    LocalSyncStatusLabel(eq.syncStatus)
+                    LocalSyncStatusLabel(eq.syncStatus, retrySupported = false)
                 }
                 if (isPinned != null && onTogglePinned != null) {
                     Spacer(modifier = Modifier.height(6.dp))
@@ -2201,8 +2262,8 @@ fun RecipeItemCard(
 }
 
 @Composable
-private fun LocalSyncStatusLabel(syncStatus: String) {
-    val label = when (syncStatus) {
+private fun LocalSyncStatusLabel(syncStatus: String, retrySupported: Boolean = true) {
+    val label = if (!retrySupported) "Guardado local · backend pendiente" else when (syncStatus) {
         "ERROR", "CONFLICT" -> "Requiere reintento"
         "PENDING_UPDATE" -> "Cambios pendientes"
         "PENDING_DELETE" -> "Eliminación pendiente"
@@ -2210,7 +2271,7 @@ private fun LocalSyncStatusLabel(syncStatus: String) {
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
-            imageVector = if (syncStatus == "ERROR" || syncStatus == "CONFLICT") Icons.Default.SyncProblem else Icons.Default.CloudUpload,
+            imageVector = if (!retrySupported || syncStatus == "ERROR" || syncStatus == "CONFLICT") Icons.Default.SyncProblem else Icons.Default.CloudUpload,
             contentDescription = null,
             tint = AcentoPrincipal,
             modifier = Modifier.size(11.dp)
@@ -2567,7 +2628,7 @@ fun CupItemCard(cup: Cup, onDelete: () -> Unit) {
                     Text(cup.beanNameSnapshot, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
                     Text("Taza • ${cup.executedDoseG} g ➔ ${cup.executedWaterMl} ml • Puntuación: ${cup.rating ?: 5.0} ★", fontSize = 11.sp, color = TextSecundario)
                     if (cup.syncStatus != "SYNCED") {
-                        LocalSyncStatusLabel(cup.syncStatus)
+                        LocalSyncStatusLabel(cup.syncStatus, retrySupported = false)
                     }
                 }
                 IconButton(onClick = onDelete) {
@@ -2611,7 +2672,7 @@ fun ExperimentItemCard(exp: LabExperiment, onDelete: () -> Unit) {
                     Text("Experimento: 1:${exp.ratio}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
                     Text("${exp.coffeeGrams} g • ${exp.waterMl} ml • ${exp.temperatureC} °C • ${exp.grindSetting} clics", fontSize = 11.sp, color = TextSecundario)
                     if (exp.syncStatus != "SYNCED") {
-                        LocalSyncStatusLabel(exp.syncStatus)
+                        LocalSyncStatusLabel(exp.syncStatus, retrySupported = false)
                     }
                 }
                 IconButton(onClick = onDelete) {

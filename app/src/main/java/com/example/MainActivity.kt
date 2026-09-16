@@ -30,9 +30,11 @@ import com.example.ui.components.V60Icon
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.BaristaCalcViewModel
+import com.example.ui.viewmodel.SocialViewModel
 
 class MainActivity : ComponentActivity() {
     private val baristaViewModel: BaristaCalcViewModel by viewModels()
+    private val socialViewModel: SocialViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,7 +44,7 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             MyApplicationTheme {
-                BrewStudioAppShell(viewModel = baristaViewModel)
+                BrewStudioAppShell(viewModel = baristaViewModel, socialViewModel = socialViewModel)
             }
         }
     }
@@ -63,10 +65,11 @@ sealed class Screen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BrewStudioAppShell(viewModel: BaristaCalcViewModel) {
+fun BrewStudioAppShell(viewModel: BaristaCalcViewModel, socialViewModel: SocialViewModel) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val calcState by viewModel.state.collectAsState()
+    val socialState by socialViewModel.uiState.collectAsState()
     
     // Listen for events to show in Snackbar
     LaunchedEffect(calcState.snackbarMessage) {
@@ -215,6 +218,8 @@ fun BrewStudioAppShell(viewModel: BaristaCalcViewModel) {
             composable(Screen.Storage.route) {
                 StorageScreen(
                     viewModel = viewModel,
+                    syncState = socialState,
+                    onRetrySync = socialViewModel::triggerSync,
                     onNavigateToPreparation = {
                         navController.navigate(Screen.Brew.route) { launchSingleTop = true }
                     },
@@ -224,7 +229,6 @@ fun BrewStudioAppShell(viewModel: BaristaCalcViewModel) {
                 )
             }
             composable("social") {
-                val socialViewModel: com.example.ui.viewmodel.SocialViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 com.example.ui.user.UserScreen(viewModel = socialViewModel, onBack = { navController.popBackStack() })
             }
 

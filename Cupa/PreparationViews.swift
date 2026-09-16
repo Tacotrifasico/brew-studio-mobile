@@ -60,11 +60,11 @@ struct PreparationExecutionView: View {
                         Text("\(model.state.methodName) · \(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(model.state.waterMl) ml")
                             .font(.caption).foregroundStyle(CupaTheme.secondaryText)
                         if let bean = beans.first(where: { $0.id == model.state.beanId }) {
-                            Label(bean.name, systemImage: "leaf").font(.caption.bold()).foregroundStyle(CupaTheme.forest)
+                            Label(bean.name, systemImage: "leaf").font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
                         }
                     }
                     Spacer()
-                    Text("1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))").font(.subheadline.bold()).foregroundStyle(CupaTheme.forest)
+                    Text("1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))").font(.subheadline.bold()).foregroundStyle(CupaTheme.forestText)
                 }
                 Text(timeString(model.state.elapsedSeconds)).font(.system(.largeTitle, design: .rounded, weight: .bold)).monospacedDigit()
                     .minimumScaleFactor(0.6).accessibilityLabel("Tiempo transcurrido").accessibilityValue(timeString(model.state.elapsedSeconds))
@@ -73,7 +73,7 @@ struct PreparationExecutionView: View {
                         Text("PASO \(step.number) DE \(model.state.steps.count)").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
                         Text(step.title).font(.title3.bold()).multilineTextAlignment(.center)
                         HStack { Label("\(step.waterAddedMl) ml", systemImage: "drop"); Label("\(step.waterAccumulatedMl) ml total", systemImage: "sum") }.font(.caption)
-                        Text(step.gesture.replacingOccurrences(of: "_", with: " ").capitalized + " · " + step.intensity.capitalized).font(.caption.bold()).foregroundStyle(CupaTheme.forest)
+                        Text(step.gesture.replacingOccurrences(of: "_", with: " ").capitalized + " · " + step.intensity.capitalized).font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
                         if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText).multilineTextAlignment(.center) }
                         ProgressView(value: Double(min(model.stepElapsed, max(1, step.durationSeconds))), total: Double(max(1, step.durationSeconds))).tint(CupaTheme.terracotta)
                     }
@@ -92,7 +92,7 @@ struct PreparationExecutionView: View {
             case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent).disabled(model.state.steps.isEmpty)
             case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta).foregroundStyle(CupaTheme.onTerracotta)
             case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
-            case .completed: Label("Finalizada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forest)
+            case .completed: Label("Finalizada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forestText)
             }
             Button { model.nextStep() } label: { Image(systemName: "forward.end") }
                 .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Paso siguiente")

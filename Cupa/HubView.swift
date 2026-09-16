@@ -230,7 +230,7 @@ struct HubView: View {
                 if inboxItem?.readAt == nil { Circle().fill(CupaTheme.terracotta).frame(width: 9, height: 9).accessibilityLabel("Sin leer") }
             }
             Text("@\(share.fromHandle) · \(share.entityType == "recipe" ? "Receta" : "Técnica")").font(.caption).foregroundStyle(.secondary)
-            if !share.subtitle.isEmpty { Text(share.subtitle).font(.subheadline.bold()).foregroundStyle(CupaTheme.forest) }
+            if !share.subtitle.isEmpty { Text(share.subtitle).font(.subheadline.bold()).foregroundStyle(CupaTheme.forestText) }
             if !share.message.isEmpty { Text(share.message).font(.subheadline) }
             shareSnapshotSummary(share.payloadSnapshot)
             if let originalAuthorName = share.originalAuthorName,
@@ -280,7 +280,7 @@ struct HubView: View {
         } else if let technique = payload.technique {
             VStack(alignment: .leading, spacing: 5) {
                 Text("\(technique.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(technique.waterMl) ml · 1:\(technique.ratio.formatted(.number.precision(.fractionLength(0...1)))) · \(technique.temperatureC) °C")
-                    .font(.caption.bold()).foregroundStyle(CupaTheme.forest)
+                    .font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
                 Text("\(technique.methodName) · \(technique.steps.count) pasos · \(technique.executionMode.replacingOccurrences(of: "_", with: " ").capitalized)")
                     .font(.caption).foregroundStyle(.secondary)
                 if !technique.grindDescription.isEmpty { Label(technique.grindDescription, systemImage: "dial.medium").font(.caption2).foregroundStyle(.secondary) }

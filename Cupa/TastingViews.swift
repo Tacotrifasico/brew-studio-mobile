@@ -62,7 +62,7 @@ struct TastingView: View {
                     case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent).accessibilityIdentifier("tasting.cooling.start")
                     case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta).foregroundStyle(CupaTheme.onTerracotta).accessibilityIdentifier("tasting.cooling.pause")
                     case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent).accessibilityIdentifier("tasting.cooling.resume")
-                    case .completed: Label("Guardada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forest)
+                    case .completed: Label("Guardada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forestText)
                     }
                     Button("Reiniciar", action: requestCoolingReset).buttonStyle(.bordered)
                         .disabled(model.state.coolingStatus == .completed)
@@ -79,7 +79,7 @@ struct TastingView: View {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("\(observationStageLabel(observation.stage)) · \(time(observation.elapsedSeconds))").font(.caption.bold())
                                     Text("A \(Int(observation.aroma)) · Ac \(Int(observation.acidity)) · D \(Int(observation.sweetness)) · C \(Int(observation.body)) · Am \(Int(observation.bitterness)) · F \(Int(observation.finish))")
-                                        .font(.caption2).foregroundStyle(CupaTheme.forest)
+                                        .font(.caption2).foregroundStyle(CupaTheme.forestText)
                                     if !observation.notes.isEmpty { Text(observation.notes).font(.caption2).foregroundStyle(CupaTheme.secondaryText) }
                                 }
                                 Spacer()
@@ -115,10 +115,11 @@ struct TastingView: View {
                     HStack {
                         ForEach(model.state.activeFlavorFamily.suggestions, id: \.self) { note in
                             Button(note) { toggle(note) }.buttonStyle(.bordered).tint(model.state.selectedFlavorNotes.contains(note) ? CupaTheme.forest : CupaTheme.secondaryText)
+                                .accessibilityValue(model.state.selectedFlavorNotes.contains(note) ? "Seleccionada" : "No seleccionada")
                         }
                     }
                 }
-                if !model.state.selectedFlavorNotes.isEmpty { Text(model.state.selectedFlavorNotes.joined(separator: ", ")).font(.caption).foregroundStyle(CupaTheme.forest) }
+                if !model.state.selectedFlavorNotes.isEmpty { Text(model.state.selectedFlavorNotes.joined(separator: ", ")).font(.caption).foregroundStyle(CupaTheme.forestText) }
                 TextField("Notas esperadas", text: $model.state.expectedNotes)
                 TextField("Notas libres y balance general", text: $model.state.freeNotes, axis: .vertical).lineLimit(3...7)
             }
@@ -150,23 +151,45 @@ struct TastingView: View {
         CupaCard {
             VStack(spacing: 12) {
                 Text("Calificación final").font(.headline).frame(maxWidth: .infinity, alignment: .leading)
-                HStack { Text("Estrellas"); Slider(value: $model.state.rating, in: 1...5, step: 1); Text("\(Int(model.state.rating))/5").bold() }
+                HStack {
+                    Text("Estrellas")
+                    Slider(value: $model.state.rating, in: 1...5, step: 1)
+                        .accessibilityLabel("Calificación final")
+                        .accessibilityValue("\(Int(model.state.rating)) de 5 estrellas")
+                    Text("\(Int(model.state.rating))/5").bold()
+                }
                 Stepper("Recomendación (NPS): \(model.state.nps)/10", value: $model.state.nps, in: 0...10)
             }
         }
     }
 
     private var actions: some View {
-        HStack {
-            Button(isSaving ? "Guardando…" : saveButtonTitle, action: save).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
-                .disabled(isSaving || (!editingExisting && model.state.coolingStatus == .completed))
-                .accessibilityIdentifier("tasting.save")
-            Button("Nueva") { model.newTasting(); editingExisting = false }.buttonStyle(.bordered)
-            Button("Llevar al Laboratorio") {
-                lab.load(tasting: model.state, brew: brews.first { $0.id == model.state.brewSessionId })
-                selection = .lab
-            }.buttonStyle(.bordered)
-        }.font(.caption)
+        ViewThatFits(in: .horizontal) {
+            tastingActionButtons(axis: .horizontal)
+            tastingActionButtons(axis: .vertical)
+        }
+    }
+
+    private func tastingActionButtons(axis: Axis) -> some View {
+        Group {
+            if axis == .horizontal {
+                HStack { tastingActionContent }
+            } else {
+                VStack { tastingActionContent }
+            }
+        }
+        .font(.caption)
+    }
+
+    @ViewBuilder private var tastingActionContent: some View {
+        Button(isSaving ? "Guardando…" : saveButtonTitle, action: save).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
+            .disabled(isSaving || (!editingExisting && model.state.coolingStatus == .completed))
+            .accessibilityIdentifier("tasting.save")
+        Button("Nueva") { model.newTasting(); editingExisting = false }.buttonStyle(.bordered)
+        Button("Llevar al Laboratorio") {
+            lab.load(tasting: model.state, brew: brews.first { $0.id == model.state.brewSessionId })
+            selection = .lab
+        }.buttonStyle(.bordered)
     }
 
     private var historyCard: some View {
@@ -250,7 +273,7 @@ private struct TastingDetailView: View {
                                 Text(FlavorFamily(rawValue: tasting.activeFlavorFamily)?.label ?? "Cata").font(.title3.bold())
                                 Text(tasting.evaluatedAt.formatted(date: .long, time: .shortened)).font(.caption).foregroundStyle(CupaTheme.secondaryText)
                             }
-                            Spacer(); Text("\(Int(tasting.rating))/5 ★").font(.headline).foregroundStyle(CupaTheme.gold)
+                            Spacer(); Text("\(Int(tasting.rating))/5 ★").font(.headline).foregroundStyle(CupaTheme.goldText)
                         }
                         if !tasting.selectedFlavorNotes.isEmpty { Label(tasting.selectedFlavorNotes.joined(separator: ", "), systemImage: "circle.hexagongrid") }
                         if !tasting.expectedNotes.isEmpty { Text("Esperadas: \(tasting.expectedNotes)").font(.subheadline).foregroundStyle(CupaTheme.secondaryText) }
@@ -291,7 +314,7 @@ private struct TastingDetailView: View {
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack { Text(stageLabel(observation.stage)).fontWeight(.semibold); Spacer(); Text(time(Int(observation.elapsedSeconds))).monospacedDigit().font(.caption) }
                                 Text("A \(Int(observation.aroma)) · Ac \(Int(observation.acidity)) · D \(Int(observation.sweetness)) · C \(Int(observation.body)) · Am \(Int(observation.bitterness)) · F \(Int(observation.finishScore))")
-                                    .font(.caption).foregroundStyle(CupaTheme.forest)
+                                    .font(.caption).foregroundStyle(CupaTheme.forestText)
                                 if !observation.notes.isEmpty { Text(observation.notes).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
                             }.padding(.vertical, 3)
                         }
@@ -319,10 +342,10 @@ private struct TastingDetailView: View {
     }
 
     private func sensoryRow(_ name: String, _ value: Double) -> some View {
-        HStack { Text(name); Spacer(); Text("\(Int(value))/5").fontWeight(.semibold).foregroundStyle(CupaTheme.forest) }
+        HStack { Text(name); Spacer(); Text("\(Int(value))/5").fontWeight(.semibold).foregroundStyle(CupaTheme.forestText) }
     }
     private func detailRow(_ name: String, _ value: String) -> some View {
-        HStack(alignment: .top) { Text(name); Spacer(); Text(value).multilineTextAlignment(.trailing).fontWeight(.semibold).foregroundStyle(CupaTheme.forest) }
+        HStack(alignment: .top) { Text(name); Spacer(); Text(value).multilineTextAlignment(.trailing).fontWeight(.semibold).foregroundStyle(CupaTheme.forestText) }
     }
     private func time(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }
     private func stageLabel(_ code: String) -> String {

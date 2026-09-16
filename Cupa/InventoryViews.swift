@@ -30,7 +30,7 @@ struct GrinderInventoryView: View {
                             Text([grinder.brand, grinder.model].filter { !$0.isEmpty }.joined(separator: " · "))
                                 .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
                             Text("\(grinder.minimumSetting)–\(grinder.maximumSetting) \(grinder.scaleUnit.lowercased()) · \(grinder.grinderType.capitalized)")
-                                .font(.caption).foregroundStyle(CupaTheme.forest)
+                                .font(.caption).foregroundStyle(CupaTheme.forestText)
                         }.padding(.vertical, 5)
                     }
                     .buttonStyle(.plain)
@@ -94,14 +94,14 @@ struct EquipmentInventoryView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
                                 Image(systemName: item.isFavorite ? "star.fill" : equipmentIcon(item.equipmentType))
-                                    .foregroundStyle(item.isFavorite ? CupaTheme.gold : CupaTheme.forest)
+                                    .foregroundStyle(item.isFavorite ? CupaTheme.goldText : CupaTheme.forestText)
                                 Text(item.name).font(.headline)
                                 Spacer()
                                 syncBadge(item.syncStatus)
                             }
                             Text(equipmentTypeLabel(item.equipmentType) + (item.capacityMl.map { " · \($0) ml" } ?? ""))
                                 .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
-                            if !item.configuration.isEmpty { Text(item.configuration).font(.caption).foregroundStyle(CupaTheme.forest) }
+                            if !item.configuration.isEmpty { Text(item.configuration).font(.caption).foregroundStyle(CupaTheme.forestText) }
                         }.padding(.vertical, 5).opacity(item.isActive ? 1 : 0.55)
                     }
                     .buttonStyle(.plain)
@@ -224,7 +224,7 @@ private struct GrinderDetailView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Label(grinder.name, systemImage: grinder.grinderType == "ELECTRIC" ? "bolt.fill" : "gearshape.2.fill")
-                            .font(.title3.bold()).foregroundStyle(CupaTheme.forest)
+                            .font(.title3.bold()).foregroundStyle(CupaTheme.forestText)
                         if !identity.isEmpty { Text(identity).font(.subheadline).foregroundStyle(CupaTheme.secondaryText) }
                     }.padding(.vertical, 4)
                 }
@@ -336,7 +336,7 @@ private struct EquipmentDetailView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Label(equipment.name, systemImage: equipmentIcon(equipment.equipmentType))
-                            .font(.title3.bold()).foregroundStyle(CupaTheme.forest)
+                            .font(.title3.bold()).foregroundStyle(CupaTheme.forestText)
                         Text(equipmentTypeLabel(equipment.equipmentType)).font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
                     }.padding(.vertical, 4)
                 }
@@ -397,12 +397,12 @@ private func syncStatusLabel(_ status: SyncStatus) -> String {
     HStack(alignment: .top) {
         Text(title)
         Spacer()
-        Text(value).multilineTextAlignment(.trailing).fontWeight(.semibold).foregroundStyle(CupaTheme.forest)
+        Text(value).multilineTextAlignment(.trailing).fontWeight(.semibold).foregroundStyle(CupaTheme.forestText)
     }
 }
 private func equipmentIcon(_ code: String) -> String {
     switch code { case "KETTLE": "kettle"; case "SCALE": "scalemass"; case "BREWER_METHOD": "mug"; default: "wrench.and.screwdriver" }
 }
 @ViewBuilder private func syncBadge(_ status: SyncStatus) -> some View {
-    if status != .synced { Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(CupaTheme.gold).accessibilityLabel("Pendiente de sincronización") }
+    if status != .synced { Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(CupaTheme.goldText).accessibilityLabel("Pendiente de sincronización") }
 }

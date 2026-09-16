@@ -1567,8 +1567,8 @@ final class NavigationAndThemeTests: XCTestCase {
     }
 
     func testBrandPaletteMeetsWCAGNormalTextContrast() {
-        let lightForegrounds = [CupaPalette.Light.text, CupaPalette.Light.secondaryText, CupaPalette.Light.forest, CupaPalette.Light.terracottaText, CupaPalette.Light.gold, CupaPalette.Light.espresso, CupaPalette.Light.clarity]
-        let darkForegrounds = [CupaPalette.Dark.text, CupaPalette.Dark.secondaryText, CupaPalette.Dark.forest, CupaPalette.Dark.terracottaText, CupaPalette.Dark.gold, CupaPalette.Dark.espresso, CupaPalette.Dark.clarity]
+        let lightForegrounds = [CupaPalette.Light.text, CupaPalette.Light.secondaryText, CupaPalette.Light.terracottaText, CupaPalette.Light.forestText, CupaPalette.Light.goldText, CupaPalette.Light.espressoText, CupaPalette.Light.clarityText]
+        let darkForegrounds = [CupaPalette.Dark.text, CupaPalette.Dark.secondaryText, CupaPalette.Dark.terracottaText, CupaPalette.Dark.forestText, CupaPalette.Dark.goldText, CupaPalette.Dark.espressoText, CupaPalette.Dark.clarityText]
         for foreground in lightForegrounds {
             XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Light.background), 4.5)
             XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Light.card), 4.5)
@@ -1577,11 +1577,11 @@ final class NavigationAndThemeTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Dark.background), 4.5)
             XCTAssertGreaterThanOrEqual(contrast(foreground, CupaPalette.Dark.card), 4.5)
         }
-        for accent in [CupaPalette.Light.forest, CupaPalette.Light.gold, CupaPalette.Light.espresso, CupaPalette.Light.clarity] {
+        for accent in [CupaPalette.Light.forest, CupaPalette.Light.gold, CupaPalette.Light.espresso, CupaPalette.Light.clarity, CupaPalette.Light.terracottaSurface] {
             XCTAssertGreaterThanOrEqual(contrast(CupaPalette.Light.onAccent, accent), 4.5)
         }
         XCTAssertGreaterThanOrEqual(contrast(CupaPalette.Light.onTerracotta, CupaPalette.Light.terracotta), 4.5)
-        for accent in [CupaPalette.Dark.forest, CupaPalette.Dark.gold, CupaPalette.Dark.espresso, CupaPalette.Dark.clarity] {
+        for accent in [CupaPalette.Dark.forest, CupaPalette.Dark.gold, CupaPalette.Dark.espresso, CupaPalette.Dark.clarity, CupaPalette.Dark.terracottaSurface] {
             XCTAssertGreaterThanOrEqual(contrast(CupaPalette.Dark.onAccent, accent), 4.5)
         }
         XCTAssertGreaterThanOrEqual(contrast(CupaPalette.Dark.onTerracotta, CupaPalette.Dark.terracotta), 4.5)

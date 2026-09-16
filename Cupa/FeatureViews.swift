@@ -42,7 +42,7 @@ struct HomeView: View {
                             .accessibilityLabel("Abrir configuración")
                             .accessibilityIdentifier("home.settings")
                     }
-                    .foregroundStyle(CupaTheme.forest)
+                    .foregroundStyle(CupaTheme.forestText)
 
                     SectionHeader(
                         eyebrow: "Cupa",
@@ -215,7 +215,7 @@ private struct BaristaCalculatorCard: View {
                     Spacer()
                     Text("1:\(calculator.ratioInput)")
                         .font(.subheadline.bold())
-                        .foregroundStyle(categoryColor)
+                        .foregroundStyle(categoryTextColor)
                 }
 
                 VStack(spacing: 2) {
@@ -228,14 +228,14 @@ private struct BaristaCalculatorCard: View {
                 .foregroundStyle(CupaTheme.onAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 22)
-                .background(LinearGradient(colors: [CupaTheme.forest, categoryColor], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .background(LinearGradient(colors: [CupaTheme.forest, categorySurfaceColor], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .clipShape(RoundedRectangle(cornerRadius: 22))
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Resultado: \(calculator.water) mililitros de agua, \(calculator.coffeeInput) gramos de café, proporción uno a \(calculator.ratioInput), método \(calculator.method)")
 
                 Text(calculator.category.label)
                     .font(.caption.bold())
-                    .foregroundStyle(categoryColor)
+                    .foregroundStyle(categoryTextColor)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                 HStack(spacing: 8) {
@@ -284,7 +284,7 @@ private struct BaristaCalculatorCard: View {
                             ForEach(quickMethodOptions) { option in
                                 Button(option.name) { calculator.selectMethod(option.name, methodId: option.equipmentId) }
                                     .buttonStyle(.bordered)
-                                    .tint(calculator.method.caseInsensitiveCompare(option.name) == .orderedSame ? categoryColor : CupaTheme.secondaryText)
+                                    .tint(calculator.method.caseInsensitiveCompare(option.name) == .orderedSame ? categoryTextColor : CupaTheme.secondaryText)
                             }
                         }
                     }
@@ -376,12 +376,21 @@ private struct BaristaCalculatorCard: View {
         catch { context.rollback(); methodError = error.localizedDescription }
     }
 
-    private var categoryColor: Color {
+    private var categorySurfaceColor: Color {
         switch calculator.category {
         case .espresso: CupaTheme.espresso
         case .intense: CupaTheme.gold
         case .balance: CupaTheme.forest
         case .clarity: CupaTheme.clarity
+        }
+    }
+
+    private var categoryTextColor: Color {
+        switch calculator.category {
+        case .espresso: CupaTheme.espressoText
+        case .intense: CupaTheme.goldText
+        case .balance: CupaTheme.forestText
+        case .clarity: CupaTheme.clarityText
         }
     }
 
@@ -416,7 +425,7 @@ private struct BaristaCalculatorCard: View {
                     .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel("Aumentar \(title)")
             }
-            .foregroundStyle(categoryColor)
+            .foregroundStyle(categoryTextColor)
         }
         .padding(9)
         .background(CupaTheme.backgroundAlt.opacity(0.7))
@@ -724,7 +733,7 @@ struct LabView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Button { withAnimation { altitudeExpanded.toggle() } } label: {
                     HStack {
-                        Image(systemName: "mountain.2.fill").foregroundStyle(CupaTheme.forest)
+                        Image(systemName: "mountain.2.fill").foregroundStyle(CupaTheme.forestText)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(model.state.cityName).font(.subheadline.bold()).foregroundStyle(CupaTheme.text)
                             Text("Hervor: \(boilingText) · \(model.state.altitudeMeters) msnm")
@@ -760,6 +769,8 @@ struct LabView: View {
                             get: { Double(model.state.altitudeMeters) },
                             set: { model.setManualAltitude(Int($0.rounded() / 25) * 25) }
                         ), in: 0...4000, step: 25).tint(CupaTheme.gold)
+                            .accessibilityLabel("Altitud de preparación")
+                            .accessibilityValue("\(model.state.altitudeMeters) metros sobre el nivel del mar")
                     }
                     Button { customCity = ""; customAltitude = String(model.state.altitudeMeters); showCustomCity = true } label: {
                         Label("Agregar mi ciudad y altura", systemImage: "location.badge.plus")
@@ -788,7 +799,7 @@ struct LabView: View {
         .foregroundStyle(CupaTheme.onAccent)
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracotta], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityElement(children: .combine)
     }
@@ -836,7 +847,7 @@ struct LabView: View {
         }
         .foregroundStyle(CupaTheme.onAccent)
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracotta], startPoint: .leading, endPoint: .trailing))
+        .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .leading, endPoint: .trailing))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -858,12 +869,16 @@ struct LabView: View {
                                 }
                             }.frame(height: 54)
                             Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7)
-                        }.frame(maxWidth: .infinity)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(label)
+                        .accessibilityValue("\(value) de 100")
                     }
                 }
                 HStack(spacing: 5) {
                     Circle().fill(CupaTheme.forest).frame(width: 6, height: 6)
-                    Text(model.diagnostic.extraction).font(.caption2.bold()).foregroundStyle(CupaTheme.forest)
+                    Text(model.diagnostic.extraction).font(.caption2.bold()).foregroundStyle(CupaTheme.forestText)
                     Spacer()
                     Text("SABOR ESTIMADO").font(.system(size: 8, weight: .bold)).foregroundStyle(CupaTheme.secondaryText)
                 }
@@ -1031,6 +1046,8 @@ struct LabView: View {
         VStack(spacing: 6) {
             HStack { Text(title).font(.subheadline.bold()); Spacer(); Text(display).font(.subheadline.bold()).foregroundStyle(CupaTheme.terracottaText) }
             Slider(value: value, in: range, step: step).tint(CupaTheme.forest)
+                .accessibilityLabel(title)
+                .accessibilityValue(display)
         }
     }
     private func binding<Value>(_ keyPath: WritableKeyPath<LabState, Value>) -> Binding<Value> {
@@ -1115,7 +1132,7 @@ private struct CupHistoryView: View {
                             HStack {
                                 Text(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot).font(.headline)
                                 Spacer()
-                                Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").foregroundStyle(CupaTheme.gold)
+                                Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").foregroundStyle(CupaTheme.goldText)
                             }
                             Text("\(cup.techniqueNameSnapshot) · \(cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))) g → \(cup.executedWaterMl) ml")
                                 .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
@@ -1123,7 +1140,7 @@ private struct CupHistoryView: View {
                                 Label(cup.cupLifeState.localizedCupLife, systemImage: "thermometer.medium")
                                 if !cup.executedGrindSetting.isEmpty { Label(cup.executedGrindSetting, systemImage: "dial.medium") }
                             }
-                            .font(.caption).foregroundStyle(CupaTheme.forest)
+                            .font(.caption).foregroundStyle(CupaTheme.forestText)
                             if !cup.comment.isEmpty { Text(cup.comment).font(.caption) }
                             if let date = cup.brewDate { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary) }
                         }
@@ -1163,7 +1180,7 @@ private struct CupSessionDetailView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Label(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot, systemImage: "cup.and.saucer.fill").font(.title3.bold())
-                            Spacer(); Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").font(.headline).foregroundStyle(CupaTheme.gold)
+                            Spacer(); Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").font(.headline).foregroundStyle(CupaTheme.goldText)
                         }
                         if let date = cup.brewDate { Text(date.formatted(date: .long, time: .shortened)).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
                     }.padding(.vertical, 4)
@@ -1205,7 +1222,7 @@ private struct CupSessionDetailView: View {
     }
 
     private func cupDetailRow(_ title: String, _ value: String) -> some View {
-        HStack(alignment: .top) { Text(title); Spacer(); Text(value).multilineTextAlignment(.trailing).fontWeight(.semibold).foregroundStyle(CupaTheme.forest) }
+        HStack(alignment: .top) { Text(title); Spacer(); Text(value).multilineTextAlignment(.trailing).fontWeight(.semibold).foregroundStyle(CupaTheme.forestText) }
     }
 }
 
@@ -1290,13 +1307,13 @@ private struct CoffeeInventoryView: View {
                     Text(bean.inventoryStatus.label.uppercased()).font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
                     CoffeeFreshnessBadge(state: freshness.state)
                     if bean.syncStatus != .synced {
-                        Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(CupaTheme.gold)
+                        Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(CupaTheme.goldText)
                     }
                 }
                 Text("\(bean.brand.isEmpty ? "Sin tostador" : bean.brand) · Tueste \(bean.roastLevel.lowercased())")
                     .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
                 Text("\(bean.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles")
-                    .font(.caption).foregroundStyle(bean.inventoryStatus == .finished ? CupaTheme.secondaryText : CupaTheme.forest)
+                    .font(.caption).foregroundStyle(bean.inventoryStatus == .finished ? CupaTheme.secondaryText : CupaTheme.forestText)
                 CoffeeFreshnessBar(result: freshness)
                 if let warning = freshness.openWarning {
                     Label(warning, systemImage: "exclamationmark.triangle.fill").font(.caption2).foregroundStyle(CupaTheme.terracottaText)
@@ -1365,7 +1382,7 @@ private struct CoffeeBeanDetail: View {
                         if !details.isEmpty { Text(details).font(.subheadline) }
                         CoffeeFreshnessBar(result: freshness)
                         Label("\(record.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles", systemImage: "scalemass")
-                            .font(.subheadline).foregroundStyle(CupaTheme.forest)
+                            .font(.subheadline).foregroundStyle(CupaTheme.forestText)
                         if !record.notes.isEmpty { Text(record.notes).font(.subheadline).foregroundStyle(CupaTheme.secondaryText) }
                     }
                     .padding(.vertical, 4)
@@ -1426,10 +1443,10 @@ private struct CoffeeBeanDetail: View {
                                     Text(cup.techniqueNameSnapshot.isEmpty ? "Cata" : cup.techniqueNameSnapshot).font(.headline)
                                     Spacer()
                                     Label(cup.rating.formatted(.number.precision(.fractionLength(1))), systemImage: "star.fill")
-                                        .font(.subheadline).foregroundStyle(CupaTheme.gold)
+                                        .font(.subheadline).foregroundStyle(CupaTheme.goldText)
                                 }
                                 Text(cup.cupLifeState.localizedCupLife)
-                                    .font(.subheadline).foregroundStyle(CupaTheme.forest)
+                                    .font(.subheadline).foregroundStyle(CupaTheme.forestText)
                                 if !cup.comment.isEmpty { Text(cup.comment).font(.subheadline) }
                                 Text((cup.brewDate ?? cup.createdAt).formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption).foregroundStyle(CupaTheme.secondaryText)

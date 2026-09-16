@@ -37,7 +37,7 @@ struct RecipeInventoryView: View {
                     Button { selectedRecipe = recipe } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Image(systemName: recipe.isFavorite ? "star.fill" : "book.pages").foregroundStyle(recipe.isFavorite ? CupaTheme.gold : CupaTheme.forest)
+                                Image(systemName: recipe.isFavorite ? "star.fill" : "book.pages").foregroundStyle(recipe.isFavorite ? CupaTheme.goldText : CupaTheme.forestText)
                                 Text(recipe.name).font(.headline)
                                 Spacer(); if recipe.syncStatus != .synced { syncIndicator }
                             }
@@ -116,7 +116,7 @@ private struct RecipeDetailView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
                             Image(systemName: recipe.isFavorite ? "star.fill" : "book.pages")
-                                .font(.title2).foregroundStyle(recipe.isFavorite ? CupaTheme.gold : CupaTheme.forest)
+                                .font(.title2).foregroundStyle(recipe.isFavorite ? CupaTheme.goldText : CupaTheme.forestText)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(recipe.name).font(.title3.bold())
                                 Text(recipeKindLabel(recipe.recipeKind) + (recipe.suggestedMethodName.isEmpty ? "" : " · \(recipe.suggestedMethodName)"))
@@ -126,7 +126,7 @@ private struct RecipeDetailView: View {
                         if !recipe.intention.isEmpty {
                             Text("“\(recipe.intention)”").font(.body.italic()).foregroundStyle(CupaTheme.secondaryText)
                         }
-                        if !recipe.tags.isEmpty { Label(recipe.tags, systemImage: "tag").font(.caption).foregroundStyle(CupaTheme.forest) }
+                        if !recipe.tags.isEmpty { Label(recipe.tags, systemImage: "tag").font(.caption).foregroundStyle(CupaTheme.forestText) }
                     }.padding(.vertical, 4)
                 }
 
@@ -135,7 +135,7 @@ private struct RecipeDetailView: View {
                         HStack {
                             Text(ingredient.name)
                             Spacer()
-                            Text(quantity(ingredient)).foregroundStyle(CupaTheme.forest).fontWeight(.semibold)
+                            Text(quantity(ingredient)).foregroundStyle(CupaTheme.forestText).fontWeight(.semibold)
                         }
                     }
                 }
@@ -215,7 +215,7 @@ struct TechniqueInventoryView: View {
                             Text("\(technique.methodName) · 1:\(technique.ratio.formatted(.number.precision(.fractionLength(0...1)))) · \(formatDuration(Int(technique.totalTimeSeconds)))")
                                 .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
                             Text("\(technique.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(technique.waterMl) ml · \(technique.temperatureC)°C · \(executionModeLabel(technique.executionMode))")
-                                .font(.caption).foregroundStyle(CupaTheme.forest)
+                                .font(.caption).foregroundStyle(CupaTheme.forestText)
                         }.padding(.vertical, 4)
                     }.buttonStyle(.plain)
                 }
@@ -287,7 +287,7 @@ private struct TechniqueDetailView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 12) {
-                            Image(systemName: "list.number").font(.title2).foregroundStyle(CupaTheme.forest)
+                            Image(systemName: "list.number").font(.title2).foregroundStyle(CupaTheme.forestText)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(technique.name).font(.title3.bold())
                                 Text("\(technique.methodName) · \(executionModeLabel(technique.executionMode))")
@@ -327,7 +327,7 @@ private struct TechniqueDetailView: View {
                                     Label("\(step.waterAddedMl) ml · \(step.waterAccumulatedMl) total", systemImage: "drop")
                                 }.font(.caption).foregroundStyle(CupaTheme.secondaryText)
                                 Text("\(gestureLabel(step.gesture)) · \(step.intensity.capitalized)")
-                                    .font(.caption.bold()).foregroundStyle(CupaTheme.forest)
+                                    .font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
                                 if step.coverage != nil || step.flow != nil {
                                     HStack(spacing: 12) {
                                         if let coverage = step.coverage { Label("\(coverage.formatted(.number.precision(.fractionLength(0...1))))%", systemImage: "circle.dotted") }
@@ -372,7 +372,7 @@ private struct TechniqueDetailView: View {
     }
 
     private func detailRow(_ title: String, _ value: String) -> some View {
-        HStack { Text(title); Spacer(); Text(value).foregroundStyle(CupaTheme.forest).fontWeight(.semibold) }
+        HStack { Text(title); Spacer(); Text(value).foregroundStyle(CupaTheme.forestText).fontWeight(.semibold) }
     }
 
     private func gestureLabel(_ code: String) -> String {
@@ -593,4 +593,4 @@ private func recipeKindLabel(_ code: String) -> String { recipeKinds.first { $0.
 private func unitLabel(_ code: String) -> String { ["GRAMS": "g", "MILLILITERS": "ml", "UNITS": "u", "TEASPOONS": "cdta", "TABLESPOONS": "cda", "OUNCES": "oz", "OTHER": "otra"][code] ?? code }
 private func executionModeLabel(_ code: String) -> String { executionModes.first { $0.0 == code }?.1 ?? code }
 private func formatDuration(_ seconds: Int) -> String { String(format: "%d:%02d", seconds / 60, seconds % 60) }
-private var syncIndicator: some View { Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(CupaTheme.gold).accessibilityLabel("Pendiente de sincronización") }
+private var syncIndicator: some View { Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(CupaTheme.goldText).accessibilityLabel("Pendiente de sincronización") }

@@ -3,17 +3,19 @@ import UIKit
 
 enum CupaPalette {
     enum Light {
-        static let background: UInt = 0xF4F1EA, backgroundAlt: UInt = 0xEBE6DC, card: UInt = 0xFFFFFF
-        static let text: UInt = 0x1A1C1A, secondaryText: UInt = 0x5A655D, border: UInt = 0xE2DDD2
-        static let forest: UInt = 0x234E3C, terracotta: UInt = 0xC86D51, terracottaText: UInt = 0xB85D42, gold: UInt = 0xD97706
-        static let espresso: UInt = 0xB85D42, clarity: UInt = 0x2E5A44, onAccent: UInt = 0xFFFFFF, onTerracotta: UInt = 0x120E0C
+        static let background: UInt = 0xF7F5F0, backgroundAlt: UInt = 0xEFECE6, card: UInt = 0xFFFFFF
+        static let text: UInt = 0x1E1A17, secondaryText: UInt = 0x5A655D, border: UInt = 0xE6DFD5
+        static let forest: UInt = 0x234E3C, terracotta: UInt = 0xC26638, terracottaText: UInt = 0xA94F28, terracottaSurface: UInt = 0xA94F28, gold: UInt = 0xB45309
+        static let espresso: UInt = 0xA4472F, clarity: UInt = 0x2E5A44, onAccent: UInt = 0xFFFFFF, onTerracotta: UInt = 0x120E0C
+        static let forestText: UInt = 0x234E3C, goldText: UInt = 0x965000, espressoText: UInt = 0xA4472F, clarityText: UInt = 0x2E5A44
     }
 
     enum Dark {
         static let background: UInt = 0x121413, backgroundAlt: UInt = 0x181C1A, card: UInt = 0x1C211F
         static let text: UInt = 0xF7F9F6, secondaryText: UInt = 0x9CA3AF, border: UInt = 0x2A302D
-        static let forest: UInt = 0x234E3C, terracotta: UInt = 0xC86D51, terracottaText: UInt = 0xF09A7D, gold: UInt = 0xD97706
-        static let espresso: UInt = 0xB85D42, clarity: UInt = 0x2E5A44, onAccent: UInt = 0xFFFFFF, onTerracotta: UInt = 0x111512
+        static let forest: UInt = 0x234E3C, terracotta: UInt = 0xC86D51, terracottaText: UInt = 0xF09A7D, terracottaSurface: UInt = 0xA94F28, gold: UInt = 0xB45309
+        static let espresso: UInt = 0xA4472F, clarity: UInt = 0x2E5A44, onAccent: UInt = 0xFFFFFF, onTerracotta: UInt = 0x111512
+        static let forestText: UInt = 0x8FC1A9, goldText: UInt = 0xF0B35B, espressoText: UInt = 0xF0A088, clarityText: UInt = 0x8FC1A9
     }
 }
 
@@ -27,9 +29,14 @@ enum CupaTheme {
     static let forest = adaptive(light: CupaPalette.Light.forest, dark: CupaPalette.Dark.forest)
     static let terracotta = adaptive(light: CupaPalette.Light.terracotta, dark: CupaPalette.Dark.terracotta)
     static let terracottaText = adaptive(light: CupaPalette.Light.terracottaText, dark: CupaPalette.Dark.terracottaText)
+    static let terracottaSurface = adaptive(light: CupaPalette.Light.terracottaSurface, dark: CupaPalette.Dark.terracottaSurface)
     static let gold = adaptive(light: CupaPalette.Light.gold, dark: CupaPalette.Dark.gold)
     static let espresso = adaptive(light: CupaPalette.Light.espresso, dark: CupaPalette.Dark.espresso)
     static let clarity = adaptive(light: CupaPalette.Light.clarity, dark: CupaPalette.Dark.clarity)
+    static let forestText = adaptive(light: CupaPalette.Light.forestText, dark: CupaPalette.Dark.forestText)
+    static let goldText = adaptive(light: CupaPalette.Light.goldText, dark: CupaPalette.Dark.goldText)
+    static let espressoText = adaptive(light: CupaPalette.Light.espressoText, dark: CupaPalette.Dark.espressoText)
+    static let clarityText = adaptive(light: CupaPalette.Light.clarityText, dark: CupaPalette.Dark.clarityText)
     static let onAccent = adaptive(light: CupaPalette.Light.onAccent, dark: CupaPalette.Dark.onAccent)
     static let onTerracotta = adaptive(light: CupaPalette.Light.onTerracotta, dark: CupaPalette.Dark.onTerracotta)
     static let warmShadow = Color(hex: 0x1E1A17)

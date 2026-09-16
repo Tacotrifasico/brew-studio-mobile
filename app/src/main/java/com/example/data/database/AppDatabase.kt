@@ -300,7 +300,7 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
                 db.execSQL("""
                     INSERT OR REPLACE INTO beans_v6 (id, roaster, name, origin, altitude, process, roastDate, firstUseDate, notes, status, stockGrams, ownerUserId, schemaVersion, remoteId, syncStatus, serverVersion, expectedVersion, lastSyncedAt, createdAt, updatedAt, migrationStatus)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, NULL, 1, ?, ?, 1, 1, ?, ?, ?, ?)
-                """.trimIndent(), arrayOf(id, roaster, name, origin, altitude, process, roastDate, firstUseDate, notes, stockGrams, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso, migrationStatus))
+                """.trimIndent(), arrayOf<Any?>(id, roaster, name, origin, altitude, process, roastDate, firstUseDate, notes, stockGrams, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso, migrationStatus))
             }
             cursor.close()
         }
@@ -399,7 +399,7 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
                 db.execSQL("""
                     INSERT OR REPLACE INTO techniques_v6 (id, name, methodId, doseG, waterMl, ratio, temperatureC, notes, totalTimeSeconds, legacyMethodName, ownerUserId, schemaVersion, remoteId, syncStatus, serverVersion, expectedVersion, lastSyncedAt, createdAt, updatedAt, migrationStatus)
                     VALUES (?, ?, ?, 15.0, ?, ?, 93, ?, ?, ?, NULL, 1, ?, ?, 1, 1, ?, ?, ?, ?)
-                """.trimIndent(), arrayOf(id, name, matchedMethodId, waterMl, ratio, notes, totalTime, legacyMethodName, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso, migrationStatus))
+                """.trimIndent(), arrayOf<Any?>(id, name, matchedMethodId, waterMl, ratio, notes, totalTime, legacyMethodName, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso, migrationStatus))
             }
             cursor.close()
         }
@@ -466,7 +466,7 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
                 db.execSQL("""
                     INSERT OR REPLACE INTO technique_steps_v6 (id, techniqueId, stepNumber, title, durationSeconds, waterAddedMl, waterAccumulatedMl, intensity, gesture, stepNote, remoteId, syncStatus, serverVersion, expectedVersion, lastSyncedAt, createdAt, updatedAt)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?)
-                """.trimIndent(), arrayOf(id, techId, stepNum, title, dur, added, acc, intensity, gesture, note, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso))
+                """.trimIndent(), arrayOf<Any?>(id, techId, stepNum, title, dur, added, acc, intensity, gesture, note, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso))
             }
             cursor.close()
         }
@@ -547,7 +547,7 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
                         db.execSQL("""
                             INSERT OR REPLACE INTO recipe_ingredients (id, recipeId, name, amount, unit, orderIndex)
                             VALUES (?, ?, ?, 15.0, 'GRAMS', ?)
-                        """.trimIndent(), arrayOf(ingId, id, ingStr, index + 1))
+                        """.trimIndent(), arrayOf<Any?>(ingId, id, ingStr, index + 1))
                     }
                 } else {
                     val ingId = UUID.nameUUIDFromBytes("ing_${id}_0".toByteArray()).toString()
@@ -565,7 +565,7 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
                         db.execSQL("""
                             INSERT OR REPLACE INTO recipe_steps (id, recipeId, instruction, stepNumber)
                             VALUES (?, ?, ?, ?)
-                        """.trimIndent(), arrayOf(stepId, id, stepStr, index + 1))
+                        """.trimIndent(), arrayOf<Any?>(stepId, id, stepStr, index + 1))
                     }
                 } else {
                     val stepId = UUID.nameUUIDFromBytes("step_${id}_0".toByteArray()).toString()
@@ -674,7 +674,7 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
                 db.execSQL("""
                     INSERT OR REPLACE INTO cups_v6 (id, executedDoseG, executedWaterMl, executedRatio, executedTemperatureC, executedGrindSetting, executedDurationSeconds, rating, comment, brewDate, recipeNameSnapshot, techniqueNameSnapshot, beanNameSnapshot, grinderNameSnapshot, recipeSnapshotJson, techniqueSnapshotJson, beanSnapshotJson, grinderSnapshotJson, ownerUserId, schemaVersion, remoteId, syncStatus, serverVersion, expectedVersion, lastSyncedAt, createdAt, updatedAt, migrationStatus)
                     VALUES (?, 15.0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, 1, 1, ?, ?, ?, ?)
-                """.trimIndent(), arrayOf(id, waterMl, ratio, temp, clicks.toString(), dur, rating, notes, createdAtIso, recipeName, techniqueName, beanName, grinderName, recipeJson, techniqueJson, beanJson, grinderJson, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso, migrationStatus))
+                """.trimIndent(), arrayOf<Any?>(id, waterMl, ratio, temp, clicks.toString(), dur, rating, notes, createdAtIso, recipeName, techniqueName, beanName, grinderName, recipeJson, techniqueJson, beanJson, grinderJson, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso, migrationStatus))
             }
             cursor.close()
         }
@@ -763,7 +763,7 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
                 db.execSQL("""
                     INSERT OR REPLACE INTO catas_v6 (id, cupId, overallScore, evaluatorNotes, evaluatedAt, ownerUserId, schemaVersion, remoteId, syncStatus, serverVersion, expectedVersion, lastSyncedAt, createdAt, updatedAt, migrationStatus)
                     VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?, 1, 1, ?, ?, ?, ?)
-                """.trimIndent(), arrayOf(id, cupId, score, notes, createdAtIso, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso, migrationStatus))
+                """.trimIndent(), arrayOf<Any?>(id, cupId, score, notes, createdAtIso, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso, migrationStatus))
 
                 if (notes.isNotEmpty()) {
                     val fnId = UUID.nameUUIDFromBytes("fn_$id".toByteArray()).toString()
@@ -843,7 +843,7 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
                 db.execSQL("""
                     INSERT OR REPLACE INTO lab_experiments_v6 (id, coffeeGrams, waterMl, ratio, temperatureC, grindSetting, estimatedTimeSeconds, experimentNotes, ownerUserId, schemaVersion, remoteId, syncStatus, serverVersion, expectedVersion, lastSyncedAt, createdAt, updatedAt, migrationStatus)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, 1, 1, ?, ?, ?, ?)
-                """.trimIndent(), arrayOf(id, coffeeGrams, waterMl, ratio, temp, clicks.toString(), estTime, notes, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso, migrationStatus))
+                """.trimIndent(), arrayOf<Any?>(id, coffeeGrams, waterMl, ratio, temp, clicks.toString(), estTime, notes, remoteId, syncStatus, lastSyncedAtIso, createdAtIso, updatedAtIso, migrationStatus))
             }
             cursor.close()
         }

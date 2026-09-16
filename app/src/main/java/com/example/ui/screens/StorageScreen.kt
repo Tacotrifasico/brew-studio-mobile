@@ -1253,6 +1253,9 @@ fun BeanItemCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (bean.syncStatus != "SYNCED") {
+                        LocalSyncStatusLabel(bean.syncStatus)
+                    }
                 }
                 
                 // Chip badge with exact Hex color mapping
@@ -1884,6 +1887,9 @@ fun GrinderItemCard(grinder: Instrument, onDelete: () -> Unit) {
                 if (grinder.notes.isNotBlank()) {
                     Text(grinder.notes, fontSize = 11.sp, color = TextSecundario)
                 }
+                if (grinder.syncStatus != "SYNCED") {
+                    LocalSyncStatusLabel(grinder.syncStatus)
+                }
             }
             IconButton(onClick = onDelete) {
                 Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar", tint = Advertencia.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
@@ -1917,6 +1923,9 @@ fun EquipmentItemCard(
                 Text("Tipo: ${eq.type.uppercase()}", fontSize = 11.sp, color = CafeCalidoOscuro, fontWeight = FontWeight.Bold)
                 if (eq.notes.isNotBlank()) {
                     Text(eq.notes, fontSize = 11.sp, color = TextSecundario)
+                }
+                if (eq.syncStatus != "SYNCED") {
+                    LocalSyncStatusLabel(eq.syncStatus)
                 }
                 if (isPinned != null && onTogglePinned != null) {
                     Spacer(modifier = Modifier.height(6.dp))
@@ -2538,6 +2547,9 @@ fun CupItemCard(cup: Cup, onDelete: () -> Unit) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(cup.beanNameSnapshot, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
                     Text("Taza • ${cup.executedDoseG} g ➔ ${cup.executedWaterMl} ml • Puntuación: ${cup.rating ?: 5.0} ★", fontSize = 11.sp, color = TextSecundario)
+                    if (cup.syncStatus != "SYNCED") {
+                        LocalSyncStatusLabel(cup.syncStatus)
+                    }
                 }
                 IconButton(onClick = onDelete) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar", tint = Advertencia.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
@@ -2579,6 +2591,9 @@ fun ExperimentItemCard(exp: LabExperiment, onDelete: () -> Unit) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Experimento: 1:${exp.ratio}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
                     Text("${exp.coffeeGrams} g • ${exp.waterMl} ml • ${exp.temperatureC} °C • ${exp.grindSetting} clics", fontSize = 11.sp, color = TextSecundario)
+                    if (exp.syncStatus != "SYNCED") {
+                        LocalSyncStatusLabel(exp.syncStatus)
+                    }
                 }
                 IconButton(onClick = onDelete) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar", tint = Advertencia.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))

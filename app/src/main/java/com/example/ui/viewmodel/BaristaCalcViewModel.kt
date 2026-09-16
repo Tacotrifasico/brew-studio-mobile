@@ -205,6 +205,8 @@ data class BaristaCalcState(
     val activePrepClicks: Int = 24,
     val activePrepBean: String = "Finca El Paraíso",
     val activePrepTechniqueName: String = "Estándar V60",
+    val activePrepTechniqueId: String? = null,
+    val activePrepMethodId: String? = "11111111-1111-4000-8000-000000000001",
     
     // Live execution state
     val timerRunning: Boolean = false,
@@ -680,6 +682,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             activePrepTemp = if (keepSelectedTechnique) currentVal.activePrepTemp else 93,
             activePrepTechniqueName = if (keepSelectedTechnique) currentVal.activePrepTechniqueName
                 else BrewTechniqueCatalog.firstTechniqueFor(currentVal.method)?.name ?: "${currentVal.method} Estándar",
+            activePrepTechniqueId = if (keepSelectedTechnique) currentVal.activePrepTechniqueId else null,
+            activePrepMethodId = if (keepSelectedTechnique) currentVal.activePrepMethodId else methodIdForName(currentVal.method),
             activePrepSteps = if (keepSelectedTechnique) currentVal.activePrepSteps
                 else generateQuickSteps(currentVal.method, currentVal.water)
         ) }
@@ -782,6 +786,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     activePrepRatio = updated.ratio,
                     activePrepTemp = if (selectedStillMatches) current.activePrepTemp else 93,
                     activePrepTechniqueName = techniqueName,
+                    activePrepTechniqueId = if (selectedStillMatches) current.activePrepTechniqueId else null,
+                    activePrepMethodId = if (selectedStillMatches) current.activePrepMethodId else methodIdForName(updated.method),
                     activePrepSteps = scaledSteps
                 )
             }
@@ -802,8 +808,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     ?: BrewTechniqueCatalog.methodName(tech.methodId)
                 _state.update { it.copy(
                     activePrepMethod = methodName,
+                    activePrepMethodId = tech.methodId,
                     activePrepTemp = tech.temperatureC,
                     activePrepTechniqueName = tech.name,
+                    activePrepTechniqueId = tech.id,
                     activePrepGrinder = tech.grindDescription ?: "Manual",
                     activePrepClicks = (tech.grindValue ?: 18.0).toInt(),
                     activePrepSteps = finalSteps
@@ -1099,6 +1107,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 val methodName = _state.value.activePrepMethod.ifBlank { "Método manual" }
                 val cup = Cup(
                     id = cupId,
+                    techniqueId = _state.value.activePrepTechniqueId,
+                    methodId = _state.value.activePrepMethodId,
                     executedDoseG = _state.value.activePrepCoffee,
                     executedWaterMl = _state.value.activePrepWater,
                     executedRatio = _state.value.activePrepRatio,
@@ -1112,7 +1122,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     beanNameSnapshot = _state.value.activePrepBean.ifBlank { "Grano de la Casa" },
                     recipeNameSnapshot = "Preparación $methodName",
                     techniqueNameSnapshot = _state.value.activePrepTechniqueName,
-                    ownerUserId = activeOwnerId.value
+                    methodNameSnapshot = methodName,
+                    ownerUserId = activeOwnerId.value,
+                    syncStatus = "PENDING_CREATE"
                 )
                 val cata = Cata(
                     id = UUID.randomUUID().toString(),
@@ -1127,7 +1139,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     totalScaScore = score.toDouble() * 20.0,
                     evaluatorNotes = comment,
                     evaluatedAt = currentIso8601(),
-                    ownerUserId = activeOwnerId.value
+                    ownerUserId = activeOwnerId.value,
+                    syncStatus = "PENDING_CREATE"
                 )
                 repository.insertCupWithCata(cup, cata)
                 showToast("Taza catada con éxito y registrada en el Almacén.")
@@ -1305,6 +1318,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             activePrepRatio = it.labRatio,
             activePrepTemp = it.labTemp,
             activePrepTechniqueName = "Idea de Laboratorio",
+            activePrepTechniqueId = null,
+            activePrepMethodId = methodIdForName(it.labMethod),
             activePrepGrinder = "Manual",
             activePrepClicks = it.labClicks,
             activePrepSteps = generateQuickSteps(it.labMethod, it.labWater)
@@ -1326,7 +1341,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 experimentHypothesis = s.labPreviewExtraction,
                 experimentNotes = "Intensidad: ${s.labPreviewIntensity}. Notas: ${s.labNotes}",
                 conclusionNotes = "",
-                ownerUserId = activeOwnerId.value
+                ownerUserId = activeOwnerId.value,
+                syncStatus = "PENDING_CREATE"
             )
             repository.insertExperiment(exp)
             showToast("Experimento guardado en el archivo del Laboratorio.")
@@ -1412,9 +1428,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         stockGrams: Float
     ) {
         viewModelScope.launch {
-            val actualId = id ?: UUID.randomUUID().toString()
-            val bean = Bean(
-                id = actualId,
+            val existing = _state.value.beansList.firstOrNull { it.id == id }
+            val bean = existing?.copy(
                 roaster = roaster,
                 name = name,
                 origin = origin,
@@ -1425,8 +1440,22 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 notes = notes,
                 status = status,
                 stockGrams = stockGrams,
-                ownerUserId = _state.value.beansList.firstOrNull { it.id == id }?.ownerUserId
-                    ?: activeOwnerId.value
+                updatedAt = currentIso8601(),
+                syncStatus = pendingWriteStatus(existing.remoteId)
+            ) ?: Bean(
+                id = id ?: UUID.randomUUID().toString(),
+                roaster = roaster,
+                name = name,
+                origin = origin,
+                altitude = altitude,
+                process = process,
+                roastDate = roastDate,
+                firstUseDate = firstUseDate,
+                notes = notes,
+                status = status,
+                stockGrams = stockGrams,
+                ownerUserId = activeOwnerId.value,
+                syncStatus = "PENDING_CREATE"
             )
             repository.insertBean(bean)
             if (id == null) {
@@ -1470,7 +1499,12 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     fun markBeanAsOpened(bean: Bean) {
         viewModelScope.launch {
             val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-            val updated = bean.copy(firstUseDate = todayStr, status = "abierto")
+            val updated = bean.copy(
+                firstUseDate = todayStr,
+                status = "abierto",
+                updatedAt = currentIso8601(),
+                syncStatus = pendingWriteStatus(bean.remoteId)
+            )
             repository.insertBean(updated)
             showToast("Café '${bean.name}' abierto hoy.")
         }
@@ -1478,7 +1512,12 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun markBeanAsFinished(bean: Bean) {
         viewModelScope.launch {
-            val updated = bean.copy(status = "terminado", stockGrams = 0f)
+            val updated = bean.copy(
+                status = "terminado",
+                stockGrams = 0f,
+                updatedAt = currentIso8601(),
+                syncStatus = pendingWriteStatus(bean.remoteId)
+            )
             repository.insertBean(updated)
             showToast("Café '${bean.name}' marcado como terminado.")
         }
@@ -1568,7 +1607,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 name = name,
                 type = normalizedType,
                 notes = notes,
-                ownerUserId = activeOwnerId.value
+                ownerUserId = activeOwnerId.value,
+                syncStatus = "PENDING_CREATE"
             )
             repository.insertInstrument(inst)
             if (isMethodType) {
@@ -1594,7 +1634,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 name = cleanName,
                 type = "BREWER_METHOD",
                 notes = "Método personalizado",
-                ownerUserId = activeOwnerId.value
+                ownerUserId = activeOwnerId.value,
+                syncStatus = "PENDING_CREATE"
             )
             repository.insertInstrument(inst)
             val method = repository.getOrCreateBrewMethodForInstrument(cleanName).let {
@@ -1674,7 +1715,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 brand = brand,
                 model = model,
                 notes = calibracion,
-                ownerUserId = activeOwnerId.value
+                ownerUserId = activeOwnerId.value,
+                syncStatus = "PENDING_CREATE"
             )
             repository.insertInstrument(inst)
             showToast("Molino '$model' guardado.")
@@ -1782,7 +1824,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 experimentHypothesis = "Prueba de extracción",
                 experimentNotes = notes,
                 conclusionNotes = "",
-                ownerUserId = activeOwnerId.value
+                ownerUserId = activeOwnerId.value,
+                syncStatus = "PENDING_CREATE"
             )
             repository.insertExperiment(exp)
             showToast("Experimento archivado en el Almacén.")
@@ -1845,4 +1888,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     fun showToast(msg: String) {
         _state.update { it.copy(snackbarMessage = msg) }
     }
+
+    private fun pendingWriteStatus(remoteId: String?): String =
+        if (remoteId == null) "PENDING_CREATE" else "PENDING_UPDATE"
 }

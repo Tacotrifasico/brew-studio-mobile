@@ -3,6 +3,7 @@ package com.example
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -57,5 +58,40 @@ class ExampleRobolectricTest {
     assertEquals(favorite, restored.selectedPreset(listOf(favorite)))
     restored.clearIfSelected(favorite.id)
     assertEquals(null, com.example.ui.viewmodel.CalculatorFavoriteStore(preferences).selectedId())
+  }
+
+  @Test
+  fun `calculator lab preparation and tasting preserve the method identity`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+
+    viewModel.onMethodSelected("AeroPress")
+    viewModel.onCoffeeChanged("18")
+    viewModel.onActionLab()
+    assertEquals("AeroPress", viewModel.state.value.labMethod)
+    assertEquals(18f, viewModel.state.value.labCoffee, 0.001f)
+
+    viewModel.updateLabVariables(
+      water = 234,
+      ratio = 13f,
+      temperature = 91,
+      clicks = 17,
+      notes = "Prueba integral"
+    )
+    viewModel.playLabIdeaAsPrep()
+    val preparation = viewModel.state.value
+    assertEquals("AeroPress", preparation.activePrepMethod)
+    assertEquals("11111111-1111-4000-8000-000000000002", preparation.activePrepMethodId)
+    assertEquals(null, preparation.activePrepTechniqueId)
+    assertEquals(234, preparation.activePrepWater)
+    assertEquals(234, preparation.activePrepSteps.last().waterAccumulatedMl)
+
+    viewModel.setCataTexture("sedosa")
+    viewModel.setCataCleanliness("alta")
+    viewModel.pullCataToLab()
+    assertEquals("AeroPress", viewModel.state.value.labMethod)
+    assertEquals(234, viewModel.state.value.labWater)
+    assertTrue(viewModel.state.value.labNotes.contains("Textura: sedosa"))
+    assertTrue(viewModel.state.value.labNotes.contains("Limpieza: alta"))
   }
 }

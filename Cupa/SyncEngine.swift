@@ -57,11 +57,15 @@ struct SyncOutboxRepository {
         else { request.predicate = NSPredicate(format: "tableName == %@ AND entityId == %@ AND ownerId == nil AND deletedAt == nil", entityName, entityId as CVarArg) }
         let existing = try context.fetch(request).first
         let item = existing ?? SyncOperationRecord(context: context)
+        let payloadChanged = existing == nil || item.operation != operation.rawValue || item.payloadJSON != payloadJSON
         if existing == nil {
             item.id = UUID(); item.ownerId = ownerId; item.tableName = entityName; item.entityId = entityId
             item.createdAt = .now; item.version = 1; item.attemptCount = 0; item.syncStatusRaw = SyncStatus.pendingCreate.rawValue; item.deletedAt = nil
         } else { item.markUpdated() }
-        item.operation = operation.rawValue; item.payloadJSON = payloadJSON; item.nextAttemptAt = .now; item.lastError = ""; item.updatedAt = .now
+        item.operation = operation.rawValue; item.payloadJSON = payloadJSON; item.updatedAt = .now
+        if payloadChanged {
+            item.attemptCount = 0; item.nextAttemptAt = .now; item.lastError = ""
+        }
         try context.save(); return item
     }
 
@@ -79,6 +83,19 @@ struct SyncOutboxRepository {
         let seconds = min(3600.0, pow(2.0, Double(item.attemptCount)) * 5.0)
         item.nextAttemptAt = now.addingTimeInterval(seconds); item.updatedAt = now; item.syncStatusRaw = SyncStatus.error.rawValue
         try context.save()
+    }
+
+    func retryNow(ownerId: UUID, now: Date = .now) throws {
+        let request = NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")
+        request.predicate = NSPredicate(format: "ownerId == %@ AND deletedAt == nil", ownerId as CVarArg)
+        for item in try context.fetch(request) { item.nextAttemptAt = now; item.updatedAt = now }
+        if context.hasChanges { try context.save() }
+    }
+
+    func pendingCount(ownerId: UUID) throws -> Int {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "SyncOperationRecord")
+        request.predicate = NSPredicate(format: "ownerId == %@ AND deletedAt == nil", ownerId as CVarArg)
+        return try context.count(for: request)
     }
 }
 

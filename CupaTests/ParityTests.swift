@@ -1132,7 +1132,14 @@ final class AccountAndSyncTests: XCTestCase {
         XCTAssertEqual(first.id, same.id); XCTAssertEqual(try repository.ready().count, 1)
         let now = Date(); try repository.markFailed(same, message: "offline", now: now)
         XCTAssertTrue(same.nextAttemptAt > now); XCTAssertTrue(try repository.ready(now: now).isEmpty)
+        XCTAssertEqual(try repository.pendingCount(ownerId: owner), 1)
+        let delayedAttempt = same.nextAttemptAt
+        _ = try repository.enqueue(entityName: "recipes", entityId: entityId, ownerId: owner, operation: .pendingUpdate, payloadJSON: "{\"name\":\"V60 editada\"}")
+        XCTAssertEqual(same.nextAttemptAt, delayedAttempt, "Una sincronización automática debe respetar el backoff")
+        try repository.retryNow(ownerId: owner, now: now)
+        XCTAssertEqual(try repository.ready(ownerId: owner, now: now).map(\.id), [same.id])
         try repository.markSucceeded(same); XCTAssertTrue(try repository.ready(now: .distantFuture).isEmpty)
+        XCTAssertEqual(try repository.pendingCount(ownerId: owner), 0)
     }
 
     func testGeminiUsesAuthenticatedEdgeFunctionAndFallsBackLocally() async throws {

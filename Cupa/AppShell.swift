@@ -99,9 +99,23 @@ struct AppShell: View {
                     statusBanner(storageWarning, icon: "externaldrive.badge.exclamationmark", color: CupaTheme.terracotta, foreground: CupaTheme.onTerracotta)
                         .accessibilityIdentifier("storage.recoveryWarning")
                 }
-                if let notice = account.sessionNotice ?? syncNotice {
-                    statusBanner(notice, icon: connectivity.isConnected ? "arrow.triangle.2.circlepath" : "wifi.slash", color: CupaTheme.espresso)
+                if let notice = account.sessionNotice {
+                    statusBanner(notice, icon: connectivity.isConnected ? "person.crop.circle.badge.exclamationmark" : "wifi.slash", color: CupaTheme.espresso)
                         .accessibilityIdentifier("sync.statusNotice")
+                } else if let syncNotice {
+                    Button {
+                        Task { await refreshAndSync(forceRetry: true) }
+                    } label: {
+                        statusBanner(
+                            syncNotice + (canRetrySync ? " Toca para reintentar." : ""),
+                            icon: connectivity.isConnected ? "arrow.triangle.2.circlepath" : "wifi.slash",
+                            color: CupaTheme.espresso
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canRetrySync)
+                    .accessibilityIdentifier("sync.statusNotice")
+                    .accessibilityHint(canRetrySync ? "Reintenta ahora la sincronización de los cambios locales" : "Los cambios siguen guardados en este dispositivo")
                 }
             }
         }
@@ -143,7 +157,11 @@ struct AppShell: View {
             .background(color)
     }
 
-    private func refreshAndSync() async {
+    private var canRetrySync: Bool {
+        connectivity.isConnected && account.configuration.isSupabaseConfigured && account.tokens != nil && !syncInProgress
+    }
+
+    private func refreshAndSync(forceRetry: Bool = false) async {
         guard connectivity.isConnected, !syncInProgress else {
             if !connectivity.isConnected { syncNotice = "Sin conexión. Los cambios quedan guardados en este dispositivo." }
             return
@@ -151,14 +169,16 @@ struct AppShell: View {
         syncInProgress = true
         defer { syncInProgress = false }
         guard let tokens = await account.validTokens() else { return }
+        syncNotice = "Sincronizando cambios guardados…"
         let coordinator = EntitySyncCoordinator(context: context, configuration: account.configuration)
-        await coordinator.sync(ownerId: tokens.userId, accessToken: tokens.accessToken)
+        await coordinator.sync(ownerId: tokens.userId, accessToken: tokens.accessToken, forceRetry: forceRetry)
         if coordinator.authenticationRejected, let refreshed = await account.validTokens(forceRefresh: true) {
-            await coordinator.sync(ownerId: refreshed.userId, accessToken: refreshed.accessToken)
+            await coordinator.sync(ownerId: refreshed.userId, accessToken: refreshed.accessToken, forceRetry: forceRetry)
         }
         switch coordinator.state {
         case .completed: syncNotice = nil
         case .offline: syncNotice = "Sin conexión. Los cambios se sincronizarán automáticamente al volver internet."
+        case let .waitingRetry(count): syncNotice = "\(count) \(count == 1 ? "cambio local sigue pendiente" : "cambios locales siguen pendientes") de sincronizar."
         case let .failed(message): syncNotice = "Sincronización pendiente: \(message)"
         default: break
         }

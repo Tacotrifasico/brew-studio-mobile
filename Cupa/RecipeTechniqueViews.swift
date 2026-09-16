@@ -39,7 +39,7 @@ struct RecipeInventoryView: View {
                             HStack {
                                 Image(systemName: recipe.isFavorite ? "star.fill" : "book.pages").foregroundStyle(recipe.isFavorite ? CupaTheme.goldText : CupaTheme.forestText)
                                 Text(recipe.name).font(.headline)
-                                Spacer(); if recipe.syncStatus != .synced { syncIndicator }
+                                Spacer(); if recipe.syncStatus != .synced { syncStatusBadge(recipe.syncStatus) }
                             }
                             Text(recipeKindLabel(recipe.recipeKind) + (recipe.suggestedMethodName.isEmpty ? "" : " · \(recipe.suggestedMethodName)"))
                                 .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
@@ -211,7 +211,7 @@ struct TechniqueInventoryView: View {
                 ForEach(visible) { technique in
                     Button { selectedTechnique = technique } label: {
                         VStack(alignment: .leading, spacing: 6) {
-                            HStack { Text(technique.name).font(.headline); Spacer(); if technique.syncStatus != .synced { syncIndicator } }
+                            HStack { Text(technique.name).font(.headline); Spacer(); if technique.syncStatus != .synced { syncStatusBadge(technique.syncStatus) } }
                             Text("\(technique.methodName) · 1:\(technique.ratio.formatted(.number.precision(.fractionLength(0...1)))) · \(formatDuration(Int(technique.totalTimeSeconds)))")
                                 .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
                             Text("\(technique.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(technique.waterMl) ml · \(technique.temperatureC)°C · \(executionModeLabel(technique.executionMode))")
@@ -593,4 +593,19 @@ private func recipeKindLabel(_ code: String) -> String { recipeKinds.first { $0.
 private func unitLabel(_ code: String) -> String { ["GRAMS": "g", "MILLILITERS": "ml", "UNITS": "u", "TEASPOONS": "cdta", "TABLESPOONS": "cda", "OUNCES": "oz", "OTHER": "otra"][code] ?? code }
 private func executionModeLabel(_ code: String) -> String { executionModes.first { $0.0 == code }?.1 ?? code }
 private func formatDuration(_ seconds: Int) -> String { String(format: "%d:%02d", seconds / 60, seconds % 60) }
-private var syncIndicator: some View { Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(CupaTheme.goldText).accessibilityLabel("Pendiente de sincronización") }
+private func syncStatusBadge(_ status: SyncStatus) -> some View {
+    let label: String = switch status {
+    case .synced: "Sincronizada"
+    case .pendingCreate: "Guardada local"
+    case .pendingUpdate: "Cambios pendientes"
+    case .pendingDelete: "Eliminación pendiente"
+    case .conflict: "Conflicto"
+    case .error: "Reintento pendiente"
+    }
+    return Label(label, systemImage: status == .error || status == .conflict ? "exclamationmark.arrow.triangle.2.circlepath" : "icloud.and.arrow.up")
+        .font(.caption2.bold())
+        .foregroundStyle(status == .error || status == .conflict ? CupaTheme.terracotta : CupaTheme.goldText)
+        .padding(.horizontal, 7).padding(.vertical, 4)
+        .background(CupaTheme.backgroundAlt, in: Capsule())
+        .accessibilityLabel(label)
+}

@@ -450,6 +450,7 @@ struct HubView: View {
             switch coordinator.state {
             case .completed: message = "Datos sincronizados."
             case .offline: message = "Sin backend: los cambios siguen guardados offline."
+            case let .waitingRetry(count): message = "\(count) \(count == 1 ? "cambio local sigue pendiente" : "cambios locales siguen pendientes") de sincronizar."
             case let .failed(error): message = error
             default: break
             }

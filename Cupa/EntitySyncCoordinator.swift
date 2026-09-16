@@ -35,7 +35,7 @@ enum CoreSyncSchema {
 
 @MainActor
 final class EntitySyncCoordinator: ObservableObject {
-    enum State: Equatable { case idle, syncing, offline, completed(Date), failed(String) }
+    enum State: Equatable { case idle, syncing, offline, waitingRetry(Int), completed(Date), failed(String) }
     @Published private(set) var state: State = .idle
     @Published private(set) var authenticationRejected = false
     private let context: NSManagedObjectContext; private let configuration: AppConfiguration; private let transport: NetworkTransport
@@ -45,15 +45,18 @@ final class EntitySyncCoordinator: ObservableObject {
         self.context = context; self.configuration = configuration; self.transport = transport; self.defaults = defaults; self.now = now
     }
 
-    func sync(ownerId: UUID, accessToken: String) async {
+    func sync(ownerId: UUID, accessToken: String, forceRetry: Bool = false) async {
         guard configuration.isSupabaseConfigured else { state = .offline; return }; state = .syncing; authenticationRejected = false
         let startedAt = now()
         do {
             try repairLegacyOutbox(ownerId: ownerId)
             try enqueuePending(ownerId: ownerId)
+            if forceRetry { try SyncOutboxRepository(context: context).retryNow(ownerId: ownerId) }
             try await push(ownerId: ownerId, accessToken: accessToken)
             let safeCheckpoint = try await pull(ownerId: ownerId, accessToken: accessToken, fallbackCheckpoint: startedAt.addingTimeInterval(-fallbackOverlap))
-            defaults.set(safeCheckpoint, forKey: checkpointKey(ownerId)); state = .completed(now())
+            defaults.set(safeCheckpoint, forKey: checkpointKey(ownerId))
+            let pending = try SyncOutboxRepository(context: context).pendingCount(ownerId: ownerId)
+            state = pending == 0 ? .completed(now()) : .waitingRetry(pending)
         } catch {
             authenticationRejected = RemoteFailureClassifier.isUnauthorized(error)
             state = RemoteFailureClassifier.isOffline(error) ? .offline : .failed(error.localizedDescription)

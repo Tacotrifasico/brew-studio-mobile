@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -1014,7 +1017,7 @@ fun StorageSummaryCards(beansList: List<Bean>) {
             title = "Bajando",
             count = decliningCount,
             tint = Color(0xFFB76545),
-            icon = Icons.Default.TrendingDown
+            icon = Icons.AutoMirrored.Filled.TrendingDown
         )
         MiniSummaryCard(
             title = "Lotes Viejos",
@@ -1440,7 +1443,7 @@ fun BeanDetailSheet(
                 )
             }
             
-            Divider(color = BordeSuave.copy(alpha = 0.4f))
+            HorizontalDivider(color = BordeSuave.copy(alpha = 0.4f))
             
             // Freshness Highlights
             Row(
@@ -2005,7 +2008,7 @@ fun RecipeItemCard(
         "COLD_DRINK" -> Triple("Bebida Fría", Color(0xFF0D9488), Icons.Default.AcUnit)
         "SIGNATURE" -> Triple("Bebida de Autor", Color(0xFFC86D51), Icons.Default.AutoAwesome)
         "DESSERT" -> Triple("Postre", Color(0xFFE11D48), Icons.Default.Cake)
-        else -> Triple("Fórmula", Color(0xFF4B6584), Icons.Default.ReceiptLong)
+        else -> Triple("Fórmula", Color(0xFF4B6584), Icons.AutoMirrored.Filled.ReceiptLong)
     }
 
     val suggestedMethod = recipe.suggestedMethodId ?: recipe.legacyMethodName ?: ""
@@ -2143,7 +2146,7 @@ fun RecipeItemCard(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = AcentoPrincipal, modifier = Modifier.size(12.dp))
+                        Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, tint = AcentoPrincipal, modifier = Modifier.size(12.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("${parsedIngredients.size} ingr", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
                     }
@@ -2216,7 +2219,7 @@ fun SavedRecipeDetailDialog(
         "COLD_DRINK" -> Triple("Bebida Fría", Color(0xFF0D9488), Icons.Default.AcUnit)
         "SIGNATURE" -> Triple("Bebida de Autor", Color(0xFFC86D51), Icons.Default.AutoAwesome)
         "DESSERT" -> Triple("Postre", Color(0xFFE11D48), Icons.Default.Cake)
-        else -> Triple("Fórmula", Color(0xFF4B6584), Icons.Default.ReceiptLong)
+        else -> Triple("Fórmula", Color(0xFF4B6584), Icons.AutoMirrored.Filled.ReceiptLong)
     }
 
     val suggestedMethod = recipe.suggestedMethodId ?: recipe.legacyMethodName ?: ""
@@ -2341,7 +2344,7 @@ fun SavedRecipeDetailDialog(
             // Ingredients Section
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = AcentoPrincipal, modifier = Modifier.size(16.dp))
+                    Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, tint = AcentoPrincipal, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Ingredientes", fontSize = 14.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, color = TextPrincipal)
                 }
@@ -2768,7 +2771,7 @@ fun AddingFormSelector(
 
                     FormSubCard(
                         title = "Datos Principales",
-                        titleIcon = Icons.Default.ReceiptLong
+                        titleIcon = Icons.AutoMirrored.Filled.ReceiptLong
                     ) {
                         StyledOutlinedTextField(
                             value = name,
@@ -2799,7 +2802,7 @@ fun AddingFormSelector(
 
                     FormSubCard(
                         title = "Ingredientes de la Receta",
-                        titleIcon = Icons.Default.FormatListBulleted
+                        titleIcon = Icons.AutoMirrored.Filled.FormatListBulleted
                     ) {
                         ingredientsList.forEachIndexed { index, ing ->
                             var showSuggestions by remember { mutableStateOf(false) }

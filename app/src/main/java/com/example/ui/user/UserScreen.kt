@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -182,7 +184,7 @@ fun UserProfileCard(state: SocialUiState, onLogout: () -> Unit) {
             }
 
             IconButton(onClick = onLogout) {
-                Icon(Icons.Default.ExitToApp, contentDescription = "Cerrar Sesión", tint = Advertencia)
+                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Cerrar Sesión", tint = Advertencia)
             }
         }
     }
@@ -552,7 +554,7 @@ fun AboutTeamCard() {
                         }
 
                         Icon(
-                            imageVector = Icons.Default.OpenInNew,
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                             contentDescription = "Abrir enlace",
                             tint = TextSecundario,
                             modifier = Modifier.size(18.dp)

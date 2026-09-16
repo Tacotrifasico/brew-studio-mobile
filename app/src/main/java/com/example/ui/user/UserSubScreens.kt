@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -320,7 +321,7 @@ fun ShareCard(
             share.originalAuthorName?.let { original ->
                 if (original != share.fromName) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Divider(color = BordeSuave)
+                    HorizontalDivider(color = BordeSuave)
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.History, contentDescription = "Credit", modifier = Modifier.size(14.dp), tint = CafeCalidoClaro)
@@ -335,7 +336,7 @@ fun ShareCard(
                 }
             }
 
-            Divider(modifier = Modifier.padding(vertical = 12.dp), color = BordeSuave)
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = BordeSuave)
 
             // Footer Actions
             Row(
@@ -385,7 +386,7 @@ fun ShareCard(
                     colors = ButtonDefaults.textButtonColors(contentColor = CafeCalidoOscuro)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CallSplit, contentDescription = "Fork", modifier = Modifier.size(16.dp))
+                        Icon(Icons.AutoMirrored.Filled.CallSplit, contentDescription = "Fork", modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Hacer Fork", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }

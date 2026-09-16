@@ -125,7 +125,7 @@ fun BrewScreen(
         AnimatedContent(
             targetState = state.timerRunning,
             transitionSpec = {
-                fadeIn() + slideInVertically() with fadeOut() + slideOutVertically()
+                fadeIn() + slideInVertically() togetherWith fadeOut() + slideOutVertically()
             },
             label = "timerState"
         ) { timerRunning ->

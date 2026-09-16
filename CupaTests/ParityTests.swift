@@ -532,6 +532,51 @@ final class RecipeTechniqueRepositoryTests: XCTestCase {
         XCTAssertEqual(technique.syncStatus, .pendingDelete)
         XCTAssertTrue(try repository.techniqueSteps(techniqueId: technique.id).isEmpty)
     }
+
+    @MainActor func testLabTechniqueStoragePreparationAndTastingKeepIdentity() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let repository = RecipeTechniqueRepository(context: context)
+        let methodId = UUID(); let beanId = UUID(); let grinderId = UUID()
+        let lab = LabState(
+            methodId: methodId,
+            beanId: beanId,
+            grinderId: grinderId,
+            method: "V60",
+            coffeeGrams: 18,
+            waterMl: 288,
+            ratio: 16,
+            temperatureC: 93,
+            grindClicks: 22,
+            timeSeconds: 195,
+            notes: "Más dulzor"
+        )
+
+        let technique = try repository.saveTechnique(.fromLab(lab))
+        let storedSteps = try repository.techniqueSteps(techniqueId: technique.id)
+        XCTAssertEqual(technique.syncStatus, .pendingCreate)
+        XCTAssertEqual(technique.methodId, methodId)
+        XCTAssertEqual(technique.beanId, beanId)
+        XCTAssertEqual(technique.grinderId, grinderId)
+        XCTAssertEqual(storedSteps.map(\.waterAccumulatedMl), [288])
+
+        let suite = "LabTechniqueFlowTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preparation = PreparationModel(defaults: defaults)
+        preparation.load(technique: technique, steps: storedSteps)
+        preparation.start(); preparation.complete()
+        let brew = BrewSessionRecord(context: context, state: preparation.state, beanName: "Etiopía", grinderName: "C40")
+        let tasting = TastingModel(defaults: defaults)
+        tasting.linkToPreparation(brew.id)
+        _ = try TastingRepository(context: context).save(tasting.state, brew: brew)
+
+        let cups = try context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"))
+        XCTAssertEqual(cups.first?.techniqueId, technique.id)
+        XCTAssertEqual(cups.first?.methodId, methodId)
+        XCTAssertEqual(cups.first?.executedDoseGrams, 18)
+        XCTAssertEqual(cups.first?.executedWaterMl, 288)
+    }
 }
 
 final class PreparationModelTests: XCTestCase {

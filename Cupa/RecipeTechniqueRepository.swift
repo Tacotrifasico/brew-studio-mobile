@@ -140,6 +140,41 @@ struct TechniqueDraftModel: Equatable, Codable {
     var notes = ""; var techniqueDescription = ""; var steps: [TechniqueStepDraft] = []
 }
 
+extension TechniqueDraftModel {
+    static func fromLab(_ state: LabState) -> TechniqueDraftModel {
+        let baseName = state.techniqueName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = baseName.flatMap { $0.isEmpty ? nil : "\($0) · ajuste de laboratorio" } ?? "Hipótesis \(state.method)"
+        return TechniqueDraftModel(
+            name: name,
+            methodId: state.methodId,
+            methodName: state.method,
+            recipeId: state.recipeId,
+            beanId: state.beanId,
+            grinderId: state.grinderId,
+            doseGrams: Double(state.coffeeGrams),
+            waterMl: state.waterMl,
+            ratio: Double(state.ratio),
+            temperatureC: state.temperatureC,
+            executionMode: "MANUAL",
+            grindValue: Double(state.grindClicks),
+            grindDescription: "\(state.grindClicks) clicks",
+            grindUnit: "CLICKS",
+            notes: state.notes,
+            techniqueDescription: "Guardada desde el Laboratorio",
+            steps: [
+                TechniqueStepDraft(
+                    title: "Preparar hipótesis",
+                    durationSeconds: state.timeSeconds,
+                    waterAddedMl: state.waterMl,
+                    intensity: "MEDIUM",
+                    gesture: "MANUAL",
+                    note: state.notes
+                )
+            ]
+        )
+    }
+}
+
 enum TechniqueDraftValidationError: LocalizedError, Equatable {
     case emptyName, invalidCoffee, invalidWater, invalidTemperature, missingStepTitle, invalidStepDuration, invalidStepWater, waterMismatch, invalidRatio
 

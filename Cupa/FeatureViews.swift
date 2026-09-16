@@ -629,7 +629,7 @@ struct LabView: View {
     @State private var customAltitude = ""
     @State private var confirmingLabReset = false
     @State private var deletingExperiment: LabExperimentRecord?
-    @State private var saveConfirmation = false
+    @State private var saveConfirmationMessage: String?
     @State private var suggestion: BrewSuggestion?
     @State private var suggestionLoading = false
     @State private var showGeminiConsent = false
@@ -684,10 +684,10 @@ struct LabView: View {
             }
         }
         .sheet(isPresented: $showCustomCity) { customCitySheet }
-        .alert("Experimento guardado", isPresented: $saveConfirmation) {
+        .alert("Guardado", isPresented: Binding(get: { saveConfirmationMessage != nil }, set: { if !$0 { saveConfirmationMessage = nil } })) {
             Button("Aceptar", role: .cancel) {}
         } message: {
-            Text("La hipótesis quedó disponible offline en este dispositivo.")
+            Text(saveConfirmationMessage ?? "")
         }
         .alert("Compartir datos con Gemini", isPresented: $showGeminiConsent) {
             Button("Usar sólo sugerencia local", role: .cancel) { requestSuggestion(allowRemote: false) }
@@ -984,7 +984,10 @@ struct LabView: View {
 
     private var actionBar: some View {
         HStack {
-            Button { saveExperiment() } label: { Label("Guardar", systemImage: "square.and.arrow.down") }
+            Menu {
+                Button { saveExperiment() } label: { Label("Guardar experimento", systemImage: "flask") }
+                Button { saveTechniqueFromLab() } label: { Label("Guardar como técnica", systemImage: "list.bullet.clipboard") }
+            } label: { Label("Guardar", systemImage: "square.and.arrow.down") }
                 .buttonStyle(.bordered)
             Button {
                 saveExperiment()
@@ -1022,8 +1025,19 @@ struct LabView: View {
 
     private func saveExperiment() {
         _ = LabExperimentRecord(context: modelContext, state: model.state, profile: model.profile)
-        do { try modelContext.save(); saveConfirmation = true }
+        do { try modelContext.save(); saveConfirmationMessage = "La hipótesis quedó disponible offline en este dispositivo." }
         catch { modelContext.rollback(); errorMessage = error.localizedDescription }
+    }
+
+    private func saveTechniqueFromLab() {
+        do {
+            let technique = try RecipeTechniqueRepository(context: modelContext).saveTechnique(.fromLab(model.state))
+            model.update { $0.techniqueId = technique.id; $0.techniqueName = technique.name }
+            saveConfirmationMessage = "La técnica quedó en Almacén → Técnicas y está lista para preparar."
+        } catch {
+            modelContext.rollback()
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func deleteExperiment(_ experiment: LabExperimentRecord) {

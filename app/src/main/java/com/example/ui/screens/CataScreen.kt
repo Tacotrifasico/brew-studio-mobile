@@ -7,8 +7,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,6 +26,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -152,7 +155,7 @@ fun CataScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -276,12 +279,14 @@ fun CataScreen(
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(MainBackgroundAlt.copy(alpha = 0.6f))
                                     .border(1.dp, BordeSuave, RoundedCornerShape(10.dp))
-                                    .clickable {
+                                    .clickable(role = Role.Button, onClickLabel = "Agregar nota $item") {
                                         val currentStr = notesFoundInput
                                         notesFoundInput = if (currentStr.isBlank()) item else "$currentStr, $item"
                                         viewModel.updateCataFoundNotes(notesFoundInput)
                                     }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Text(item, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = TextPrincipal)
                             }
@@ -323,7 +328,12 @@ fun CataScreen(
                                         .clip(RoundedCornerShape(10.dp))
                                         .background(if (isSelected) AcentoPrincipal else MainBackgroundAlt.copy(alpha = 0.6f))
                                         .border(1.dp, if (isSelected) AcentoPrincipal else BordeSuave, RoundedCornerShape(10.dp))
-                                        .clickable { viewModel.setCataTexture(text) }
+                                        .selectable(
+                                            selected = isSelected,
+                                            role = Role.RadioButton,
+                                            onClick = { viewModel.setCataTexture(text) }
+                                        )
+                                        .defaultMinSize(minHeight = 48.dp)
                                         .padding(vertical = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -353,7 +363,12 @@ fun CataScreen(
                                         .clip(RoundedCornerShape(10.dp))
                                         .background(if (isSelected) CafeCalidoClaro else MainBackgroundAlt.copy(alpha = 0.6f))
                                         .border(1.dp, if (isSelected) CafeCalidoClaro else BordeSuave, RoundedCornerShape(10.dp))
-                                        .clickable { viewModel.setCataCleanliness(item) }
+                                        .selectable(
+                                            selected = isSelected,
+                                            role = Role.RadioButton,
+                                            onClick = { viewModel.setCataCleanliness(item) }
+                                        )
+                                        .defaultMinSize(minHeight = 48.dp)
                                         .padding(vertical = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -383,7 +398,12 @@ fun CataScreen(
                                         .clip(RoundedCornerShape(10.dp))
                                         .background(if (isSelected) AcentoSecundario else MainBackgroundAlt.copy(alpha = 0.6f))
                                         .border(1.dp, if (isSelected) AcentoSecundario else BordeSuave, RoundedCornerShape(10.dp))
-                                        .clickable { viewModel.setCataPersistence(item) }
+                                        .selectable(
+                                            selected = isSelected,
+                                            role = Role.RadioButton,
+                                            onClick = { viewModel.setCataPersistence(item) }
+                                        )
+                                        .defaultMinSize(minHeight = 48.dp)
                                         .padding(vertical = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -424,15 +444,23 @@ fun CataScreen(
                         horizontalArrangement = Arrangement.Center
                     ) {
                         (1..5).forEach { star ->
-                            Icon(
-                                imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
-                                contentDescription = "Rating Star",
-                                tint = Advertencia,
+                            Box(
                                 modifier = Modifier
-                                    .size(34.dp)
-                                    .clickable { rating = star.toFloat(); viewModel.setCataRating(rating) }
-                                    .padding(horizontal = 2.dp)
-                            )
+                                    .size(48.dp)
+                                    .selectable(
+                                        selected = star.toFloat() == rating,
+                                        role = Role.RadioButton,
+                                        onClick = { rating = star.toFloat(); viewModel.setCataRating(rating) }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = "$star de 5 estrellas",
+                                    tint = Advertencia,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                            }
                         }
                     }
 

@@ -32,6 +32,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -942,6 +948,8 @@ fun LabCalibratedSlider(
     recommendedRange: ClosedFloatingPointRange<Float>?,
     step: Float = 1f,
     activeColor: Color,
+    accessibilityLabel: String,
+    accessibilityValue: String,
     modifier: Modifier = Modifier
 ) {
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -1014,6 +1022,17 @@ fun LabCalibratedSlider(
         modifier = modifier
             .fillMaxWidth()
             .height(48.dp)
+            .semantics {
+                contentDescription = accessibilityLabel
+                stateDescription = accessibilityValue
+                progressBarRangeInfo = ProgressBarRangeInfo(value, range)
+                setProgress { requested ->
+                    val stepped = if (step > 0f) Math.round(requested / step) * step else requested
+                    val normalized = stepped.coerceIn(range.start, range.endInclusive)
+                    if (normalized != value) onValueChange(normalized)
+                    true
+                }
+            }
             .pointerInput(range, recommendedRange, step) {
                 detectTapGestures { offset ->
                     val frac = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
@@ -1224,7 +1243,9 @@ fun LabVariableDock(
                             range = 8f..22f,
                             recommendedRange = 15f..17f,
                             step = 0.5f,
-                            activeColor = AcentoPrincipal
+                            activeColor = AcentoPrincipal,
+                            accessibilityLabel = "Proporción de café y agua",
+                            accessibilityValue = "Uno a ${String.format(java.util.Locale.US, "%.1f", state.labRatio)}"
                         )
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("1:8 (Intenso / Denso)", fontSize = 10.sp, color = TextSecundario)
@@ -1260,7 +1281,9 @@ fun LabVariableDock(
                             range = 60f..360f,
                             recommendedRange = 135f..210f, // 2:15 - 3:30 min
                             step = 5f,
-                            activeColor = AcentoPrincipal
+                            activeColor = AcentoPrincipal,
+                            accessibilityLabel = "Tiempo de extracción",
+                            accessibilityValue = formattedTime
                         )
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("1:00 min (Rápido)", fontSize = 10.sp, color = TextSecundario)
@@ -1376,7 +1399,9 @@ fun LabVariableDock(
                             range = 80f..98f,
                             recommendedRange = 90f..96f,
                             step = 1f,
-                            activeColor = CafeCalidoClaro
+                            activeColor = CafeCalidoClaro,
+                            accessibilityLabel = "Temperatura del agua",
+                            accessibilityValue = displayTemp
                         )
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1422,7 +1447,9 @@ fun LabVariableDock(
                             range = 6f..36f,
                             recommendedRange = 18f..26f,
                             step = 1f,
-                            activeColor = CafeCalidoClaro
+                            activeColor = CafeCalidoClaro,
+                            accessibilityLabel = "Ajuste de molienda",
+                            accessibilityValue = "${state.labClicks} clics"
                         )
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

@@ -714,7 +714,7 @@ private fun TechniqueStorageItemCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClickLabel = "Ver técnica ${technique.name}", onClick = onClick)
             .border(1.dp, BordeSuave, RoundedCornerShape(16.dp)),
         colors = CardDefaults.cardColors(containerColor = SurfaceCard),
         shape = RoundedCornerShape(16.dp)
@@ -1218,6 +1218,8 @@ fun BeanItemCard(
             .shadow(4.dp, RoundedCornerShape(24.dp), ambientColor = Color.Black.copy(alpha = 0.05f))
             .border(1.dp, BordeSuave, RoundedCornerShape(24.dp))
             .combinedClickable(
+                onClickLabel = "Ver detalles de ${bean.name}",
+                onLongClickLabel = "Editar ${bean.name}",
                 onClick = onDetailRequest,
                 onLongClick = onEditSelected
             ),
@@ -2011,7 +2013,7 @@ fun RecipeItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .border(1.dp, BordeSuave, RoundedCornerShape(20.dp))
-            .clickable(enabled = onClick != null) { onClick?.invoke() },
+            .clickable(enabled = onClick != null, onClickLabel = "Ver receta ${recipe.name}") { onClick?.invoke() },
         colors = CardDefaults.cardColors(containerColor = SurfaceCard),
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)

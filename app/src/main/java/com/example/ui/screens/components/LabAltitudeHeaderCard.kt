@@ -291,7 +291,9 @@ fun LabAltitudeHeaderCard(
                             range = 0f..4000f,
                             recommendedRange = 0f..2600f,
                             step = 25f,
-                            activeColor = CafeCalidoClaro
+                            activeColor = CafeCalidoClaro,
+                            accessibilityLabel = "Altitud de preparación",
+                            accessibilityValue = "$altitudeMeters metros sobre el nivel del mar"
                         )
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

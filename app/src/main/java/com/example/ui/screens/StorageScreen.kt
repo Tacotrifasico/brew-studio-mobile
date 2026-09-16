@@ -676,9 +676,11 @@ fun StorageScreen(
             technique = technique,
             initialSteps = selectedTechniqueSteps,
             onDismiss = { editingTechnique = null },
-            onSave = { updated, steps ->
-                viewModel.updateTechnique(updated, steps)
-                editingTechnique = null
+            onSave = { updated, steps, onCompleted ->
+                viewModel.updateTechnique(updated, steps) { success ->
+                    onCompleted(success)
+                    if (success) editingTechnique = null
+                }
             }
         )
     }
@@ -873,7 +875,7 @@ private fun TechniqueStorageEditorDialog(
     technique: Technique,
     initialSteps: List<TechniqueStep>,
     onDismiss: () -> Unit,
-    onSave: (Technique, List<TechniqueStep>) -> Unit
+    onSave: (Technique, List<TechniqueStep>, (Boolean) -> Unit) -> Unit
 ) {
     var isSaving by remember(technique.id) { mutableStateOf(false) }
     var name by remember(technique.id) { mutableStateOf(technique.name) }
@@ -962,7 +964,10 @@ private fun TechniqueStorageEditorDialog(
                                 intensity = draft.intensity, gesture = draft.gesture, stepNote = draft.note.trim(), remoteId = draft.remoteId
                             )
                         }
-                        onSave(technique.copy(name = name.trim(), doseG = coffeeValue ?: technique.doseG, waterMl = total, ratio = total / (coffeeValue ?: technique.doseG), temperatureC = temperatureValue ?: technique.temperatureC, notes = notes.trim(), totalTimeSeconds = steps.sumOf { it.durationSeconds }), steps)
+                        onSave(
+                            technique.copy(name = name.trim(), doseG = coffeeValue ?: technique.doseG, waterMl = total, ratio = total / (coffeeValue ?: technique.doseG), temperatureC = temperatureValue ?: technique.temperatureC, notes = notes.trim(), totalTimeSeconds = steps.sumOf { it.durationSeconds }),
+                            steps
+                        ) { success -> if (!success) isSaving = false }
                     }
                 ) { Text(if (isSaving) "Guardando…" else "Guardar cambios") }
             }

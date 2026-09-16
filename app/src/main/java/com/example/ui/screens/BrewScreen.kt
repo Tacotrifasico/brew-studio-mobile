@@ -1173,11 +1173,6 @@ fun CreateTechniqueFormView(
                         if (validationError == null && !isSaving) {
                             isSaving = true
                             val pCoffee = coffee.replace(',', '.').trim().toFloatOrNull() ?: 15.0f
-                            val w1 = stepWater1.replace(',', '.').trim().toIntOrNull() ?: 50
-                            val w2 = stepWater2.replace(',', '.').trim().toIntOrNull() ?: 90
-                            val w3 = stepWater3.replace(',', '.').trim().toIntOrNull() ?: 100
-                            val pWater = w1 + w2 + w3
-                            val pRatio = if (pCoffee > 0f) pWater / pCoffee else 16.0f
                             val pTemp = temp.replace(',', '.').trim().toIntOrNull() ?: 93
                             val pClicks = clicks.replace(',', '.').trim().toIntOrNull() ?: 24
                             
@@ -1189,8 +1184,6 @@ fun CreateTechniqueFormView(
                                 name = name,
                                 methodId = selectedMethodId,
                                 coffee = pCoffee,
-                                water = pWater,
-                                ratio = pRatio,
                                 temp = pTemp,
                                 grinderId = selectedGrinderId,
                                 grinderName = selectedGrinderName,
@@ -1198,9 +1191,12 @@ fun CreateTechniqueFormView(
                                 notes = notes,
                                 stepTitles = titles,
                                 stepTimes = times,
-                                stepWaters = waters
+                                stepWaters = waters,
+                                onCompleted = { success ->
+                                    isSaving = false
+                                    if (success) onDone()
+                                }
                             )
-                            onDone()
                         }
                     }
                 )

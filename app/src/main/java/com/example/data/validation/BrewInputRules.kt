@@ -10,6 +10,13 @@ object BrewInputRules {
     const val MIN_TEMPERATURE_C = 60
     const val MAX_TEMPERATURE_C = 100
 
+    data class NormalizedTechnique(
+        val waterMl: Int,
+        val ratio: Float,
+        val totalTimeSeconds: Int,
+        val accumulatedWaterMl: List<Int>
+    )
+
     fun validCoffee(value: Float) = value in MIN_COFFEE_GRAMS..MAX_COFFEE_GRAMS
     fun validRatio(value: Float) = value in MIN_RATIO..MAX_RATIO
     fun validWater(value: Int) = value in MIN_WATER_ML..MAX_WATER_ML
@@ -34,5 +41,30 @@ object BrewInputRules {
         val calculatedRatio = totalWater / coffee
         if (!validRatio(calculatedRatio)) return "La proporción resultante debe estar entre 1:1 y 1:40."
         return null
+    }
+
+    fun normalizeTechnique(
+        name: String,
+        coffee: Float?,
+        temperature: Int?,
+        stepTitles: List<String>,
+        stepDurations: List<Int?>,
+        stepWaters: List<Int?>
+    ): NormalizedTechnique? {
+        if (techniqueError(name, coffee, temperature, stepTitles, stepDurations, stepWaters) != null) return null
+        val validCoffee = coffee ?: return null
+        val validDurations = stepDurations.map { it ?: return null }
+        val validWaters = stepWaters.map { it ?: return null }
+        var accumulated = 0
+        val accumulatedWater = validWaters.map { added ->
+            accumulated += added
+            accumulated
+        }
+        return NormalizedTechnique(
+            waterMl = accumulated,
+            ratio = accumulated / validCoffee,
+            totalTimeSeconds = validDurations.sum(),
+            accumulatedWaterMl = accumulatedWater
+        )
     }
 }

@@ -152,6 +152,31 @@ interface TechniqueDao {
     @Delete
     suspend fun deleteTechnique(technique: Technique)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTechniqueSteps(steps: List<TechniqueStep>)
+
+    @Query("DELETE FROM technique_steps WHERE techniqueId = :techniqueId")
+    suspend fun deleteTechniqueSteps(techniqueId: String)
+
+    @Transaction
+    suspend fun insertTechniqueWithSteps(technique: Technique, steps: List<TechniqueStep>) {
+        insertTechnique(technique)
+        insertTechniqueSteps(steps.map { it.copy(techniqueId = technique.id) })
+    }
+
+    @Transaction
+    suspend fun replaceTechniqueWithSteps(technique: Technique, steps: List<TechniqueStep>) {
+        insertTechnique(technique)
+        deleteTechniqueSteps(technique.id)
+        insertTechniqueSteps(steps.map { it.copy(techniqueId = technique.id) })
+    }
+
+    @Transaction
+    suspend fun deleteTechniqueWithSteps(technique: Technique) {
+        deleteTechniqueSteps(technique.id)
+        deleteTechnique(technique)
+    }
+
     @Query("SELECT COUNT(*) FROM techniques")
     fun getTechniquesCount(): Flow<Int>
 }

@@ -124,18 +124,13 @@ class BrewRepository(
 
     // Techniques & Steps
     suspend fun insertTechnique(technique: Technique, steps: List<TechniqueStep>) {
-        techniqueDao.insertTechnique(technique)
-        val stepsWithId = steps.map { it.copy(techniqueId = technique.id) }
-        techniqueStepDao.insertSteps(stepsWithId)
+        techniqueDao.insertTechniqueWithSteps(technique, steps)
     }
     suspend fun replaceTechnique(technique: Technique, steps: List<TechniqueStep>) {
-        techniqueDao.insertTechnique(technique)
-        techniqueStepDao.deleteStepsForTechnique(technique.id)
-        techniqueStepDao.insertSteps(steps.map { it.copy(techniqueId = technique.id) })
+        techniqueDao.replaceTechniqueWithSteps(technique, steps)
     }
     suspend fun deleteTechnique(technique: Technique) {
-        techniqueDao.deleteTechnique(technique)
-        techniqueStepDao.deleteStepsForTechnique(technique.id)
+        techniqueDao.deleteTechniqueWithSteps(technique)
     }
     fun getStepsForTechnique(techId: String): Flow<List<TechniqueStep>> =
         techniqueStepDao.getStepsForTechnique(techId)

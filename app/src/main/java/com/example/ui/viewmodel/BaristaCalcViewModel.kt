@@ -942,24 +942,51 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun updateTechnique(technique: Technique, steps: List<TechniqueStep>) {
+    fun updateTechnique(technique: Technique, steps: List<TechniqueStep>, onCompleted: (Boolean) -> Unit = {}) {
         if (BrewTechniqueCatalog.isBuiltInTechnique(technique.id)) {
             showToast("Duplica una técnica incluida antes de editarla.")
+            onCompleted(false)
             return
         }
         viewModelScope.launch {
-            repository.replaceTechnique(
-                technique.copy(updatedAt = currentIso8601(), syncStatus = "PENDING_UPDATE"),
-                steps.mapIndexed { index, step ->
-                    step.copy(
-                        techniqueId = technique.id,
-                        stepNumber = index + 1,
-                        updatedAt = currentIso8601(),
-                        syncStatus = if (step.remoteId == null) "PENDING_CREATE" else "PENDING_UPDATE"
-                    )
-                }
+            val normalized = BrewInputRules.normalizeTechnique(
+                name = technique.name,
+                coffee = technique.doseG,
+                temperature = technique.temperatureC,
+                stepTitles = steps.map { it.title },
+                stepDurations = steps.map { it.durationSeconds },
+                stepWaters = steps.map { it.waterAddedMl }
             )
-            showToast("Técnica actualizada en el Almacén.")
+            if (normalized == null) {
+                showToast("No se guardó: revisa las cantidades y los pasos de la técnica.")
+                onCompleted(false)
+                return@launch
+            }
+            try {
+                repository.replaceTechnique(
+                    technique.copy(
+                        waterMl = normalized.waterMl,
+                        ratio = normalized.ratio,
+                        totalTimeSeconds = normalized.totalTimeSeconds,
+                        updatedAt = currentIso8601(),
+                        syncStatus = "PENDING_UPDATE"
+                    ),
+                    steps.mapIndexed { index, step ->
+                        step.copy(
+                            techniqueId = technique.id,
+                            stepNumber = index + 1,
+                            waterAccumulatedMl = normalized.accumulatedWaterMl[index],
+                            updatedAt = currentIso8601(),
+                            syncStatus = if (step.remoteId == null) "PENDING_CREATE" else "PENDING_UPDATE"
+                        )
+                    }
+                )
+                showToast("Técnica actualizada en el Almacén.")
+                onCompleted(true)
+            } catch (_: Exception) {
+                showToast("No se pudo actualizar. Tus cambios siguen en pantalla para reintentar.")
+                onCompleted(false)
+            }
         }
     }
 
@@ -967,8 +994,6 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         name: String,
         methodId: String,
         coffee: Float,
-        water: Int,
-        ratio: Float,
         temp: Int,
         grinderId: String?,
         grinderName: String,
@@ -976,10 +1001,23 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         notes: String,
         stepTitles: List<String>,
         stepTimes: List<Int>,
-        stepWaters: List<Int>
+        stepWaters: List<Int>,
+        onCompleted: (Boolean) -> Unit = {}
     ) {
         viewModelScope.launch {
-            val sumTime = stepTimes.sum()
+            val normalized = BrewInputRules.normalizeTechnique(
+                name = name,
+                coffee = coffee,
+                temperature = temp,
+                stepTitles = stepTitles,
+                stepDurations = stepTimes,
+                stepWaters = stepWaters
+            )
+            if (normalized == null) {
+                showToast("No se guardó: revisa las cantidades y los pasos de la técnica.")
+                onCompleted(false)
+                return@launch
+            }
             val techId = UUID.randomUUID().toString()
             val tech = Technique(
                 id = techId,
@@ -987,33 +1025,37 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 methodId = methodId.ifBlank { "11111111-1111-4000-8000-000000000001" },
                 grinderId = grinderId,
                 doseG = coffee,
-                waterMl = water,
-                ratio = ratio,
+                waterMl = normalized.waterMl,
+                ratio = normalized.ratio,
                 temperatureC = temp,
                 executionMode = "GUIDED",
                 grindValue = clicks.toDouble(),
                 grindDescription = grinderName.ifBlank { "$clicks Clicks" },
                 notes = notes,
-                totalTimeSeconds = sumTime,
+                totalTimeSeconds = normalized.totalTimeSeconds,
                 ownerUserId = activeOwnerId.value
             )
-            var accumulated = 0
             val steps = stepTitles.mapIndexed { idx, title ->
-                accumulated += stepWaters.getOrElse(idx) { 0 }
                 TechniqueStep(
                     techniqueId = techId,
                     stepNumber = idx + 1,
                     title = title,
                     durationSeconds = stepTimes.getOrElse(idx) { 30 },
                     waterAddedMl = stepWaters.getOrElse(idx) { 0 },
-                    waterAccumulatedMl = accumulated,
+                    waterAccumulatedMl = normalized.accumulatedWaterMl[idx],
                     intensity = if (idx == 0) "alta" else "media",
                     gesture = "tap",
                     stepNote = "Paso manual de extracción"
                 )
             }
-            repository.insertTechnique(tech, steps)
-            showToast("Técnica '$name' creada y guardada en el Almacén.")
+            try {
+                repository.insertTechnique(tech, steps)
+                showToast("Técnica '$name' creada y guardada en el Almacén.")
+                onCompleted(true)
+            } catch (_: Exception) {
+                showToast("No se pudo guardar. Tus datos siguen en pantalla para reintentar.")
+                onCompleted(false)
+            }
         }
     }
 

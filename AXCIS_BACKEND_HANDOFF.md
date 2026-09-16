@@ -22,6 +22,8 @@ Esta es la guía operativa para conectar Android e iOS al mismo backend y valida
 4. Desplegar `gemini-suggestions` y `delete-account`; `GEMINI_API_KEY` vive únicamente como secreto de la Edge Function.
 5. Android: completar refresh token, expiración y almacenamiento cifrado señalados en `SessionManager.kt`. Eliminar el estado falso de “conectado” cuando el JWT venció.
 6. Android: sustituir los valores provisionales señalados en `SyncRepository.kt` y sincronizar hijos reales de recetas/técnicas, borrados y actualizaciones, no sólo altas.
+   - Incluir también `beans`, `instruments`/equipo, `cups`, `catas` y `lab_experiments`. Android ya marca las escrituras locales como pendientes y conserva `Cup.techniqueId`/`Cup.methodId`; falta que el backend confirme cada operación antes de pasarla a `SYNCED`.
+   - Agregar outbox y borrado lógico para esas entidades. Su borrado Android sigue siendo únicamente local hasta que exista ese contrato remoto.
 7. Confirmar que Android e iOS usan el mismo Staging:
    - Android: `.env` local con `SUPABASE_URL` y `SUPABASE_ANON_KEY`.
    - iOS: configuración Staging mediante xcconfig local con las mismas dos claves.

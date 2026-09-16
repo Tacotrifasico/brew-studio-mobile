@@ -68,8 +68,22 @@ class ExampleRobolectricTest {
     viewModel.onMethodSelected("AeroPress")
     viewModel.onCoffeeChanged("18")
     viewModel.onActionLab()
+    val bean = com.example.data.database.Bean(
+      id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      roaster = "Tostador prueba",
+      name = "Etiopía prueba",
+      origin = "Etiopía",
+      altitude = "1900",
+      process = "Lavado",
+      roastDate = "2026-09-01",
+      firstUseDate = "",
+      notes = "Jazmín",
+      stockGrams = 250f
+    )
+    viewModel.selectBeanForLab(bean)
     assertEquals("AeroPress", viewModel.state.value.labMethod)
     assertEquals(18f, viewModel.state.value.labCoffee, 0.001f)
+    assertEquals(bean.id, viewModel.state.value.labBeanId)
 
     viewModel.updateLabVariables(
       water = 234,
@@ -83,6 +97,7 @@ class ExampleRobolectricTest {
     assertEquals("AeroPress", preparation.activePrepMethod)
     assertEquals("11111111-1111-4000-8000-000000000002", preparation.activePrepMethodId)
     assertEquals(null, preparation.activePrepTechniqueId)
+    assertEquals(bean.id, preparation.activePrepBeanId)
     assertEquals(234, preparation.activePrepWater)
     assertEquals(234, preparation.activePrepSteps.last().waterAccumulatedMl)
 
@@ -90,6 +105,7 @@ class ExampleRobolectricTest {
     viewModel.setCataCleanliness("alta")
     viewModel.pullCataToLab()
     assertEquals("AeroPress", viewModel.state.value.labMethod)
+    assertEquals(bean.id, viewModel.state.value.labBeanId)
     assertEquals(234, viewModel.state.value.labWater)
     assertTrue(viewModel.state.value.labNotes.contains("Textura: sedosa"))
     assertTrue(viewModel.state.value.labNotes.contains("Limpieza: alta"))

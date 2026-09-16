@@ -202,8 +202,10 @@ data class BaristaCalcState(
     val activePrepRatio: Float = 16f,
     val activePrepTemp: Int = 92,
     val activePrepGrinder: String = "Comandante C40",
+    val activePrepGrinderId: String? = null,
     val activePrepClicks: Int = 24,
     val activePrepBean: String = "Finca El Paraíso",
+    val activePrepBeanId: String? = null,
     val activePrepTechniqueName: String = "Estándar V60",
     val activePrepTechniqueId: String? = null,
     val activePrepMethodId: String? = "11111111-1111-4000-8000-000000000001",
@@ -232,8 +234,10 @@ data class BaristaCalcState(
     val labRatio: Float = 16f,
     val labTemp: Int = 92,
     val labGrinder: String = "Comandante C40",
+    val labGrinderId: String? = null,
     val labClicks: Int = 24,
     val labBean: String = "Finca El Paraíso",
+    val labBeanId: String? = null,
     val labBeanFreshness: String = "en ventana", // "muy fresco", "en ventana", "punto ideal", "bajando", "viejo"
     val labEstTimeSeconds: Int = 180,
     val labNotes: String = "",
@@ -812,7 +816,12 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     activePrepTemp = tech.temperatureC,
                     activePrepTechniqueName = tech.name,
                     activePrepTechniqueId = tech.id,
-                    activePrepGrinder = tech.grindDescription ?: "Manual",
+                    activePrepGrinderId = tech.grinderId,
+                    activePrepGrinder = current.grindersList.firstOrNull { it.id == tech.grinderId }?.name
+                        ?: tech.grindDescription ?: "Manual",
+                    activePrepBeanId = tech.beanId,
+                    activePrepBean = current.beansList.firstOrNull { it.id == tech.beanId }?.name
+                        ?: current.activePrepBean,
                     activePrepClicks = (tech.grindValue ?: 18.0).toInt(),
                     activePrepSteps = finalSteps
                 ) }
@@ -1107,8 +1116,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 val methodName = _state.value.activePrepMethod.ifBlank { "Método manual" }
                 val cup = Cup(
                     id = cupId,
+                    beanId = _state.value.activePrepBeanId,
                     techniqueId = _state.value.activePrepTechniqueId,
                     methodId = _state.value.activePrepMethodId,
+                    grinderId = _state.value.activePrepGrinderId,
                     executedDoseG = _state.value.activePrepCoffee,
                     executedWaterMl = _state.value.activePrepWater,
                     executedRatio = _state.value.activePrepRatio,
@@ -1129,6 +1140,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 val cata = Cata(
                     id = UUID.randomUUID().toString(),
                     cupId = cupId,
+                    beanId = _state.value.activePrepBeanId,
                     activeFlavorFamily = "FRUITY",
                     selectedFlavorNotesJson = CataDraftEncoding.flavorNotesJson(notesFound),
                     sensoryWheelDescriptorsJson = CataDraftEncoding.descriptorsJson(notesExpected),
@@ -1168,6 +1180,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             labRatio = it.activePrepRatio,
             labTemp = it.activePrepTemp,
             labClicks = it.activePrepClicks,
+            labGrinder = it.activePrepGrinder,
+            labGrinderId = it.activePrepGrinderId,
+            labBean = it.activePrepBean,
+            labBeanId = it.activePrepBeanId,
             labNotes = "Cargado de cata sensorial. Textura: ${it.cataTexture}, Limpieza: ${it.cataCleanliness}."
         ) }
         calculateOfflineLabHypothesis()
@@ -1320,8 +1336,11 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             activePrepTechniqueName = "Idea de Laboratorio",
             activePrepTechniqueId = null,
             activePrepMethodId = methodIdForName(it.labMethod),
-            activePrepGrinder = "Manual",
+            activePrepGrinder = it.labGrinder.ifBlank { "Manual" },
+            activePrepGrinderId = it.labGrinderId,
             activePrepClicks = it.labClicks,
+            activePrepBean = it.labBean,
+            activePrepBeanId = it.labBeanId,
             activePrepSteps = generateQuickSteps(it.labMethod, it.labWater)
         ) }
         showToast("¡Hipótesis de Laboratorio enviada a Preparar!")
@@ -1372,6 +1391,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             val technique = Technique(
                 name = techniqueName,
                 methodId = selectedMethodId,
+                beanId = s.labBeanId,
+                grinderId = s.labGrinderId,
                 doseG = s.labCoffee,
                 waterMl = s.labWater,
                 ratio = s.labRatio,
@@ -1396,8 +1417,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             labWater = 240,
             labRatio = 16f,
             labTemp = 92,
+            labGrinderId = null,
             labClicks = 24,
             labBean = "Finca El Paraíso",
+            labBeanId = null,
             labBeanFreshness = "en ventana",
             labEstTimeSeconds = 180,
             labNotes = ""
@@ -1470,6 +1493,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         val f = calculateBeanFreshness(bean.roastDate, bean.firstUseDate)
         _state.update { it.copy(
             activePrepBean = bean.name,
+            activePrepBeanId = bean.id,
             selectedExpectedNotes = bean.notes,
             microcopy = "Preparando con ${bean.name} (${f.freshnessState.label}, tueste: ${bean.roastDate})"
         ) }
@@ -1481,6 +1505,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         _state.update { current ->
             current.copy(
                 labBean = bean.name,
+                labBeanId = bean.id,
                 labBeanFreshness = when (f.freshnessState) {
                     FreshnessState.VeryFresh -> "muy fresco"
                     FreshnessState.InWindow -> "en ventana"

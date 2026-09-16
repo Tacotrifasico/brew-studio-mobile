@@ -94,11 +94,15 @@ class BrewAggregateRoomTest {
         val techniqueId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
         val cupId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
         val ownerId = "owner-b"
+        val beanId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        val grinderId = "ffffffff-ffff-4fff-8fff-ffffffffffff"
         database.techniqueDao().insertTechniqueWithSteps(
             Technique(
                 id = techniqueId,
                 name = "AeroPress invertida",
                 methodId = "11111111-1111-4000-8000-000000000002",
+                beanId = beanId,
+                grinderId = grinderId,
                 doseG = 18f,
                 waterMl = 234,
                 ratio = 13f,
@@ -114,8 +118,10 @@ class BrewAggregateRoomTest {
         )
         val cup = Cup(
             id = cupId,
+            beanId = beanId,
             techniqueId = techniqueId,
             methodId = "11111111-1111-4000-8000-000000000002",
+            grinderId = grinderId,
             executedDoseG = 18f,
             executedWaterMl = 234,
             executedRatio = 13f,
@@ -131,6 +137,7 @@ class BrewAggregateRoomTest {
         val tasting = Cata(
             id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
             cupId = cupId,
+            beanId = beanId,
             activeFlavorFamily = "FRUITY",
             selectedFlavorNotesJson = "[\"durazno\",\"cítricos\"]",
             textureLevel = "MEDIUM",
@@ -149,9 +156,12 @@ class BrewAggregateRoomTest {
         assertNotNull(storedCup)
         assertNotNull(storedTasting)
         assertEquals(techniqueId, storedCup?.techniqueId)
+        assertEquals(beanId, storedCup?.beanId)
+        assertEquals(grinderId, storedCup?.grinderId)
         assertEquals("AeroPress invertida", storedCup?.techniqueNameSnapshot)
         assertEquals(234, storedCup?.executedWaterMl)
         assertEquals(cupId, storedTasting?.cupId)
+        assertEquals(beanId, storedTasting?.beanId)
         assertEquals(ownerId, storedTasting?.ownerUserId)
         assertEquals(1, database.cataDao().getAllCatas().first().count { it.cupId == cupId })
     }

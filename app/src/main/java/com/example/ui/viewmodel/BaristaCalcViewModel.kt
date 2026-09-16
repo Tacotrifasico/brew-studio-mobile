@@ -302,13 +302,13 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     )
 
     private val defaultPresets = listOf(
-        BaristaPreset("default_1", "V60", 15.0f, 16.0f, "V60 · 15g · 1:16"),
-        BaristaPreset("default_2", "AeroPress", 18.0f, 13.0f, "AeroPress · 18g · 1:13"),
-        BaristaPreset("default_3", "Prensa francesa", 20.0f, 15.0f, "Prensa · 20g · 1:15"),
-        BaristaPreset("default_4", "Chemex", 24.0f, 16.0f, "Chemex · 24g · 1:16"),
-        BaristaPreset("default_5", "Espresso", 18.0f, 2.0f, "Espresso · 18g · 1:2"),
-        BaristaPreset("default_6", "Moka", 18.0f, 10.0f, "Moka · 18g · 1:10"),
-        BaristaPreset("default_7", "Cold brew", 50.0f, 8.0f, "Cold brew · 50g · 1:8")
+        BaristaPreset("default_1", "V60", 15.0f, 16.0f, "V60 · 15 g · 1:16"),
+        BaristaPreset("default_2", "AeroPress", 18.0f, 13.0f, "AeroPress · 18 g · 1:13"),
+        BaristaPreset("default_3", "Prensa francesa", 20.0f, 15.0f, "Prensa · 20 g · 1:15"),
+        BaristaPreset("default_4", "Chemex", 24.0f, 16.0f, "Chemex · 24 g · 1:16"),
+        BaristaPreset("default_5", "Espresso", 18.0f, 2.0f, "Espresso · 18 g · 1:2"),
+        BaristaPreset("default_6", "Moka", 18.0f, 10.0f, "Moka · 18 g · 1:10"),
+        BaristaPreset("default_7", "Cold brew", 50.0f, 8.0f, "Cold brew · 50 g · 1:8")
     )
 
     val presets: List<BaristaPreset>
@@ -548,7 +548,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 coffee = parsed,
                 water = calcWater,
                 waterInput = calcWater.toString(),
-                microcopy = "Listo para preparar con ${parsed}g de café."
+                microcopy = "Listo para preparar con $parsed g de café."
             ) }
         }
     }
@@ -578,7 +578,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 coffee = calcCoffee,
                 coffeeInput = calcCoffee.toString(),
                 water = parsed,
-                microcopy = "Ajustado agua total a ${parsed}ml."
+                microcopy = "Agua total ajustada a $parsed ml."
             ) }
         }
     }
@@ -683,7 +683,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             activePrepSteps = if (keepSelectedTechnique) currentVal.activePrepSteps
                 else generateQuickSteps(currentVal.method, currentVal.water)
         ) }
-        showToast("Enviado a Preparar: Extracción de ${currentVal.coffee}g para ${currentVal.water}ml.")
+        showToast("Enviado a Preparar: extracción de ${currentVal.coffee} g para ${currentVal.water} ml.")
     }
 
     fun onActionLab() {
@@ -719,7 +719,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             } else {
                 val coffeeStr = if (currentCoffee % 1 == 0f) currentCoffee.toInt().toString() else currentCoffee.toString()
                 val ratioStr = if (currentRatio % 1 == 0f) currentRatio.toInt().toString() else currentRatio.toString()
-                val label = "⭐ $currentMethod · ${coffeeStr}g · 1:${ratioStr}"
+                val label = "⭐ $currentMethod · $coffeeStr g · 1:$ratioStr"
 
                 val newPreset = RatioPreset(
                     methodName = currentMethod,

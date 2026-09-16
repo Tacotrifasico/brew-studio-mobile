@@ -58,7 +58,7 @@ sealed class Screen(
     object Brew : Screen("brew", "Preparar", V60Icon, V60Icon)
     class CataScreenConfig : Screen("cata", "Cata", Icons.Filled.Favorite, Icons.Outlined.Favorite)
     object Lab : Screen("lab", "Laboratorio", Icons.Filled.Science, Icons.Outlined.Science)
-    object Storage : Screen("storage", "Almacen", Icons.Filled.Inventory, Icons.Outlined.Inventory)
+    object Storage : Screen("storage", "Almacén", Icons.Filled.Inventory, Icons.Outlined.Inventory)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

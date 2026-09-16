@@ -1306,7 +1306,7 @@ fun BeanItemCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Stock: ${bean.stockGrams}g",
+                    text = "Disponible: ${bean.stockGrams} g",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = CafeCalidoOscuro
@@ -1552,7 +1552,7 @@ fun BeanDetailSheet(
                         label = "Fecha de Apertura", 
                         value = if (bean.firstUseDate.isBlank()) "Cerrado / Hermético" else bean.firstUseDate
                     )
-                    SpecRow(label = "Stock", value = "${bean.stockGrams}g")
+                    SpecRow(label = "Disponible", value = "${bean.stockGrams} g")
                 }
             }
 
@@ -2535,7 +2535,7 @@ fun CupItemCard(cup: Cup, onDelete: () -> Unit) {
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(cup.beanNameSnapshot, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                    Text("Taza • ${cup.executedDoseG}g ➔ ${cup.executedWaterMl}ml • Score: ${cup.rating ?: 5.0}★", fontSize = 11.sp, color = TextSecundario)
+                    Text("Taza • ${cup.executedDoseG} g ➔ ${cup.executedWaterMl} ml • Puntuación: ${cup.rating ?: 5.0} ★", fontSize = 11.sp, color = TextSecundario)
                 }
                 IconButton(onClick = onDelete) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar", tint = Advertencia.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
@@ -2576,7 +2576,7 @@ fun ExperimentItemCard(exp: LabExperiment, onDelete: () -> Unit) {
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Experimento: 1:${exp.ratio}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                    Text("${exp.coffeeGrams}g • ${exp.waterMl}ml • ${exp.temperatureC}°C • ${exp.grindSetting} clks", fontSize = 11.sp, color = TextSecundario)
+                    Text("${exp.coffeeGrams} g • ${exp.waterMl} ml • ${exp.temperatureC} °C • ${exp.grindSetting} clics", fontSize = 11.sp, color = TextSecundario)
                 }
                 IconButton(onClick = onDelete) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar", tint = Advertencia.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
@@ -2955,7 +2955,7 @@ fun AddingFormSelector(
                                         stepsList[index] = step.copy(instruction = newInst)
                                     },
                                     label = "Paso ${index + 1}",
-                                    placeholder = "ej. Vertir tónica en copa fría con hielo",
+                                    placeholder = "ej. Verter tónica en copa fría con hielo",
                                     modifier = Modifier.weight(1f)
                                 )
                                 if (stepsList.size > 1) {
@@ -3264,7 +3264,7 @@ fun AddingFormSelector(
                             value = notes,
                             onValueChange = { notes = it },
                             label = "Notas o Especificaciones Técnicas",
-                            placeholder = "ej. Capacidad 600ml, flujo controlado"
+                            placeholder = "ej. Capacidad de 600 ml, flujo controlado"
                         )
                     }
 

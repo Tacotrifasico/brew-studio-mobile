@@ -286,7 +286,7 @@ fun BrewSetupView(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("CAFÉ", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
                         Text(
-                            text = "${state.activePrepCoffee}g",
+                            text = "${state.activePrepCoffee} g",
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Black,
@@ -308,7 +308,7 @@ fun BrewSetupView(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("AGUA", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
                         Text(
-                            text = "${state.activePrepWater}ml",
+                            text = "${state.activePrepWater} ml",
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Black,
@@ -427,7 +427,7 @@ fun BrewSetupView(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(tech.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                                Text("Usará ${state.activePrepCoffee}g • ${state.activePrepWater}ml • 1:${state.activePrepRatio}", fontSize = 11.sp, color = TextSecundario)
+                                Text("Usará ${state.activePrepCoffee} g • ${state.activePrepWater} ml • 1:${state.activePrepRatio}", fontSize = 11.sp, color = TextSecundario)
                             }
                             if (!viewModel.isBuiltInTechnique(tech.id)) {
                                 IconButton(onClick = { viewModel.deleteTechnique(tech.id) }) {
@@ -636,7 +636,7 @@ fun ActiveBrewTimerView(
                             color = if (isCurrent) TextPrincipal else if (isPast) TextSecundario else TextPrincipal.copy(alpha = 0.8f)
                         )
                         Text(
-                            text = "${step.durationSeconds}s • Agrega +${step.waterAddedMl}ml (Total: ${step.waterAccumulatedMl}ml)",
+                            text = "${step.durationSeconds} s • Agrega +${step.waterAddedMl} ml (total: ${step.waterAccumulatedMl} ml)",
                             fontSize = 11.sp,
                             color = TextSecundario
                         )
@@ -832,7 +832,7 @@ fun CreateTechniqueFormView(
                 primaryValue = "1:$calculatedRatio",
                 secondaryValue = "$parsedWater ml Total",
                 details = listOf(
-                    "Dosis" to "${parsedCoffee}g",
+                    "Dosis" to "$parsedCoffee g",
                     "Temp" to "${temp}°C",
                     "Molino" to selectedGrinderName
                 )

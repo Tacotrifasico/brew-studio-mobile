@@ -302,8 +302,8 @@ fun ShareCard(
             ) {
                 SpecItem("Método", methodValue)
                 SpecItem("Ratio", "1:$ratio")
-                SpecItem("Café", "${coffee}g")
-                SpecItem("Agua", "${water}ml")
+                SpecItem("Café", "$coffee g")
+                SpecItem("Agua", "$water ml")
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -481,7 +481,7 @@ fun MyLocalFormulasTab(viewModel: SocialViewModel) {
                         items(techniques) { tech ->
                             LocalItemCard(
                                 title = tech.name,
-                                subtitle = "Dosis ${tech.doseG}g · ${tech.notes.take(40)}...",
+                                subtitle = "Dosis ${tech.doseG} g · ${tech.notes.take(40)}...",
                                 isShared = tech.isShared || tech.remoteId != null,
                                 onShare = { selectedTechToShare = tech }
                             )

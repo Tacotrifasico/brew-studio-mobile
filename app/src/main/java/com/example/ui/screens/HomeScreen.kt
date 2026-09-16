@@ -692,7 +692,7 @@ fun HomeScreen(
                             if (lastBean != null) {
                                 Text(lastBean.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal, maxLines = 1)
                                 Text(lastBean.origin, fontSize = 11.sp, color = TextSecundario, maxLines = 1)
-                                Text("${lastBean.process} • ${lastBean.stockGrams}g stock", fontSize = 10.sp, color = CafeCalidoOscuro, fontWeight = FontWeight.Medium)
+                                Text("${lastBean.process} • ${lastBean.stockGrams} g disponibles", fontSize = 10.sp, color = CafeCalidoOscuro, fontWeight = FontWeight.Medium)
                             } else {
                                 Text("No hay granos registrados", fontSize = 12.sp, color = TextSecundario)
                             }
@@ -726,7 +726,7 @@ fun HomeScreen(
                                 Text(lastRecipe.ingredientsSummary.ifBlank { "Fórmula guardada" }, fontSize = 10.sp, color = AcentoPrincipal, fontWeight = FontWeight.Medium)
                             } else {
                                 Text("V60 Filtro Estándar", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                                Text("V60 • 15g • 1:16", fontSize = 11.sp, color = TextSecundario)
+                                Text("V60 • 15 g • 1:16", fontSize = 11.sp, color = TextSecundario)
                             }
                         }
                     }

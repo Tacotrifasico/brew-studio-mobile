@@ -136,7 +136,7 @@ struct TechniqueDraftModel: Equatable, Codable {
     var id = UUID(); var name = ""; var methodId: UUID?; var methodName = "V60"
     var recipeId: UUID?; var beanId: UUID?; var grinderId: UUID?
     var doseGrams = 15.0; var waterMl = 240; var ratio = 16.0; var temperatureC = 93
-    var executionMode = "GUIDED"; var grindValue = 18.0; var grindDescription = "18 Clicks"; var grindUnit = "CLICKS"
+    var executionMode = "GUIDED"; var grindValue = 18.0; var grindDescription = "18 clics"; var grindUnit = "CLICKS"
     var notes = ""; var techniqueDescription = ""; var steps: [TechniqueStepDraft] = []
 }
 
@@ -157,7 +157,7 @@ extension TechniqueDraftModel {
             temperatureC: state.temperatureC,
             executionMode: "MANUAL",
             grindValue: Double(state.grindClicks),
-            grindDescription: "\(state.grindClicks) clicks",
+            grindDescription: "\(state.grindClicks) clics",
             grindUnit: "CLICKS",
             notes: state.notes,
             techniqueDescription: "Guardada desde el Laboratorio",

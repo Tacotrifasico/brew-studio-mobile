@@ -190,7 +190,7 @@ private struct GrinderEditor: View {
                     Picker("Tipo", selection: $type) { Text("Manual").tag("MANUAL"); Text("Eléctrico").tag("ELECTRIC") }
                 }
                 Section("Escala") {
-                    Picker("Unidad", selection: $unit) { ForEach(["CLICKS", "MICRONS", "SETTING_NUMERIC", "DESCRIPTIVE"], id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized) } }
+                    Picker("Unidad", selection: $unit) { ForEach(["CLICKS", "MICRONS", "SETTING_NUMERIC", "DESCRIPTIVE"], id: \.self) { Text(grinderScaleLabel($0)).tag($0) } }
                     Stepper("Mínimo: \(minimum)", value: $minimum, in: 0...10_000)
                     Stepper("Máximo: \(maximum)", value: $maximum, in: minimum...10_000)
                     TextField("Notas de calibración", text: $calibration, axis: .vertical).lineLimit(2...5)
@@ -388,7 +388,7 @@ private let equipmentTypes = [
 
 private func equipmentTypeLabel(_ code: String) -> String { equipmentTypes.first { $0.code == code }?.label ?? code.capitalized }
 private func grinderScaleLabel(_ code: String) -> String {
-    switch code { case "CLICKS": "clicks"; case "MICRONS": "micras"; case "SETTING_NUMERIC": "niveles"; default: "descriptiva" }
+    switch code { case "CLICKS": "clics"; case "MICRONS": "micras"; case "SETTING_NUMERIC": "niveles"; default: "descriptiva" }
 }
 private func syncStatusLabel(_ status: SyncStatus) -> String {
     switch status { case .synced: "Sincronizado"; case .pendingCreate: "Pendiente de alta"; case .pendingUpdate: "Cambios pendientes"; case .pendingDelete: "Eliminación pendiente"; case .conflict: "Conflicto"; case .error: "Error" }

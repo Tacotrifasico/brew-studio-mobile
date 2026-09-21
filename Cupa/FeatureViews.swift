@@ -340,7 +340,7 @@ private struct BaristaCalculatorCard: View {
         ), dragAxis: .vertical, dragStep: $coffeeDragStep,
         adjust: { adjustCoffee(Double($0)) })
 
-        calculatorInput("RATIO (1:x)", identifier: "calculator.ratio", text: Binding(
+        calculatorInput("PROPORCIÓN (1:x)", identifier: "calculator.ratio", text: Binding(
             get: { calculator.ratioInput },
             set: { calculator.changeRatio($0) }
         ), dragAxis: .horizontal, dragStep: $ratioDragStep,
@@ -575,7 +575,7 @@ private struct CalculatorMethodManager: View {
                 NavigationStack {
                     Form {
                         TextField("Nombre del método", text: $newMethodName)
-                        TextField("Ratio inicial 1:", text: $newMethodRatio).keyboardType(.decimalPad)
+                        TextField("Proporción inicial 1:", text: $newMethodRatio).keyboardType(.decimalPad)
                     }
                     .navigationTitle("Nuevo método")
                     .navigationBarTitleDisplayMode(.inline)
@@ -918,7 +918,7 @@ struct LabView: View {
                         Divider()
                         Stepper("Agua \(model.state.waterMl) ml", value: binding(\.waterMl), in: 10...2000, step: 10)
                     }
-                    labSlider("Ratio", value: bindingFloat(\.ratio), range: 8...22, step: 0.5, display: "1:\(String(format: "%.1f", model.state.ratio))")
+                    labSlider("Proporción", value: bindingFloat(\.ratio), range: 8...22, step: 0.5, display: "1:\(String(format: "%.1f", model.state.ratio))")
                     labSlider("Tiempo", value: bindingInt(\.timeSeconds), range: 60...360, step: 5, display: formattedTime)
                 case .extraction:
                     Picker("Unidad", selection: Binding(get: { model.state.temperatureUnit }, set: model.setTemperatureUnit)) {
@@ -926,7 +926,7 @@ struct LabView: View {
                     }.pickerStyle(.segmented).accessibilityIdentifier("lab.temperature.unit")
                     labSlider("Temperatura", value: bindingInt(\.temperatureC), range: 80...98, step: 1, display: temperatureText)
                     temperatureCalibrationBand
-                    labSlider("Clicks de molienda", value: bindingInt(\.grindClicks), range: 6...36, step: 1, display: "\(model.state.grindClicks) clicks")
+                    labSlider("Clics de molienda", value: bindingInt(\.grindClicks), range: 6...36, step: 1, display: "\(model.state.grindClicks) clics")
                 case .bean:
                     Picker("Frescura", selection: binding(\.freshness)) {
                         ForEach(["muy fresco", "en ventana", "punto ideal", "bajando", "viejo"], id: \.self) { Text($0.capitalized) }

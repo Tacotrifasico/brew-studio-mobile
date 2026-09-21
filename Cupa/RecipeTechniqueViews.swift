@@ -505,10 +505,10 @@ private struct TechniqueEditorView: View {
                 }
                 Section("Preparación") {
                     HStack { TextField("Café (g)", value: $draft.doseGrams, format: .number).keyboardType(.decimalPad); TextField("Agua (ml)", value: $draft.waterMl, format: .number).keyboardType(.numberPad) }
-                    HStack { TextField("Ratio", value: $draft.ratio, format: .number).keyboardType(.decimalPad); TextField("Temperatura °C", value: $draft.temperatureC, format: .number).keyboardType(.numberPad) }
+                    HStack { TextField("Proporción", value: $draft.ratio, format: .number).keyboardType(.decimalPad); TextField("Temperatura °C", value: $draft.temperatureC, format: .number).keyboardType(.numberPad) }
                     Picker("Café", selection: $draft.beanId) { Text("Sin café seleccionado").tag(Optional<UUID>.none); ForEach(beans) { Text($0.name).tag(Optional($0.id)) } }
                     Picker("Molino", selection: $draft.grinderId) { Text("Sin molino seleccionado").tag(Optional<UUID>.none); ForEach(grinders) { Text($0.name).tag(Optional($0.id)) } }
-                    HStack { TextField("Valor molienda", value: $draft.grindValue, format: .number).keyboardType(.decimalPad); Picker("Unidad", selection: $draft.grindUnit) { ForEach(grindUnits, id: \.self) { Text($0.capitalized).tag($0) } } }
+                    HStack { TextField("Valor de molienda", value: $draft.grindValue, format: .number).keyboardType(.decimalPad); Picker("Unidad", selection: $draft.grindUnit) { ForEach(grindUnits, id: \.self) { Text(grindUnitLabel($0)).tag($0) } } }
                     TextField("Descripción de molienda", text: $draft.grindDescription)
                     TextField("Notas", text: $draft.notes, axis: .vertical).lineLimit(2...5)
                 }
@@ -592,6 +592,7 @@ private let gestures = ["BLOOM", "CIRCULAR_POUR", "CENTER_POUR", "SWIRL", "STIR"
 private func recipeKindLabel(_ code: String) -> String { recipeKinds.first { $0.code == code }?.label ?? code }
 private func unitLabel(_ code: String) -> String { ["GRAMS": "g", "MILLILITERS": "ml", "UNITS": "u", "TEASPOONS": "cdta", "TABLESPOONS": "cda", "OUNCES": "oz", "OTHER": "otra"][code] ?? code }
 private func executionModeLabel(_ code: String) -> String { executionModes.first { $0.0 == code }?.1 ?? code }
+private func grindUnitLabel(_ code: String) -> String { ["CLICKS": "clics", "MICRONS": "micras", "SETTING_NUMERIC": "niveles", "DESCRIPTIVE": "descriptiva"][code] ?? code }
 private func formatDuration(_ seconds: Int) -> String { String(format: "%d:%02d", seconds / 60, seconds % 60) }
 private func syncStatusBadge(_ status: SyncStatus) -> some View {
     let label: String = switch status {

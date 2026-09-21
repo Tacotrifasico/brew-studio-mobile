@@ -37,7 +37,7 @@ struct PreparationExecutionView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("TÉCNICAS PARA \(model.state.methodName.uppercased())")
                     .font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
-                Text("Todas usarán \(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g, \(model.state.waterMl) ml y ratio 1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1)))).")
+                Text("Todas usarán \(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g, \(model.state.waterMl) ml y proporción 1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1)))).")
                     .font(.caption).foregroundStyle(CupaTheme.secondaryText)
                 Picker("Técnica", selection: $selectedTechniqueKey) {
                     Text("Selecciona una técnica").tag(Optional<String>.none)

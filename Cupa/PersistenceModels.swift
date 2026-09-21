@@ -599,7 +599,7 @@ struct PersistenceController {
             attribute("doseGrams", .doubleAttributeType, defaultValue: 15), attribute("waterMl", .integer64AttributeType, defaultValue: 240),
             attribute("ratio", .doubleAttributeType, defaultValue: 16), attribute("temperatureC", .integer64AttributeType, defaultValue: 93),
             attribute("executionMode", .stringAttributeType, defaultValue: "GUIDED"), attribute("grindValue", .doubleAttributeType, defaultValue: 18),
-            attribute("grindDescription", .stringAttributeType, defaultValue: "18 Clicks"), attribute("grindUnit", .stringAttributeType, defaultValue: "CLICKS"),
+            attribute("grindDescription", .stringAttributeType, defaultValue: "18 clics"), attribute("grindUnit", .stringAttributeType, defaultValue: "CLICKS"),
             attribute("notes", .stringAttributeType, defaultValue: ""), attribute("techniqueDescription", .stringAttributeType, defaultValue: ""),
             attribute("totalTimeSeconds", .integer64AttributeType, defaultValue: 180), attribute("visibility", .stringAttributeType, defaultValue: "PRIVATE"),
             attribute("isShared", .booleanAttributeType, defaultValue: false),

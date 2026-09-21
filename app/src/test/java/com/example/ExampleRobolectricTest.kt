@@ -8,6 +8,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -58,6 +61,25 @@ class ExampleRobolectricTest {
     assertEquals(favorite, restored.selectedPreset(listOf(favorite)))
     restored.clearIfSelected(favorite.id)
     assertEquals(null, com.example.ui.viewmodel.CalculatorFavoriteStore(preferences).selectedId())
+  }
+
+  @Test
+  fun `owner scope changes reset account-bound screen identity`() = runBlocking {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val session = com.example.data.remote.SessionManager(application)
+    session.clearSession()
+    try {
+      val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+      assertEquals("guest", withTimeout(2_000) { viewModel.state.first { it.ownerScopeKey == "guest" }.ownerScopeKey })
+
+      session.saveSession("token-a", "owner-a", "a@example.com", "A", "a", null)
+      assertEquals("owner-a", withTimeout(2_000) { viewModel.state.first { it.ownerScopeKey == "owner-a" }.ownerScopeKey })
+
+      session.clearSession()
+      assertEquals("guest", withTimeout(2_000) { viewModel.state.first { it.ownerScopeKey == "guest" }.ownerScopeKey })
+    } finally {
+      session.clearSession()
+    }
   }
 
   @Test

@@ -45,6 +45,7 @@ fun BrewScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var isCreatingCustom by remember { mutableStateOf(false) }
+    LaunchedEffect(state.ownerScopeKey) { isCreatingCustom = false }
 
     Box(
         modifier = modifier
@@ -134,13 +135,15 @@ fun BrewScreen(
                 ActiveBrewTimerView(viewModel = viewModel, state = state, onNavigateToCata = onNavigateToCata)
             } else if (isCreatingCustom) {
                 // CREATION FORM VIEW
-                CreateTechniqueFormView(
-                    viewModel = viewModel,
-                    onDone = { isCreatingCustom = false }
-                )
+                key(state.ownerScopeKey) {
+                    CreateTechniqueFormView(
+                        viewModel = viewModel,
+                        onDone = { isCreatingCustom = false }
+                    )
+                }
             } else {
                 // DEFAULT SETUP SCREEN WITH LIBRARY PICKERS
-                BrewSetupView(viewModel = viewModel, state = state)
+                key(state.ownerScopeKey) { BrewSetupView(viewModel = viewModel, state = state) }
             }
         }
       }

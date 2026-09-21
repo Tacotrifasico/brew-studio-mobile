@@ -77,6 +77,30 @@ fun StorageScreen(
     onNavigateToCommunity: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsState()
+    key(state.ownerScopeKey) {
+        OwnerScopedStorageScreen(
+            viewModel = viewModel,
+            state = state,
+            modifier = modifier,
+            syncState = syncState,
+            onRetrySync = onRetrySync,
+            onNavigateToPreparation = onNavigateToPreparation,
+            onNavigateToCommunity = onNavigateToCommunity
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OwnerScopedStorageScreen(
+    viewModel: BaristaCalcViewModel,
+    state: com.example.ui.viewmodel.BaristaCalcState,
+    modifier: Modifier,
+    syncState: SocialUiState,
+    onRetrySync: () -> Unit,
+    onNavigateToPreparation: () -> Unit,
+    onNavigateToCommunity: () -> Unit
+) {
     var selectedCategory by remember { mutableStateOf("Café") }
     
     // Bottom Sheet Triggers

@@ -179,6 +179,7 @@ data class BaristaPreset(
 )
 
 data class BaristaCalcState(
+    val ownerScopeKey: String = "guest",
     // Calculator variables
     val method: String = "V60",
     val coffee: Float = 15.0f,
@@ -362,6 +363,11 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         viewModelScope.launch { repository.ensureCoreCatalog() }
+        viewModelScope.launch {
+            activeOwnerId.collect { ownerId ->
+                _state.update { it.copy(ownerScopeKey = ownerId ?: "guest") }
+            }
+        }
 
         // Collect DB changes and update states
         viewModelScope.launch {

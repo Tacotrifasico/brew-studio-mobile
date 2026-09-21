@@ -922,7 +922,7 @@ fun LabVariableGroupTabs(
         LabCategory.values().forEach { category ->
             val isSelected = selectedCategory == category
             val label = when (category) {
-                LabCategory.Proporcion -> "Ratio"
+                LabCategory.Proporcion -> "Proporción"
                 LabCategory.Extraccion -> "Calor"
                 LabCategory.Grano -> "Grano"
             }
@@ -1232,7 +1232,7 @@ fun LabVariableDock(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "RATIO & TIEMPO DE EXTRACCIÓN",
+                            "PROPORCIÓN Y TIEMPO DE EXTRACCIÓN",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextSecundario,
@@ -1260,7 +1260,7 @@ fun LabVariableDock(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Ratio de Proporción", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                            Text("Proporción", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
                             Text(
                                 text = "1:${String.format(java.util.Locale.US, "%.1f", state.labRatio)}",
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
@@ -1452,7 +1452,7 @@ fun LabVariableDock(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Clicks de Molienda", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                                Text("Clics de molienda", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
                                 if (isClicksInOptimum) {
                                     Box(
                                         modifier = Modifier
@@ -1465,7 +1465,7 @@ fun LabVariableDock(
                                 }
                             }
                             Text(
-                                text = "${state.labClicks} clicks",
+                                text = "${state.labClicks} clics",
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
@@ -1695,9 +1695,9 @@ fun LabInfoSheet(onDismissRequest: () -> Unit) {
             HorizontalDivider(color = BordeSuave, thickness = 1.dp)
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("⚖️ Ratio y Proporción", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = CafeCalidoOscuro)
+                Text("⚖️ Proporción", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = CafeCalidoOscuro)
                 Text(
-                    text = "El ratio define la intensidad. Ratios cortos (1:11) aportan cuerpo y potencia; ratios largos (1:18) aportan ligereza y claridad.",
+                    text = "La proporción define la intensidad. Proporciones cortas (1:11) aportan cuerpo y potencia; proporciones largas (1:18) aportan ligereza y claridad.",
                     fontSize = 12.sp,
                     color = TextSecundario,
                     lineHeight = 16.sp

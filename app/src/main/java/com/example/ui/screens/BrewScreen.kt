@@ -167,7 +167,7 @@ fun BrewSetupView(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("El método aparecerá en la calculadora y en Preparar café con tres técnicas iniciales.", fontSize = 12.sp, color = TextSecundario)
                     StyledOutlinedTextField(value = newMethodName, onValueChange = { newMethodName = it }, label = "Nombre", placeholder = "Ej. Kalita Wave")
-                    StyledOutlinedTextField(value = newMethodRatio, onValueChange = { newMethodRatio = it }, label = "Ratio inicial 1:", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                    StyledOutlinedTextField(value = newMethodRatio, onValueChange = { newMethodRatio = it }, label = "Proporción inicial 1:", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 }
             },
             confirmButton = {
@@ -295,7 +295,7 @@ fun BrewSetupView(
                     }
                     Box(modifier = Modifier.size(1.dp, 20.dp).background(Color.White.copy(alpha = 0.3f)))
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("RATIO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
+                        Text("PROPORCIÓN", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
                         Text(
                             text = "1:${state.activePrepRatio}",
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
@@ -832,10 +832,10 @@ fun CreateTechniqueFormView(
             FormHeroCard(
                 title = "Relación de Extracción Calculada",
                 primaryValue = "1:$calculatedRatio",
-                secondaryValue = "$parsedWater ml Total",
+                secondaryValue = "$parsedWater ml total",
                 details = listOf(
                     "Dosis" to "$parsedCoffee g",
-                    "Temp" to "${temp}°C",
+                    "Temperatura" to "$temp °C",
                     "Molino" to selectedGrinderName
                 )
             )
@@ -943,7 +943,7 @@ fun CreateTechniqueFormView(
                     StyledOutlinedTextField(
                         value = temp,
                         onValueChange = { temp = it },
-                        label = "Temp (°C)",
+                        label = "Temperatura (°C)",
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f)
@@ -1031,7 +1031,7 @@ fun CreateTechniqueFormView(
                     StyledOutlinedTextField(
                         value = clicks,
                         onValueChange = { clicks = it },
-                        label = "Clicks",
+                        label = "Clics",
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f)

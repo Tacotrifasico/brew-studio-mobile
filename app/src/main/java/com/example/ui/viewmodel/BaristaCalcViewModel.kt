@@ -595,7 +595,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 ratio = parsed,
                 water = calcWater,
                 waterInput = calcWater.toString(),
-                microcopy = "Ratio ajustado a 1:${parsed}."
+                microcopy = "Proporción ajustada a 1:${parsed}."
             ) }
         }
     }
@@ -626,7 +626,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             ratioInput = ratio.toString(),
             water = calcWater,
             waterInput = calcWater.toString(),
-            microcopy = "Método cambiado a $method. Ratio sugerido 1:$ratio."
+            microcopy = "Método cambiado a $method. Proporción sugerida 1:$ratio."
         ) }
     }
 
@@ -751,7 +751,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             if (existing != null) {
                 repository.deletePreset(existing)
                 favoriteStore.clearIfSelected(existing.id)
-                showToast("Ratio eliminado de los guardados de la Calculadora.")
+                showToast("Proporción eliminada de los guardados de la Calculadora.")
             } else {
                 val coffeeStr = if (currentCoffee % 1 == 0f) currentCoffee.toInt().toString() else currentCoffee.toString()
                 val ratioStr = if (currentRatio % 1 == 0f) currentRatio.toInt().toString() else currentRatio.toString()
@@ -765,7 +765,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 )
                 repository.insertPreset(newPreset)
                 rememberSelectedFavorite(newPreset.id)
-                showToast("Ratio guardado en Presets de la Calculadora.")
+                showToast("Proporción guardada en los ajustes de la Calculadora.")
             }
         }
     }
@@ -1058,7 +1058,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 temperatureC = temp,
                 executionMode = "GUIDED",
                 grindValue = clicks.toDouble(),
-                grindDescription = grinderName.ifBlank { "$clicks Clicks" },
+                grindDescription = grinderName.ifBlank { "$clicks clics" },
                 notes = notes,
                 totalTimeSeconds = normalized.totalTimeSeconds,
                 ownerUserId = activeOwnerId.value,
@@ -1794,7 +1794,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             updateCalculatorAndPreparation { it.copy(
                 method = cleanName, ratio = defaultRatio, ratioInput = defaultRatio.toString(),
                 water = water, waterInput = water.toString(),
-                microcopy = "Método cambiado a $cleanName. Ratio sugerido 1:$defaultRatio."
+                microcopy = "Método cambiado a $cleanName. Proporción sugerida 1:$defaultRatio."
             ) }
             showToast("Método '$cleanName' agregado a la calculadora y a Preparar café.")
             onCreated?.invoke(method)

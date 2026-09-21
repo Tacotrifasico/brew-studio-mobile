@@ -302,7 +302,7 @@ fun ShareCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 SpecItem("Método", methodValue)
-                SpecItem("Ratio", "1:$ratio")
+                SpecItem("Proporción", "1:$ratio")
                 SpecItem("Café", "$coffee g")
                 SpecItem("Agua", "$water ml")
             }
@@ -313,8 +313,8 @@ fun ShareCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("🌡️ Temp: $tempValue°C", fontSize = 11.sp, color = TextSecundario, fontWeight = FontWeight.SemiBold)
-                Text("⚙️ Molienda: $clicksValue clicks", fontSize = 11.sp, color = TextSecundario, fontWeight = FontWeight.SemiBold)
+                Text("🌡️ Temperatura: $tempValue °C", fontSize = 11.sp, color = TextSecundario, fontWeight = FontWeight.SemiBold)
+                Text("⚙️ Molienda: $clicksValue clics", fontSize = 11.sp, color = TextSecundario, fontWeight = FontWeight.SemiBold)
             }
 
             // Attribution display

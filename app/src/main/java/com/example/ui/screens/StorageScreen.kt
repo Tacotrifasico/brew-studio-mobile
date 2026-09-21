@@ -2725,7 +2725,7 @@ fun AddingFormSelector(
                 "Molinos" -> {
                     var brand by remember { mutableStateOf("") }
                     var model by remember { mutableStateOf("") }
-                    var clickRange by remember { mutableStateOf("0 - 40 clicks") }
+                    var clickRange by remember { mutableStateOf("0–40 clics") }
                     var calibracion by remember { mutableStateOf("") }
 
                     FormHeaderWithBlob(
@@ -2752,8 +2752,8 @@ fun AddingFormSelector(
                         StyledOutlinedTextField(
                             value = clickRange,
                             onValueChange = { clickRange = it },
-                            label = "Rango de Clicks Operativo",
-                            placeholder = "ej. 12 - 28 clicks"
+                            label = "Rango operativo de clics",
+                            placeholder = "Ej. 12–28 clics"
                         )
                         StyledOutlinedTextField(
                             value = calibracion,
@@ -3280,7 +3280,7 @@ fun AddingFormSelector(
                             StyledOutlinedTextField(
                                 value = tempStr,
                                 onValueChange = { tempStr = it },
-                                label = "Temp (°C)",
+                                label = "Temperatura (°C)",
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.weight(1f)
                             )
@@ -3289,7 +3289,7 @@ fun AddingFormSelector(
                             value = grindSize,
                             onValueChange = { grindSize = it },
                             label = "Tamaño de Molienda",
-                            placeholder = "ej. Media fina (24 clicks)"
+                            placeholder = "Ej. media fina (24 clics)"
                         )
                         StyledOutlinedTextField(
                             value = notes,

@@ -470,7 +470,7 @@ fun BaristaCalcCard(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "RATIO (1:x)",
+                            text = "PROPORCIÓN (1:x)",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextSecundario,
@@ -838,7 +838,7 @@ fun BaristaCalcCard(
                 ) {
                     Icon(
                         imageVector = if (isCurrentRatioSaved) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Guardar Ratio en Calculadora",
+                        contentDescription = "Guardar proporción en Calculadora",
                         tint = if (isCurrentRatioSaved) Advertencia else TextSecundario
                     )
                 }

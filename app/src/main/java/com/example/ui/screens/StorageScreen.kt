@@ -54,6 +54,7 @@ import com.example.data.engine.IngredientSuggestion
 import com.example.ui.components.*
 import com.example.data.engine.IngredientSuggestionEngine
 import com.example.data.engine.RecipeDraft
+import com.example.data.engine.RecipeDraftValidator
 import com.example.data.engine.RecipeIngredientInput
 import com.example.data.engine.RecipeStepInput
 import com.example.data.engine.RecipeTextParser
@@ -2834,6 +2835,7 @@ fun AddingFormSelector(
                             )
                         }
                     }
+                    val recipeValidationMessage = RecipeDraftValidator.message(name, ingredientsList, stepsList)
 
                     val suggestionIndex = remember(state.recipesList, state.beansList) {
                         IngredientSuggestionEngine.buildIndex(state.recipesList, beans = state.beansList)
@@ -3010,7 +3012,7 @@ fun AddingFormSelector(
                                         },
                                         label = "Cantidad",
                                         placeholder = "ej. 30",
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
                                         modifier = Modifier.weight(1f)
                                     )
 
@@ -3146,9 +3148,9 @@ fun AddingFormSelector(
                         StyledPrimaryButton(
                             text = if (isSaving) "Guardando…" else if (isEditingExisting) "Guardar" else "Guardar Receta",
                             icon = Icons.Default.Check,
-                            enabled = name.isNotBlank() && !isSaving,
+                            enabled = recipeValidationMessage == null && !isSaving,
                             onClick = {
-                                if (name.isNotBlank() && !isSaving) {
+                                if (recipeValidationMessage == null && !isSaving) {
                                     isSaving = true
                                     val ingSummary = ingredientsList
                                         .filter { it.name.isNotBlank() }
@@ -3178,6 +3180,7 @@ fun AddingFormSelector(
                                         tags = tagsText,
                                         isFavorite = isFavorite,
                                         ingredientsList = ingredientsList.filter { it.name.isNotBlank() },
+                                        stepsList = stepsList.filter { it.instruction.isNotBlank() },
                                         recipeId = if (isEditingExisting) initialDraft?.id else null,
                                         sourceRecipeId = initialDraft?.sourceRecipeId,
                                         onCompleted = { success ->
@@ -3188,6 +3191,15 @@ fun AddingFormSelector(
                                 }
                             }
                         )
+
+                        if (recipeValidationMessage != null) {
+                            Text(
+                                text = recipeValidationMessage,
+                                color = Advertencia,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
 
                         StyledSecondaryButton(
                             text = "Cancelar",

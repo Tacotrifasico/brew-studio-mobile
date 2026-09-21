@@ -27,6 +27,26 @@ data class RecipeDraft(
     val isFavorite: Boolean = false
 )
 
+object RecipeDraftValidator {
+    fun message(
+        name: String,
+        ingredients: List<RecipeIngredientInput>,
+        steps: List<RecipeStepInput>
+    ): String? {
+        if (name.trim().isEmpty()) return "Escribe un nombre para la receta."
+        if (ingredients.isEmpty()) return "Agrega por lo menos un ingrediente."
+        if (ingredients.any { it.name.trim().isEmpty() }) return "Todos los ingredientes necesitan un nombre."
+        if (ingredients.any { ingredient ->
+                val amount = ingredient.amount.trim().replace(',', '.').toFloatOrNull()
+                amount == null || !amount.isFinite() || amount <= 0f
+            }
+        ) return "Cada ingrediente necesita una cantidad mayor a 0."
+        if (steps.isEmpty()) return "Agrega por lo menos un paso de preparación."
+        if (steps.any { it.instruction.trim().isEmpty() }) return "Todos los pasos necesitan una instrucción."
+        return null
+    }
+}
+
 object RecipeTextParser {
 
     fun parse(rawText: String): RecipeDraft {

@@ -5,10 +5,41 @@ import com.example.data.database.Recipe
 import com.example.data.database.RecipeIngredient
 import com.example.data.engine.IngredientSuggestionEngine
 import com.example.data.engine.RecipeTextParser
+import com.example.data.engine.RecipeDraftValidator
+import com.example.data.engine.RecipeIngredientInput
+import com.example.data.engine.RecipeStepInput
 import org.junit.Assert.*
 import org.junit.Test
 
 class RecipeModuleTest {
+
+    @Test
+    fun recipeDraftValidationRejectsInvalidAmountsAndIncompleteRows() {
+        val validSteps = listOf(RecipeStepInput(instruction = "Verter agua"))
+        assertEquals(
+            "Cada ingrediente necesita una cantidad mayor a 0.",
+            RecipeDraftValidator.message(
+                "V60",
+                listOf(RecipeIngredientInput(name = "Café", amount = "0", unit = "G")),
+                validSteps
+            )
+        )
+        assertEquals(
+            "Todos los pasos necesitan una instrucción.",
+            RecipeDraftValidator.message(
+                "V60",
+                listOf(RecipeIngredientInput(name = "Café", amount = "15,5", unit = "G")),
+                listOf(RecipeStepInput(instruction = ""))
+            )
+        )
+        assertNull(
+            RecipeDraftValidator.message(
+                "V60",
+                listOf(RecipeIngredientInput(name = "Café", amount = "15,5", unit = "G")),
+                validSteps
+            )
+        )
+    }
 
     @Test
     fun testRecipeTextParser_basicParsing() {

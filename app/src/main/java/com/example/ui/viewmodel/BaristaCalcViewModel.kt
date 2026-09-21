@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.catalog.BrewTechniqueCatalog
 import com.example.data.database.*
 import com.example.data.engine.RecipeIngredientInput
+import com.example.data.engine.RecipeDraftValidator
+import com.example.data.engine.RecipeStepInput
 import com.example.data.engine.CataDraftEncoding
 import com.example.data.remote.SessionManager
 import com.example.data.repository.BrewRepository
@@ -1888,10 +1890,16 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         tags: String = "",
         isFavorite: Boolean = false,
         ingredientsList: List<RecipeIngredientInput> = emptyList(),
+        stepsList: List<RecipeStepInput> = emptyList(),
         recipeId: String? = null,
         sourceRecipeId: String? = null,
         onCompleted: (Boolean) -> Unit = {}
     ) {
+        RecipeDraftValidator.message(name, ingredientsList, stepsList)?.let { message ->
+            showToast(message)
+            onCompleted(false)
+            return
+        }
         viewModelScope.launch {
             val existing = _state.value.recipesList.firstOrNull { it.id == recipeId }
             val source = _state.value.recipesList.firstOrNull { it.id == sourceRecipeId }

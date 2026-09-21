@@ -406,6 +406,24 @@ final class RecipeTechniqueRepositoryTests: XCTestCase {
         XCTAssertEqual(saved.ratio, 16)
     }
 
+    func testRecipeValidationRejectsInvalidAmountsAndDurations() throws {
+        var draft = RecipeDraftModel(
+            name: "V60",
+            ingredients: [.init(name: "Café", amount: 0, unit: "GRAMS")],
+            steps: [.init(instruction: "Verter", durationSeconds: 30)]
+        )
+        XCTAssertThrowsError(try RecipeDraftValidator.validate(draft)) {
+            XCTAssertEqual($0 as? RecipeDraftValidationError, .invalidIngredientAmount)
+        }
+        draft.ingredients[0].amount = 15
+        draft.steps[0].durationSeconds = 0
+        XCTAssertThrowsError(try RecipeDraftValidator.validate(draft)) {
+            XCTAssertEqual($0 as? RecipeDraftValidationError, .invalidStepDuration)
+        }
+        draft.steps[0].durationSeconds = nil
+        XCTAssertNoThrow(try RecipeDraftValidator.validate(draft))
+    }
+
     @MainActor func testTechniqueDuplicationCreatesIndependentStepIdentifiers() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext

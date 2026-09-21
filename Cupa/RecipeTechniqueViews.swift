@@ -445,6 +445,13 @@ private struct RecipeEditorView: View {
                     }.onDelete { draft.steps.remove(atOffsets: $0) }.onMove { draft.steps.move(fromOffsets: $0, toOffset: $1) }
                     Button { draft.steps.append(.init()) } label: { Label("Agregar paso", systemImage: "plus") }
                 }
+                if let validationMessage {
+                    Section {
+                        Label(validationMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(CupaTheme.terracottaText)
+                    }
+                }
             }
             .brewScrollableCanvas()
             .environment(\.editMode, .constant(.active))
@@ -459,7 +466,8 @@ private struct RecipeEditorView: View {
         }
     }
 
-    private var canSave: Bool { !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.ingredients.contains { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty } && draft.steps.contains { !$0.instruction.trimmingCharacters(in: .whitespaces).isEmpty } }
+    private var validationMessage: String? { RecipeDraftValidator.message(for: draft) }
+    private var canSave: Bool { validationMessage == nil }
     private func load() {
         guard !loaded else { return }; loaded = true
         if let initialDraft { draft = initialDraft; return }

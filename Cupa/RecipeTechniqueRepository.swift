@@ -15,6 +15,39 @@ struct RecipeDraftModel: Equatable, Codable {
     var ingredients: [RecipeIngredientDraft] = []; var steps: [RecipeStepDraft] = []
 }
 
+enum RecipeDraftValidationError: LocalizedError, Equatable {
+    case emptyName, missingIngredient, missingIngredientName, invalidIngredientAmount
+    case missingStep, missingStepInstruction, invalidStepDuration
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyName: "Escribe un nombre para la receta."
+        case .missingIngredient: "Agrega por lo menos un ingrediente."
+        case .missingIngredientName: "Todos los ingredientes necesitan un nombre."
+        case .invalidIngredientAmount: "Cada ingrediente necesita una cantidad mayor a 0."
+        case .missingStep: "Agrega por lo menos un paso de preparación."
+        case .missingStepInstruction: "Todos los pasos necesitan una instrucción."
+        case .invalidStepDuration: "La duración de cada paso debe ser mayor a 0 segundos."
+        }
+    }
+}
+
+enum RecipeDraftValidator {
+    static func validate(_ draft: RecipeDraftModel) throws {
+        if draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw RecipeDraftValidationError.emptyName }
+        if draft.ingredients.isEmpty { throw RecipeDraftValidationError.missingIngredient }
+        if draft.ingredients.contains(where: { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) { throw RecipeDraftValidationError.missingIngredientName }
+        if draft.ingredients.contains(where: { !$0.amount.isFinite || $0.amount <= 0 }) { throw RecipeDraftValidationError.invalidIngredientAmount }
+        if draft.steps.isEmpty { throw RecipeDraftValidationError.missingStep }
+        if draft.steps.contains(where: { $0.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) { throw RecipeDraftValidationError.missingStepInstruction }
+        if draft.steps.contains(where: { ($0.durationSeconds ?? 1) <= 0 }) { throw RecipeDraftValidationError.invalidStepDuration }
+    }
+
+    static func message(for draft: RecipeDraftModel) -> String? {
+        do { try validate(draft); return nil } catch { return error.localizedDescription }
+    }
+}
+
 enum RecipeTextParser {
     static func parse(_ rawText: String) -> RecipeDraftModel {
         let lines = rawText.components(separatedBy: .newlines)
@@ -228,6 +261,7 @@ final class RecipeTechniqueRepository {
     }
 
     @discardableResult func saveRecipe(_ draft: RecipeDraftModel) throws -> RecipeRecord {
+        try RecipeDraftValidator.validate(draft)
         let recipe = try recipe(id: draft.id) ?? RecipeRecord(
             context: context, id: draft.id, name: draft.name, recipeKind: draft.recipeKind,
             intention: draft.intention, suggestedMethodId: draft.suggestedMethodId,

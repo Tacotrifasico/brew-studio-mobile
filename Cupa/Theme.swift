@@ -67,6 +67,7 @@ extension UIColor {
 extension View {
     func brewScrollableCanvas() -> some View {
         scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.interactively)
             .background(CupaTheme.background)
             .brewKeyboardDismissToolbar()
     }

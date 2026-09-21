@@ -381,6 +381,21 @@ final class RecipeTechniqueRepositoryTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(TechniqueDraftModel.self, from: JSONEncoder().encode(technique)), technique)
     }
 
+    func testEditorDraftRecoveryIsIsolatedByAccount() throws {
+        let ownerA = UUID(); let ownerB = UUID()
+        let draftA = RecipeDraftModel(name: "Privada A", ingredients: [.init(name: "Café", amount: 18)], steps: [.init(instruction: "Preparar")])
+        let draftB = RecipeDraftModel(name: "Privada B", ingredients: [.init(name: "Agua", amount: 240)], steps: [.init(instruction: "Verter")])
+        var data = try XCTUnwrap(storingEditorDraft(draftA, ownerId: ownerA, in: nil))
+
+        XCTAssertEqual(scopedEditorDraft(from: data, ownerId: ownerA, as: RecipeDraftModel.self), draftA)
+        XCTAssertNil(scopedEditorDraft(from: data, ownerId: ownerB, as: RecipeDraftModel.self))
+
+        data = try XCTUnwrap(storingEditorDraft(draftB, ownerId: ownerB, in: data))
+        data = try XCTUnwrap(removingEditorDraft(ownerId: ownerB, from: data, as: RecipeDraftModel.self))
+        XCTAssertEqual(scopedEditorDraft(from: data, ownerId: ownerA, as: RecipeDraftModel.self), draftA)
+        XCTAssertNil(scopedEditorDraft(from: data, ownerId: ownerB, as: RecipeDraftModel.self))
+    }
+
     @MainActor func testTechniqueValidationRejectsWaterMismatchAndNormalizesRatio() throws {
         var draft = TechniqueDraftModel(name: "V60", doseGrams: 15, waterMl: 240, ratio: 99, temperatureC: 93, steps: [.init(title: "Bloom", durationSeconds: 30, waterAddedMl: 50)])
         XCTAssertThrowsError(try TechniqueDraftValidator.validate(draft)) { XCTAssertEqual($0 as? TechniqueDraftValidationError, .waterMismatch) }

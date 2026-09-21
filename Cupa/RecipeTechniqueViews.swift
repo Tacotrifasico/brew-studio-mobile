@@ -1,6 +1,28 @@
 import CoreData
 import SwiftUI
 
+struct ScopedEditorDraftStore<Payload: Codable>: Codable {
+    var drafts: [String: Payload] = [:]
+    static func key(for ownerId: UUID?) -> String { ownerId?.uuidString ?? "guest" }
+}
+
+func scopedEditorDraft<Payload: Codable>(from data: Data?, ownerId: UUID?, as _: Payload.Type = Payload.self) -> Payload? {
+    guard let data, let store = try? JSONDecoder().decode(ScopedEditorDraftStore<Payload>.self, from: data) else { return nil }
+    return store.drafts[ScopedEditorDraftStore<Payload>.key(for: ownerId)]
+}
+
+func storingEditorDraft<Payload: Codable>(_ payload: Payload, ownerId: UUID?, in data: Data?) -> Data? {
+    var store = data.flatMap { try? JSONDecoder().decode(ScopedEditorDraftStore<Payload>.self, from: $0) } ?? .init()
+    store.drafts[ScopedEditorDraftStore<Payload>.key(for: ownerId)] = payload
+    return try? JSONEncoder().encode(store)
+}
+
+func removingEditorDraft<Payload: Codable>(ownerId: UUID?, from data: Data?, as _: Payload.Type) -> Data? {
+    guard let data, var store = try? JSONDecoder().decode(ScopedEditorDraftStore<Payload>.self, from: data) else { return nil }
+    store.drafts.removeValue(forKey: ScopedEditorDraftStore<Payload>.key(for: ownerId))
+    return store.drafts.isEmpty ? nil : try? JSONEncoder().encode(store)
+}
+
 struct RecipeInventoryView: View {
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(
@@ -428,11 +450,11 @@ private struct RecipeEditorView: View {
             .environment(\.editMode, .constant(.active))
             .navigationTitle(recipe == nil ? "Nueva receta" : "Editar receta")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { storedDraft = nil; dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { clearStoredDraft(); dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button(isSaving ? "Guardando…" : "Guardar", action: save).disabled(!canSave || isSaving) }
             }
             .onAppear(perform: load)
-            .onChange(of: draft) { _, value in storedDraft = try? JSONEncoder().encode(value) }
+            .onChange(of: draft) { _, value in storedDraft = storingEditorDraft(value, ownerId: context.activeOwnerId, in: storedDraft) }
             .alert("No se pudo guardar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "") }
         }
     }
@@ -440,16 +462,17 @@ private struct RecipeEditorView: View {
     private var canSave: Bool { !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.ingredients.contains { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty } && draft.steps.contains { !$0.instruction.trimmingCharacters(in: .whitespaces).isEmpty } }
     private func load() {
         guard !loaded else { return }; loaded = true
-        if let storedDraft, let restored = try? JSONDecoder().decode(RecipeDraftModel.self, from: storedDraft), recipe == nil || restored.id == recipe?.id { draft = restored; return }
+        if let initialDraft { draft = initialDraft; return }
+        if let restored: RecipeDraftModel = scopedEditorDraft(from: storedDraft, ownerId: context.activeOwnerId), recipe == nil || restored.id == recipe?.id { draft = restored; return }
         if let recipe { do { draft = try RecipeTechniqueRepository(context: context).recipeDraft(for: recipe) } catch { errorMessage = error.localizedDescription } }
-        else if let initialDraft { draft = initialDraft }
     }
     private func save() {
         guard !isSaving else { return }
         isSaving = true
         if let selected = methods.first(where: { $0.id == draft.suggestedMethodId }) { draft.suggestedMethodName = selected.name }
-        do { _ = try RecipeTechniqueRepository(context: context).saveRecipe(draft); storedDraft = nil; dismiss() } catch { isSaving = false; errorMessage = error.localizedDescription }
+        do { _ = try RecipeTechniqueRepository(context: context).saveRecipe(draft); clearStoredDraft(); dismiss() } catch { isSaving = false; errorMessage = error.localizedDescription }
     }
+    private func clearStoredDraft() { storedDraft = removingEditorDraft(ownerId: context.activeOwnerId, from: storedDraft, as: RecipeDraftModel.self) }
 }
 
 private struct RecipeImporterView: View {
@@ -526,11 +549,11 @@ private struct TechniqueEditorView: View {
             .environment(\.editMode, .constant(.active))
             .navigationTitle(technique == nil ? "Nueva técnica" : "Editar técnica")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { storedDraft = nil; dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { clearStoredDraft(); dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button(isSaving ? "Guardando…" : "Guardar", action: save).disabled(!canSave || isSaving) }
             }
             .onAppear(perform: load)
-            .onChange(of: draft) { _, value in storedDraft = try? JSONEncoder().encode(value) }
+            .onChange(of: draft) { _, value in storedDraft = storingEditorDraft(value, ownerId: context.activeOwnerId, in: storedDraft) }
             .alert("No se pudo guardar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "") }
         }
     }
@@ -539,15 +562,16 @@ private struct TechniqueEditorView: View {
     private var canSave: Bool { validationMessage == nil }
     private func load() {
         guard !loaded else { return }; loaded = true
-        if let storedDraft, let restored = try? JSONDecoder().decode(TechniqueDraftModel.self, from: storedDraft), technique == nil || restored.id == technique?.id { draft = restored; return }
+        if let restored: TechniqueDraftModel = scopedEditorDraft(from: storedDraft, ownerId: context.activeOwnerId), technique == nil || restored.id == technique?.id { draft = restored; return }
         if let technique { do { draft = try RecipeTechniqueRepository(context: context).techniqueDraft(for: technique) } catch { errorMessage = error.localizedDescription } }
     }
     private func save() {
         guard !isSaving else { return }
         isSaving = true
         if let method = methods.first(where: { $0.id == draft.methodId }) { draft.methodName = method.name }
-        do { _ = try RecipeTechniqueRepository(context: context).saveTechnique(draft); storedDraft = nil; dismiss() } catch { isSaving = false; errorMessage = error.localizedDescription }
+        do { _ = try RecipeTechniqueRepository(context: context).saveTechnique(draft); clearStoredDraft(); dismiss() } catch { isSaving = false; errorMessage = error.localizedDescription }
     }
+    private func clearStoredDraft() { storedDraft = removingEditorDraft(ownerId: context.activeOwnerId, from: storedDraft, as: TechniqueDraftModel.self) }
     private func importRecipeQuantities() {
         guard let recipeId = draft.recipeId else { return }
         do {

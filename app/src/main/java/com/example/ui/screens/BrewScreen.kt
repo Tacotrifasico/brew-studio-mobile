@@ -814,6 +814,7 @@ fun CreateTechniqueFormView(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .imePadding()
                 .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .padding(bottom = 80.dp),

@@ -987,7 +987,7 @@ private fun TechniqueStorageEditorDialog(
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MainBackground) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Column(modifier = Modifier.fillMaxSize().imePadding().padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancelar edición") }
                     Text("Editar técnica", fontSize = 21.sp, fontWeight = FontWeight.Black, color = TextPrincipal)

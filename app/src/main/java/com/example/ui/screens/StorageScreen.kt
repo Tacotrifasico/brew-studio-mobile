@@ -103,6 +103,7 @@ private fun OwnerScopedStorageScreen(
     onNavigateToCommunity: () -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf("Café") }
+    var pendingDeletion by remember { mutableStateOf<StorageDeletionRequest?>(null) }
     
     // Bottom Sheet Triggers
     var activeBeanDetail by remember { mutableStateOf<Bean?>(null) }
@@ -378,7 +379,12 @@ private fun OwnerScopedStorageScreen(
                                 onBrewSelected = { viewModel.selectBeanForBrewing(bean) },
                                 onLabSelected = { viewModel.selectBeanForLab(bean) },
                                 onEditSelected = { activeBeanEdit = bean },
-                                onDelete = { viewModel.deleteBean(bean) }
+                                onDelete = {
+                                    pendingDeletion = StorageDeletionRequest(
+                                        title = "¿Eliminar ${bean.name}?",
+                                        message = "Se quitará este café del Almacén. Tus preparaciones históricas conservarán sus datos."
+                                    ) { viewModel.deleteBean(bean) }
+                                }
                             )
                         }
                     }
@@ -423,7 +429,12 @@ private fun OwnerScopedStorageScreen(
                                             color = TextSecundario.copy(alpha = 0.7f)
                                         )
                                     }
-                                    IconButton(onClick = { viewModel.deleteBean(bean) }) {
+                                    IconButton(onClick = {
+                                        pendingDeletion = StorageDeletionRequest(
+                                            title = "¿Eliminar ${bean.name}?",
+                                            message = "Se quitará este lote histórico del Almacén."
+                                        ) { viewModel.deleteBean(bean) }
+                                    }) {
                                         Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar", tint = Advertencia.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
                                     }
                                 }
@@ -442,7 +453,12 @@ private fun OwnerScopedStorageScreen(
                         }
                     } else {
                         items(state.grindersList) { grinder ->
-                            GrinderItemCard(grinder = grinder, onDelete = { viewModel.deleteGrinder(grinder) })
+                            GrinderItemCard(grinder = grinder, onDelete = {
+                                pendingDeletion = StorageDeletionRequest(
+                                    title = "¿Eliminar ${grinder.name}?",
+                                    message = "Se quitará este molino del Almacén. Las preparaciones históricas conservarán su nombre."
+                                ) { viewModel.deleteGrinder(grinder) }
+                            })
                         }
                     }
                 }
@@ -463,7 +479,12 @@ private fun OwnerScopedStorageScreen(
                                 eq = eq,
                                 isPinned = if (isMethodEquipment) (methodPref?.isPinnedToCalculator ?: false) else null,
                                 onTogglePinned = if (isMethodEquipment) { { viewModel.toggleMethodPinnedForInstrument(eq.id) } } else null,
-                                onDelete = { viewModel.deleteEquipment(eq) }
+                                onDelete = {
+                                    pendingDeletion = StorageDeletionRequest(
+                                        title = "¿Eliminar ${eq.name}?",
+                                        message = "Se quitará este equipo del Almacén. Las preparaciones históricas conservarán sus datos."
+                                    ) { viewModel.deleteEquipment(eq) }
+                                }
                             )
                         }
                     }
@@ -555,7 +576,12 @@ private fun OwnerScopedStorageScreen(
                             RecipeItemCard(
                                 recipe = recipe,
                                 onClick = { selectedRecipeForDetail = recipe },
-                                onDelete = { viewModel.deleteRecipe(recipe) },
+                                onDelete = {
+                                    pendingDeletion = StorageDeletionRequest(
+                                        title = "¿Eliminar ${recipe.name}?",
+                                        message = "Se quitará esta receta de la biblioteca; las preparaciones guardadas conservarán sus datos."
+                                    ) { viewModel.deleteRecipe(recipe) }
+                                },
                                 onFavoriteToggle = { viewModel.toggleRecipeFavorite(recipe) },
                                 onEdit = {
                                     importedRecipeDraft = recipe.toRecipeDraft(isClone = false)
@@ -615,7 +641,12 @@ private fun OwnerScopedStorageScreen(
                         }
                     } else {
                         items(state.cupsList) { cup ->
-                            CupItemCard(cup = cup, onDelete = { viewModel.deleteCup(cup) })
+                            CupItemCard(cup = cup, onDelete = {
+                                pendingDeletion = StorageDeletionRequest(
+                                    title = "¿Eliminar esta taza?",
+                                    message = "Se eliminará el registro histórico de esta taza catada."
+                                ) { viewModel.deleteCup(cup) }
+                            })
                         }
                     }
                 }
@@ -630,7 +661,12 @@ private fun OwnerScopedStorageScreen(
                         }
                     } else {
                         items(state.experimentsList) { exp ->
-                            ExperimentItemCard(exp = exp, onDelete = { viewModel.deleteExperiment(exp) })
+                            ExperimentItemCard(exp = exp, onDelete = {
+                                pendingDeletion = StorageDeletionRequest(
+                                    title = "¿Eliminar este experimento?",
+                                    message = "Se quitará esta hipótesis y sus resultados del historial local."
+                                ) { viewModel.deleteExperiment(exp) }
+                            })
                         }
                     }
                 }
@@ -790,7 +826,35 @@ private fun OwnerScopedStorageScreen(
             containerColor = SurfaceCard
         )
     }
+
+    pendingDeletion?.let { request ->
+        AlertDialog(
+            onDismissRequest = { pendingDeletion = null },
+            title = { Text(request.title) },
+            text = { Text(request.message) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        pendingDeletion = null
+                        request.onConfirm()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Advertencia)
+                ) { Text("Eliminar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeletion = null }) { Text("Cancelar") }
+            },
+            containerColor = SurfaceCard,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
 }
+
+private data class StorageDeletionRequest(
+    val title: String,
+    val message: String,
+    val onConfirm: () -> Unit
+)
 
 @Composable
 private fun TechniqueStorageItemCard(

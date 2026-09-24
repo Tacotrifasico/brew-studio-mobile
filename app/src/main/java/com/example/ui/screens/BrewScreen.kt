@@ -23,6 +23,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
@@ -514,28 +517,22 @@ private fun TechniqueStepsOverview(
 
 @Composable
 private fun PreparationStepMetrics(step: TechniqueStep) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(7.dp)
-    ) {
-        PreparationMetric(
-            label = "AGREGA AHORA",
-            value = "+${step.waterAddedMl} ml",
-            color = CafeCalidoOscuro,
-            modifier = Modifier.weight(1f)
-        )
-        PreparationMetric(
-            label = "META EN BÁSCULA",
-            value = "${step.waterAccumulatedMl} ml",
-            color = AcentoPrincipal,
-            modifier = Modifier.weight(1f)
-        )
-        PreparationMetric(
-            label = "TIEMPO",
-            value = formatStepDuration(step.durationSeconds),
-            color = AccentGold,
-            modifier = Modifier.weight(1f)
-        )
+    val largeText = LocalDensity.current.fontScale >= 1.3f
+    if (largeText) {
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            PreparationMetric("AGREGA AHORA", "+${step.waterAddedMl} ml", CafeCalidoOscuro, Modifier.fillMaxWidth())
+            PreparationMetric("META EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Modifier.fillMaxWidth())
+            PreparationMetric("TIEMPO", formatStepDuration(step.durationSeconds), AccentGold, Modifier.fillMaxWidth())
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            PreparationMetric("AGREGA AHORA", "+${step.waterAddedMl} ml", CafeCalidoOscuro, Modifier.weight(1f))
+            PreparationMetric("META EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Modifier.weight(1f))
+            PreparationMetric("TIEMPO", formatStepDuration(step.durationSeconds), AccentGold, Modifier.weight(1f))
+        }
     }
 }
 
@@ -548,6 +545,7 @@ private fun PreparationMetric(
 ) {
     Column(
         modifier = modifier
+            .semantics(mergeDescendants = true) { contentDescription = "$label: $value" }
             .clip(RoundedCornerShape(12.dp))
             .background(color.copy(alpha = 0.12f))
             .border(1.dp, color.copy(alpha = 0.28f), RoundedCornerShape(12.dp))

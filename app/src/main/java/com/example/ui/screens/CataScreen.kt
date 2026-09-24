@@ -483,7 +483,7 @@ fun CataScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
-                    enabled = !isSaving,
+                    enabled = !isSaving && state.savedCataCupId == null,
                     onClick = {
                         if (isSaving) return@Button
                         isSaving = true
@@ -509,7 +509,35 @@ fun CataScreen(
                 ) {
                     Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Guardar Taza")
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (isSaving) "Guardando…" else "Guardar taza catada", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        when {
+                            isSaving -> "Guardando…"
+                            state.savedCataCupId != null -> "Cata guardada"
+                            else -> "Guardar taza catada"
+                        },
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                if (state.savedCataCupId != null) {
+                    Button(
+                        onClick = {
+                            viewModel.beginNewCata()
+                            rating = 4.0f
+                            notesFoundInput = ""
+                            expectedNotesInput = "Frutas rojas, chocolate, panela"
+                            commentsInput = ""
+                        },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceCard, contentColor = TextPrincipal),
+                        border = borderStrokeSuave,
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.AddCircle, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Nueva cata", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 Button(

@@ -62,6 +62,67 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `each preparation owns one stable tasting identity until a new tasting begins`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+
+    val initialSession = viewModel.state.value.activePreparationSessionId
+    val initialCata = viewModel.state.value.activeCataId
+    viewModel.startTimer()
+
+    val brewing = viewModel.state.value
+    assertTrue(initialSession != brewing.activePreparationSessionId)
+    assertTrue(initialCata != brewing.activeCataId)
+    assertEquals(null, brewing.savedCataCupId)
+
+    val session = brewing.activePreparationSessionId
+    val cata = brewing.activeCataId
+    viewModel.beginNewCata()
+    val next = viewModel.state.value
+    assertTrue(session != next.activePreparationSessionId)
+    assertTrue(cata != next.activeCataId)
+    assertEquals(null, next.savedCataCupId)
+    assertEquals(0, next.cataMinutesElapsed)
+  }
+
+  @Test
+  fun `saving the same tasting twice creates only one cup and preserves real duration`() = runBlocking {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+    viewModel.startTimer()
+    viewModel.advanceStep()
+    val expectedDuration = viewModel.state.value.elapsedSeconds
+    val cupId = viewModel.state.value.activePreparationSessionId
+    viewModel.stopTimer()
+    val mainLooper = org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+
+    val firstResult = kotlinx.coroutines.CompletableDeferred<Boolean>()
+    viewModel.saveCup("Cacao", "Chocolate", 4f, "Balanceada") { firstResult.complete(it) }
+    repeat(100) {
+      mainLooper.idle()
+      if (firstResult.isCompleted) return@repeat
+      Thread.sleep(20)
+    }
+    assertTrue(withTimeout(5_000) { firstResult.await() })
+    repeat(100) {
+      mainLooper.idle()
+      if (viewModel.state.value.cupsList.any { it.id == cupId }) return@repeat
+      Thread.sleep(20)
+    }
+    assertTrue(viewModel.state.value.cupsList.any { it.id == cupId })
+
+    val secondResult = kotlinx.coroutines.CompletableDeferred<Boolean>()
+    viewModel.saveCup("Cacao", "Chocolate", 4f, "Balanceada") { secondResult.complete(it) }
+    mainLooper.idle()
+    assertTrue(withTimeout(2_000) { secondResult.await() })
+
+    val saved = viewModel.state.value.cupsList.filter { it.id == cupId }
+    assertEquals(1, saved.size)
+    assertEquals(expectedDuration, saved.single().executedDurationSeconds)
+    assertEquals(cupId, viewModel.state.value.savedCataCupId)
+  }
+
+  @Test
   fun `selected calculator favorite persists until it is removed`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val preferences = context.getSharedPreferences("favorite_test", Context.MODE_PRIVATE)

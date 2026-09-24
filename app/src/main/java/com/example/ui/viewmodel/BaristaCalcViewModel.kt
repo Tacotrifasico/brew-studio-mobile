@@ -239,6 +239,9 @@ data class BaristaCalcState(
     val timerRunning: Boolean = false,
     val timerPaused: Boolean = false,
     val preparationCompleted: Boolean = false,
+    val activePreparationSessionId: String = UUID.randomUUID().toString(),
+    val activeCataId: String = UUID.randomUUID().toString(),
+    val savedCataCupId: String? = null,
     val elapsedSeconds: Int = 0,
     val activeStepIndex: Int = 0,
     val activePrepSteps: List<TechniqueStep> = emptyList(),
@@ -363,6 +366,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     private var timerJob: Job? = null
     private var cataTimerJob: Job? = null
+    private var cataSaveInFlight = false
 
     init {
         viewModelScope.launch { repository.ensureCoreCatalog() }
@@ -871,7 +875,18 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             _state.update { it.copy(activePrepSteps = generateQuickSteps(it.activePrepMethod, it.activePrepWater)) }
         }
 
-        _state.update { it.copy(timerRunning = true, timerPaused = false, preparationCompleted = false, elapsedSeconds = 0, activeStepIndex = 0) }
+        _state.update {
+            it.copy(
+                timerRunning = true,
+                timerPaused = false,
+                preparationCompleted = false,
+                activePreparationSessionId = UUID.randomUUID().toString(),
+                activeCataId = UUID.randomUUID().toString(),
+                savedCataCupId = null,
+                elapsedSeconds = 0,
+                activeStepIndex = 0
+            )
+        }
 
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
@@ -1125,6 +1140,26 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         cataTimerJob?.cancel()
     }
 
+    fun beginNewCata() {
+        cataTimerJob?.cancel()
+        cataSaveInFlight = false
+        _state.update {
+            it.copy(
+                activePreparationSessionId = UUID.randomUUID().toString(),
+                activeCataId = UUID.randomUUID().toString(),
+                savedCataCupId = null,
+                cataMinutesElapsed = 0,
+                selectedFoundNotes = "",
+                cataTexture = "sedosa",
+                cataCleanliness = "alta",
+                cataPersistence = "media",
+                cataFreeNotes = "",
+                cataRating = 4.0f
+            )
+        }
+        startCataMinutesTimer()
+    }
+
     fun getCupLifeStateLabel(): String {
         val minutes = _state.value.cataMinutesElapsed
         return when {
@@ -1136,9 +1171,17 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun saveCup(notesFound: String, notesExpected: String, score: Float, comment: String, onCompleted: (Boolean) -> Unit = {}) {
+        if (_state.value.savedCataCupId != null) {
+            showToast("Esta cata ya está guardada. Pulsa Nueva cata para registrar otra.")
+            onCompleted(true)
+            return
+        }
+        if (cataSaveInFlight) return
+        cataSaveInFlight = true
         viewModelScope.launch {
             try {
-                val cupId = UUID.randomUUID().toString()
+                val cupId = _state.value.activePreparationSessionId
+                val cataId = _state.value.activeCataId
                 val methodName = _state.value.activePrepMethod.ifBlank { "Método manual" }
                 val cup = Cup(
                     id = cupId,
@@ -1151,7 +1194,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     executedRatio = _state.value.activePrepRatio,
                     executedTemperatureC = _state.value.activePrepTemp,
                     executedGrindSetting = _state.value.activePrepClicks.toString(),
-                    executedDurationSeconds = _state.value.elapsedSeconds.coerceAtLeast(120),
+                    executedDurationSeconds = _state.value.elapsedSeconds.coerceAtLeast(0),
                     cupLifeSeconds = _state.value.cataMinutesElapsed * 60,
                     cupLifeState = "FRESH",
                     rating = score.toDouble(),
@@ -1164,7 +1207,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     syncStatus = "PENDING_CREATE"
                 )
                 val cata = Cata(
-                    id = UUID.randomUUID().toString(),
+                    id = cataId,
                     cupId = cupId,
                     beanId = _state.value.activePrepBeanId,
                     activeFlavorFamily = "FRUITY",
@@ -1181,11 +1224,14 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     syncStatus = "PENDING_CREATE"
                 )
                 repository.insertCupWithCata(cup, cata)
+                _state.update { it.copy(savedCataCupId = cupId) }
                 showToast("Taza catada con éxito y registrada en el Almacén.")
                 onCompleted(true)
             } catch (_: Exception) {
                 showToast("No se pudo guardar la cata. Tus datos siguen en pantalla para reintentar.")
                 onCompleted(false)
+            } finally {
+                cataSaveInFlight = false
             }
         }
     }

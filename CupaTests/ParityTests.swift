@@ -670,7 +670,20 @@ final class PreparationModelTests: XCTestCase {
         for method in calculator.methods {
             let techniques = PreparationTechniqueCatalog.techniques(for: method)
             XCTAssertGreaterThanOrEqual(techniques.count, 3)
-            XCTAssertTrue(techniques.allSatisfy { PreparationTechniqueCatalog.steps(for: $0, waterMl: 347).last?.waterAccumulatedMl == 347 })
+            for water in [36, 240, 347, 800] {
+                for technique in techniques {
+                    let steps = PreparationTechniqueCatalog.steps(for: technique, waterMl: water)
+                    XCTAssertEqual(steps.reduce(0) { $0 + $1.waterAddedMl }, water)
+                    XCTAssertEqual(steps.last?.waterAccumulatedMl, water)
+                    var runningTotal = 0
+                    for step in steps {
+                        XCTAssertGreaterThanOrEqual(step.waterAddedMl, 0)
+                        XCTAssertGreaterThan(step.durationSeconds, 0)
+                        runningTotal += step.waterAddedMl
+                        XCTAssertEqual(step.waterAccumulatedMl, runningTotal, "La meta en báscula debe ser la suma real")
+                    }
+                }
+            }
         }
         model.start(); let tick = model.state.lastTickAt!
         model.synchronizeClock(now: tick.addingTimeInterval(150))

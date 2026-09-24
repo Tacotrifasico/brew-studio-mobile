@@ -172,11 +172,12 @@ struct PreparationExecutionView: View {
     }
 
     private func stepMetrics(_ step: PreparationStepSnapshot, timeLabel: String, timeValue: String) -> some View {
-        HStack(spacing: 7) {
-            PreparationMetricTile(label: "AGREGA AHORA", value: "+\(step.waterAddedMl) ml", color: CupaTheme.terracotta)
-            PreparationMetricTile(label: "META EN BÁSCULA", value: "\(step.waterAccumulatedMl) ml", color: CupaTheme.forest)
-            PreparationMetricTile(label: timeLabel, value: timeValue, color: CupaTheme.gold)
-        }
+        PreparationMetricsRow(
+            added: "+\(step.waterAddedMl) ml",
+            accumulated: "\(step.waterAccumulatedMl) ml",
+            timeLabel: timeLabel,
+            timeValue: timeValue
+        )
     }
 
     private func durationString(_ seconds: Int) -> String {
@@ -247,6 +248,30 @@ struct PreparationExecutionView: View {
         }
     }
     private func timeString(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }
+}
+
+private struct PreparationMetricsRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let added: String
+    let accumulated: String
+    let timeLabel: String
+    let timeValue: String
+
+    var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 7) { tiles }
+            } else {
+                HStack(spacing: 7) { tiles }
+            }
+        }
+    }
+
+    @ViewBuilder private var tiles: some View {
+        PreparationMetricTile(label: "AGREGA AHORA", value: added, color: CupaTheme.terracotta)
+        PreparationMetricTile(label: "META EN BÁSCULA", value: accumulated, color: CupaTheme.forest)
+        PreparationMetricTile(label: timeLabel, value: timeValue, color: CupaTheme.gold)
+    }
 }
 
 private struct PreparationMetricTile: View {

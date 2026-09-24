@@ -31,6 +31,13 @@ class BrewTechniqueCatalogTest {
                 val steps = BrewTechniqueCatalog.steps(technique, water)
                 assertEquals(water, steps.sumOf { it.waterAddedMl })
                 assertEquals(water, steps.last().waterAccumulatedMl)
+                var runningTotal = 0
+                steps.forEach { step ->
+                    assertTrue("El agua agregada nunca puede ser negativa", step.waterAddedMl >= 0)
+                    assertTrue("Cada paso necesita tiempo visible", step.durationSeconds > 0)
+                    runningTotal += step.waterAddedMl
+                    assertEquals("La meta en báscula debe ser la suma real", runningTotal, step.waterAccumulatedMl)
+                }
             }
         }
     }

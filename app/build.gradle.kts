@@ -128,3 +128,11 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+// Permite que las pruebas locales usen un directorio temporal dentro de
+// entornos aislados (Robolectric crea allí su archivo de bloqueo).
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+  providers.gradleProperty("testUserHome").orNull?.let { safeHome ->
+    systemProperty("user.home", safeHome)
+  }
+}

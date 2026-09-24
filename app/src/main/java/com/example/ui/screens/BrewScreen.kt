@@ -103,7 +103,7 @@ fun BrewScreen(
                 )
             }
 
-            if (!state.timerRunning) {
+            if (!state.timerRunning && !state.preparationCompleted) {
                 Button(
                     onClick = { isCreatingCustom = !isCreatingCustom },
                     colors = ButtonDefaults.buttonColors(containerColor = if (isCreatingCustom) Advertencia else AcentoPrincipal),
@@ -128,13 +128,13 @@ fun BrewScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         AnimatedContent(
-            targetState = state.timerRunning,
+            targetState = state.timerRunning || state.preparationCompleted,
             transitionSpec = {
                 fadeIn() + slideInVertically() togetherWith fadeOut() + slideOutVertically()
             },
             label = "timerState"
-        ) { timerRunning ->
-            if (timerRunning) {
+        ) { showingExecution ->
+            if (showingExecution) {
                 // ACTIVE EXTRACTOR TIMER DISPLAY
                 ActiveBrewTimerView(viewModel = viewModel, state = state, onNavigateToCata = onNavigateToCata)
             } else if (isCreatingCustom) {
@@ -666,6 +666,7 @@ fun ActiveBrewTimerView(
                     ) {
                         IconButton(
                             onClick = { viewModel.previousStep() },
+                            enabled = !state.preparationCompleted && currentIndex > 0,
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(12.dp))
@@ -674,24 +675,40 @@ fun ActiveBrewTimerView(
                             Icon(imageVector = Icons.Default.SkipPrevious, contentDescription = "Atras", tint = TextPrincipal)
                         }
 
-                        Button(
-                            onClick = {
-                                if (state.timerPaused) viewModel.resumeTimer() else viewModel.pauseTimer()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.height(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (state.timerPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                                contentDescription = if (state.timerPaused) "Reanudar" else "Pausar"
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (state.timerPaused) "Reanudar" else "Pausar", fontWeight = FontWeight.Bold)
+                        if (state.preparationCompleted) {
+                            Row(
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(AcentoPrincipal.copy(alpha = 0.14f))
+                                    .padding(horizontal = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = AcentoPrincipal)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Finalizada", color = AcentoPrincipal, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    if (state.timerPaused) viewModel.resumeTimer() else viewModel.pauseTimer()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (state.timerPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                    contentDescription = if (state.timerPaused) "Reanudar" else "Pausar"
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (state.timerPaused) "Reanudar" else "Pausar", fontWeight = FontWeight.Bold)
+                            }
                         }
 
                         IconButton(
                             onClick = { viewModel.advanceStep() },
+                            enabled = !state.preparationCompleted,
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(12.dp))
@@ -797,7 +814,7 @@ fun ActiveBrewTimerView(
             ) {
                 Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Completado")
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Completar extracción e ir a Cata", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(if (state.preparationCompleted) "Continuar a Cata" else "Completar extracción e ir a Cata", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -238,6 +238,7 @@ data class BaristaCalcState(
     // Live execution state
     val timerRunning: Boolean = false,
     val timerPaused: Boolean = false,
+    val preparationCompleted: Boolean = false,
     val elapsedSeconds: Int = 0,
     val activeStepIndex: Int = 0,
     val activePrepSteps: List<TechniqueStep> = emptyList(),
@@ -870,7 +871,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             _state.update { it.copy(activePrepSteps = generateQuickSteps(it.activePrepMethod, it.activePrepWater)) }
         }
 
-        _state.update { it.copy(timerRunning = true, timerPaused = false, elapsedSeconds = 0, activeStepIndex = 0) }
+        _state.update { it.copy(timerRunning = true, timerPaused = false, preparationCompleted = false, elapsedSeconds = 0, activeStepIndex = 0) }
 
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
@@ -890,7 +891,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                             showToast("¡Siguiente paso de preparación!")
                         } else {
                             // finished
-                            stopTimer()
+                            completePreparation()
                             showToast("¡Extracción de café completada con éxito!")
                         }
                     }
@@ -909,7 +910,12 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun stopTimer() {
         timerJob?.cancel()
-        _state.update { it.copy(timerRunning = false, timerPaused = false) }
+        _state.update { it.copy(timerRunning = false, timerPaused = false, preparationCompleted = false) }
+    }
+
+    private fun completePreparation() {
+        timerJob?.cancel()
+        _state.update { it.copy(timerRunning = false, timerPaused = false, preparationCompleted = true) }
     }
 
     fun advanceStep() {
@@ -921,7 +927,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 elapsedSeconds = prevStepsSum
             ) }
         } else {
-            stopTimer()
+            completePreparation()
         }
     }
 

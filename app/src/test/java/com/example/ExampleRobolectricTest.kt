@@ -43,6 +43,25 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `finishing the last guided step keeps the cata handoff visible`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+    viewModel.onMethodSelected("V60")
+    viewModel.startTimer()
+
+    val stepCount = viewModel.state.value.activePrepSteps.size
+    repeat(stepCount) { viewModel.advanceStep() }
+
+    val completed = viewModel.state.value
+    assertTrue(stepCount > 0)
+    assertEquals(false, completed.timerRunning)
+    assertEquals(true, completed.preparationCompleted)
+    assertEquals(stepCount - 1, completed.activeStepIndex)
+    assertEquals(completed.activePrepWater, completed.activePrepSteps.last().waterAccumulatedMl)
+    viewModel.stopTimer()
+  }
+
+  @Test
   fun `selected calculator favorite persists until it is removed`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val preferences = context.getSharedPreferences("favorite_test", Context.MODE_PRIVATE)

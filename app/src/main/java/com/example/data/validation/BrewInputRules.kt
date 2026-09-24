@@ -22,6 +22,15 @@ object BrewInputRules {
     fun validWater(value: Int) = value in MIN_WATER_ML..MAX_WATER_ML
     fun validTemperature(value: Int) = value in MIN_TEMPERATURE_C..MAX_TEMPERATURE_C
 
+    fun experimentError(method: String, coffee: Float?, water: Int?, temperature: Int?): String? {
+        if (method.isBlank()) return "Escribe el método o la hipótesis."
+        if (coffee == null || !validCoffee(coffee)) return "El café debe estar entre 1 y 100 g."
+        if (water == null || !validWater(water)) return "El agua debe estar entre 10 y 2000 ml."
+        if (temperature == null || !validTemperature(temperature)) return "La temperatura debe estar entre 60 y 100 °C."
+        if (!validRatio(water / coffee)) return "La proporción resultante debe estar entre 1:1 y 1:40."
+        return null
+    }
+
     fun techniqueError(
         name: String,
         coffee: Float?,

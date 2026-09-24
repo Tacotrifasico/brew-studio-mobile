@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.database.Technique
+import com.example.data.database.TechniqueStep
 import com.example.data.validation.BrewInputRules
 import com.example.ui.theme.*
 import com.example.ui.components.*
@@ -336,6 +337,13 @@ fun BrewSetupView(
             }
         }
 
+        if (state.activePrepSteps.isNotEmpty()) {
+            TechniqueStepsOverview(
+                techniqueName = state.activePrepTechniqueName,
+                steps = state.activePrepSteps
+            )
+        }
+
         // Techniques library section
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -447,6 +455,115 @@ fun BrewSetupView(
 }
 
 @Composable
+private fun TechniqueStepsOverview(
+    techniqueName: String,
+    steps: List<TechniqueStep>
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, BordeSuave, RoundedCornerShape(20.dp)),
+        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = "TÉCNICA COMPLETA · ${steps.size} PASOS",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.sp,
+                    color = AcentoPrincipal
+                )
+                Text(techniqueName, fontSize = 17.sp, fontWeight = FontWeight.Black, color = TextPrincipal)
+                Text(
+                    "Revísala antes de iniciar. “Meta en báscula” es el total que debe marcar al terminar cada paso.",
+                    fontSize = 11.sp,
+                    color = TextSecundario,
+                    lineHeight = 15.sp
+                )
+            }
+            steps.forEachIndexed { index, step ->
+                if (index > 0) HorizontalDivider(color = BordeSuave.copy(alpha = 0.65f))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(AcentoPrincipal),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("${index + 1}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(step.title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                    }
+                    PreparationStepMetrics(step = step)
+                    if (step.stepNote.isNotBlank()) {
+                        Text(step.stepNote, fontSize = 11.sp, color = TextSecundario, lineHeight = 15.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreparationStepMetrics(step: TechniqueStep) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        PreparationMetric(
+            label = "AGREGA AHORA",
+            value = "+${step.waterAddedMl} ml",
+            color = CafeCalidoOscuro,
+            modifier = Modifier.weight(1f)
+        )
+        PreparationMetric(
+            label = "META EN BÁSCULA",
+            value = "${step.waterAccumulatedMl} ml",
+            color = AcentoPrincipal,
+            modifier = Modifier.weight(1f)
+        )
+        PreparationMetric(
+            label = "TIEMPO",
+            value = formatStepDuration(step.durationSeconds),
+            color = AccentGold,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun PreparationMetric(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(color.copy(alpha = 0.12f))
+            .border(1.dp, color.copy(alpha = 0.28f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 7.dp, vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(label, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, color = color, maxLines = 1)
+        Text(value, fontSize = 15.sp, fontWeight = FontWeight.Black, color = TextPrincipal, maxLines = 1)
+    }
+}
+
+private fun formatStepDuration(seconds: Int): String =
+    if (seconds < 60) "${seconds} s" else String.format(Locale.getDefault(), "%d:%02d", seconds / 60, seconds % 60)
+
+@Composable
 fun ActiveBrewTimerView(
     viewModel: BaristaCalcViewModel,
     state: com.example.ui.viewmodel.BaristaCalcState,
@@ -500,7 +617,7 @@ fun ActiveBrewTimerView(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Text(
-                        text = "Vaso actual: ${activeStep?.title ?: "Derrame de equilibrio"}",
+                        text = "AHORA · ${activeStep?.title ?: "Derrame de equilibrio"}",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrincipal
@@ -514,6 +631,10 @@ fun ActiveBrewTimerView(
                         color = TextSecundario,
                         textAlign = TextAlign.Center
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    activeStep?.let { PreparationStepMetrics(step = it) }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -632,27 +753,31 @@ fun ActiveBrewTimerView(
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = step.title,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isCurrent) TextPrincipal else if (isPast) TextSecundario else TextPrincipal.copy(alpha = 0.8f)
-                        )
-                        Text(
-                            text = "${step.durationSeconds} s • Agrega +${step.waterAddedMl} ml (total: ${step.waterAccumulatedMl} ml)",
-                            fontSize = 11.sp,
-                            color = TextSecundario
-                        )
-                    }
-                    if (isCurrent) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(AcentoPrincipal.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text("ACTIVO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = step.title,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isCurrent) TextPrincipal else if (isPast) TextSecundario else TextPrincipal.copy(alpha = 0.8f),
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isCurrent) {
+                                Text(
+                                    "ACTIVO",
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = AcentoPrincipal,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(AcentoPrincipal.copy(alpha = 0.15f))
+                                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                        PreparationStepMetrics(step = step)
+                        if (step.stepNote.isNotBlank()) {
+                            Text(step.stepNote, fontSize = 10.sp, color = TextSecundario, lineHeight = 14.sp)
                         }
                     }
                 }
@@ -793,11 +918,11 @@ fun CreateTechniqueFormView(
                     text = "Guardar y Seleccionar",
                     onClick = {
                         if (newModel.isNotBlank() || newBrand.isNotBlank()) {
-                            viewModel.addGrinder(newBrand, newModel, newClicks, newNotes) { createdInst ->
+                            viewModel.addGrinder(newBrand, newModel, newClicks, newNotes, onCreated = { createdInst ->
                                 selectedGrinderId = createdInst.id
                                 selectedGrinderName = createdInst.name
                                 showAddGrinderDialog = false
-                            }
+                            })
                         }
                     },
                     modifier = Modifier.fillMaxWidth()

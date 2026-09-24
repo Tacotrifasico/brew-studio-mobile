@@ -1745,33 +1745,39 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         _state.update { it.copy(pendingPinDialogInstrument = null) }
     }
 
-    fun addEquipment(name: String, type: String, notes: String) {
+    fun addEquipment(name: String, type: String, notes: String, onCompleted: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            val isMethodType = type.equals("BREWER_METHOD", ignoreCase = true) ||
-                    type.equals("BREW_METHOD", ignoreCase = true) ||
-                    type.contains("metodo", ignoreCase = true) ||
-                    type.contains("método", ignoreCase = true)
-            val normalizedType = if (isMethodType) "BREWER_METHOD" else type
-            val inst = Instrument(
-                name = name,
-                type = normalizedType,
-                notes = notes,
-                ownerUserId = activeOwnerId.value,
-                syncStatus = "PENDING_CREATE"
-            )
-            repository.insertInstrument(inst)
-            if (isMethodType) {
-                val bm = repository.getOrCreateBrewMethodForInstrument(name)
-                val pref = UserMethodPreference(
-                    methodId = bm.id,
-                    sourceInstrumentId = inst.id,
-                    isPinnedToCalculator = true,
-                    isActive = true
+            try {
+                val isMethodType = type.equals("BREWER_METHOD", ignoreCase = true) ||
+                        type.equals("BREW_METHOD", ignoreCase = true) ||
+                        type.contains("metodo", ignoreCase = true) ||
+                        type.contains("método", ignoreCase = true)
+                val normalizedType = if (isMethodType) "BREWER_METHOD" else type
+                val inst = Instrument(
+                    name = name.trim(),
+                    type = normalizedType,
+                    notes = notes,
+                    ownerUserId = activeOwnerId.value,
+                    syncStatus = "PENDING_CREATE"
                 )
-                repository.insertUserMethodPreference(pref)
-                createStarterTechniquesFor(bm, bm.defaultRatio)
+                repository.insertInstrument(inst)
+                if (isMethodType) {
+                    val bm = repository.getOrCreateBrewMethodForInstrument(name.trim())
+                    val pref = UserMethodPreference(
+                        methodId = bm.id,
+                        sourceInstrumentId = inst.id,
+                        isPinnedToCalculator = true,
+                        isActive = true
+                    )
+                    repository.insertUserMethodPreference(pref)
+                    createStarterTechniquesFor(bm, bm.defaultRatio)
+                }
+                showToast("Equipo / Método '${name.trim()}' registrado en el Almacén.")
+                onCompleted(true)
+            } catch (_: Exception) {
+                showToast("No se pudo guardar el equipo. Tus datos siguen en pantalla para reintentar.")
+                onCompleted(false)
             }
-            showToast("Equipo / Método '$name' registrado en el Almacén.")
         }
     }
 
@@ -1856,20 +1862,26 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun addGrinder(brand: String, model: String, clicks: String, calibracion: String, onCreated: ((Instrument) -> Unit)? = null) {
+    fun addGrinder(brand: String, model: String, clicks: String, calibracion: String, onCreated: ((Instrument) -> Unit)? = null, onCompleted: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            val inst = Instrument(
-                name = "$brand $model".trim(),
-                type = "GRINDER",
-                brand = brand,
-                model = model,
-                notes = calibracion,
-                ownerUserId = activeOwnerId.value,
-                syncStatus = "PENDING_CREATE"
-            )
-            repository.insertInstrument(inst)
-            showToast("Molino '$model' guardado.")
-            onCreated?.invoke(inst)
+            try {
+                val inst = Instrument(
+                    name = "$brand $model".trim(),
+                    type = "GRINDER",
+                    brand = brand.trim(),
+                    model = model.trim(),
+                    notes = calibracion,
+                    ownerUserId = activeOwnerId.value,
+                    syncStatus = "PENDING_CREATE"
+                )
+                repository.insertInstrument(inst)
+                showToast("Molino '${model.trim()}' guardado.")
+                onCreated?.invoke(inst)
+                onCompleted(true)
+            } catch (_: Exception) {
+                showToast("No se pudo guardar el molino. Tus datos siguen en pantalla para reintentar.")
+                onCompleted(false)
+            }
         }
     }
 
@@ -1966,25 +1978,37 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         ratio: Float,
         temp: Int,
         grindSize: String,
-        notes: String
+        notes: String,
+        onCompleted: (Boolean) -> Unit = {}
     ) {
+        BrewInputRules.experimentError(methodName, coffeeGrams, waterMl, temp)?.let { message ->
+            showToast(message)
+            onCompleted(false)
+            return
+        }
         viewModelScope.launch {
-            val exp = LabExperiment(
-                coffeeGrams = coffeeGrams,
-                waterMl = waterMl,
-                ratio = ratio,
-                temperatureC = temp,
-                grindSetting = grindSize,
-                beanFreshnessDays = 7,
-                estimatedTimeSeconds = 180,
-                experimentHypothesis = "Prueba de extracción",
-                experimentNotes = notes,
-                conclusionNotes = "",
-                ownerUserId = activeOwnerId.value,
-                syncStatus = "PENDING_CREATE"
-            )
-            repository.insertExperiment(exp)
-            showToast("Experimento archivado en el Almacén.")
+            try {
+                val exp = LabExperiment(
+                    coffeeGrams = coffeeGrams,
+                    waterMl = waterMl,
+                    ratio = waterMl / coffeeGrams,
+                    temperatureC = temp,
+                    grindSetting = grindSize,
+                    beanFreshnessDays = 7,
+                    estimatedTimeSeconds = 180,
+                    experimentHypothesis = methodName.trim(),
+                    experimentNotes = notes,
+                    conclusionNotes = "",
+                    ownerUserId = activeOwnerId.value,
+                    syncStatus = "PENDING_CREATE"
+                )
+                repository.insertExperiment(exp)
+                showToast("Experimento archivado en el Almacén.")
+                onCompleted(true)
+            } catch (_: Exception) {
+                showToast("No se pudo guardar el experimento. Tus datos siguen en pantalla para reintentar.")
+                onCompleted(false)
+            }
         }
     }
 

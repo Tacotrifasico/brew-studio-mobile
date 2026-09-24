@@ -2812,10 +2812,12 @@ fun AddingFormSelector(
         ) {
             when (category) {
                 "Molinos" -> {
+                    var isSaving by remember { mutableStateOf(false) }
                     var brand by remember { mutableStateOf("") }
                     var model by remember { mutableStateOf("") }
                     var clickRange by remember { mutableStateOf("0–40 clics") }
                     var calibracion by remember { mutableStateOf("") }
+                    val validationMessage = if (model.isBlank()) "Escribe el modelo del molino." else null
 
                     FormHeaderWithBlob(
                         title = "Registrar Molino del Taller",
@@ -2854,15 +2856,20 @@ fun AddingFormSelector(
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         StyledPrimaryButton(
-                            text = "Archivar Molino",
+                            text = if (isSaving) "Guardando…" else "Archivar Molino",
                             icon = Icons.Default.Check,
+                            enabled = validationMessage == null && !isSaving,
                             onClick = {
-                                if (model.isNotBlank()) {
-                                    viewModel.addGrinder(brand, model, clickRange, calibracion)
-                                    onCompleted()
+                                if (validationMessage == null && !isSaving) {
+                                    isSaving = true
+                                    viewModel.addGrinder(brand, model, clickRange, calibracion, onCompleted = { success ->
+                                        isSaving = false
+                                        if (success) onCompleted()
+                                    })
                                 }
                             }
                         )
+                        validationMessage?.let { Text(it, color = Advertencia, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
                         StyledSecondaryButton(
                             text = "Cancelar",
                             onClick = onCompleted
@@ -3272,10 +3279,12 @@ fun AddingFormSelector(
                     }
                 }
                 "Tazas" -> {
+                    var isSaving by remember { mutableStateOf(false) }
                     var beanName by remember { mutableStateOf("") }
                     var method by remember { mutableStateOf("V60") }
                     var foundNotes by remember { mutableStateOf("") }
                     var comment by remember { mutableStateOf("") }
+                    val validationMessage = if (beanName.isBlank()) "Escribe el nombre del café catado." else null
 
                     FormHeaderWithBlob(
                         title = "Archivar Taza Evaluada",
@@ -3317,20 +3326,26 @@ fun AddingFormSelector(
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         StyledPrimaryButton(
-                            text = "Archivar Taza",
+                            text = if (isSaving) "Guardando…" else "Archivar Taza",
                             icon = Icons.Default.Check,
+                            enabled = validationMessage == null && !isSaving,
                             onClick = {
-                                if (beanName.isNotBlank()) {
+                                if (validationMessage == null && !isSaving) {
+                                    isSaving = true
                                     viewModel.saveCup(
                                         notesFound = foundNotes,
                                         notesExpected = "",
                                         score = 4.5f,
-                                        comment = "Café: $beanName. Método: $method. $comment"
+                                        comment = "Café: $beanName. Método: $method. $comment",
+                                        onCompleted = { success ->
+                                            isSaving = false
+                                            if (success) onCompleted()
+                                        }
                                     )
-                                    onCompleted()
                                 }
                             }
                         )
+                        validationMessage?.let { Text(it, color = Advertencia, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
                         StyledSecondaryButton(
                             text = "Cancelar",
                             onClick = onCompleted
@@ -3338,12 +3353,17 @@ fun AddingFormSelector(
                     }
                 }
                 "Ciencia" -> {
+                    var isSaving by remember { mutableStateOf(false) }
                     var method by remember { mutableStateOf("V60") }
                     var coffeeStr by remember { mutableStateOf("15") }
                     var waterStr by remember { mutableStateOf("240") }
                     var tempStr by remember { mutableStateOf("93") }
                     var grindSize by remember { mutableStateOf("Media") }
                     var notes by remember { mutableStateOf("") }
+                    val coffeeValue = coffeeStr.replace(',', '.').toFloatOrNull()
+                    val waterValue = waterStr.toIntOrNull()
+                    val temperatureValue = tempStr.toIntOrNull()
+                    val validationMessage = BrewInputRules.experimentError(method, coffeeValue, waterValue, temperatureValue)
 
                     FormHeaderWithBlob(
                         title = "Archivar Experimento de Laboratorio",
@@ -3402,17 +3422,23 @@ fun AddingFormSelector(
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         StyledPrimaryButton(
-                            text = "Archivar Experimento",
+                            text = if (isSaving) "Guardando…" else "Archivar Experimento",
                             icon = Icons.Default.Check,
+                            enabled = validationMessage == null && !isSaving,
                             onClick = {
-                                val c = coffeeStr.toFloatOrNull() ?: 15f
-                                val w = waterStr.toIntOrNull() ?: 240
-                                val t = tempStr.toIntOrNull() ?: 93
-                                val r = if (c > 0) w / c else 16f
-                                viewModel.addExperiment(method, c, w, r, t, grindSize, notes)
-                                onCompleted()
+                                val c = coffeeValue
+                                val w = waterValue
+                                val t = temperatureValue
+                                if (validationMessage == null && c != null && w != null && t != null && !isSaving) {
+                                    isSaving = true
+                                    viewModel.addExperiment(method, c, w, w / c, t, grindSize, notes) { success ->
+                                        isSaving = false
+                                        if (success) onCompleted()
+                                    }
+                                }
                             }
                         )
+                        validationMessage?.let { Text(it, color = Advertencia, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
                         StyledSecondaryButton(
                             text = "Cancelar",
                             onClick = onCompleted
@@ -3420,9 +3446,11 @@ fun AddingFormSelector(
                     }
                 }
                 else -> { // "Equipos"
+                    var isSaving by remember { mutableStateOf(false) }
                     var name by remember { mutableStateOf("") }
                     var type by remember { mutableStateOf("método") }
                     var notes by remember { mutableStateOf("") }
+                    val validationMessage = if (name.isBlank()) "Escribe el nombre o la descripción del equipo." else null
 
                     FormHeaderWithBlob(
                         title = "Registrar Equipo de Extracción",
@@ -3467,15 +3495,20 @@ fun AddingFormSelector(
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         StyledPrimaryButton(
-                            text = "Archivar Equipo",
+                            text = if (isSaving) "Guardando…" else "Archivar Equipo",
                             icon = Icons.Default.Check,
+                            enabled = validationMessage == null && !isSaving,
                             onClick = {
-                                if (name.isNotBlank()) {
-                                    viewModel.addEquipment(name, type, notes)
-                                    onCompleted()
+                                if (validationMessage == null && !isSaving) {
+                                    isSaving = true
+                                    viewModel.addEquipment(name, type, notes) { success ->
+                                        isSaving = false
+                                        if (success) onCompleted()
+                                    }
                                 }
                             }
                         )
+                        validationMessage?.let { Text(it, color = Advertencia, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
                         StyledSecondaryButton(
                             text = "Cancelar",
                             onClick = onCompleted

@@ -6,6 +6,14 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class BrewInputRulesTest {
+    @Test
+    fun `experiment validation rejects silent fallback values`() {
+        assertEquals("El café debe estar entre 1 y 100 g.", BrewInputRules.experimentError("V60", null, 240, 93))
+        assertEquals("El agua debe estar entre 10 y 2000 ml.", BrewInputRules.experimentError("V60", 15f, 0, 93))
+        assertEquals("La temperatura debe estar entre 60 y 100 °C.", BrewInputRules.experimentError("V60", 15f, 240, 120))
+        assertNull(BrewInputRules.experimentError("V60", 15f, 240, 93))
+    }
+
     @Test fun validTechniqueRequiresConsistentSafeValues() {
         assertNull(BrewInputRules.techniqueError("V60 dulce", 15f, 93, listOf("Bloom", "Vertido"), listOf(30, 90), listOf(50, 190)))
     }

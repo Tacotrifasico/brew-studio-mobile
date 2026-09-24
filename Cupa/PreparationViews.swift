@@ -80,23 +80,107 @@ struct PreparationExecutionView: View {
                     .padding(.vertical, 8)
                     .background(CupaTheme.backgroundAlt.opacity(0.82))
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                if let step = model.activeStep {
-                    VStack(spacing: 8) {
-                        Text("PASO \(step.number) DE \(model.state.steps.count)").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
-                        Text(step.title).font(.title3.bold()).multilineTextAlignment(.center)
-                        HStack { Label("\(step.waterAddedMl) ml", systemImage: "drop"); Label("\(step.waterAccumulatedMl) ml total", systemImage: "sum") }.font(.caption)
-                        Text(step.gesture.replacingOccurrences(of: "_", with: " ").capitalized + " · " + step.intensity.capitalized).font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
-                        if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText).multilineTextAlignment(.center) }
-                        ProgressView(value: Double(min(model.stepElapsed, max(1, step.durationSeconds))), total: Double(max(1, step.durationSeconds))).tint(CupaTheme.terracotta)
-                    }
-                    .padding(12)
-                    .background(LinearGradient(colors: [CupaTheme.terracotta.opacity(0.12), CupaTheme.forest.opacity(0.08)], startPoint: .leading, endPoint: .trailing))
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(CupaTheme.border, lineWidth: 1) }
-                } else { Text("Selecciona una técnica para comenzar.").font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                if model.state.status == .ready {
+                    completeTechniqueOverview
+                } else if let step = model.activeStep {
+                    activeStepCard(step)
+                    executionSequence
+                } else {
+                    Text("Selecciona una técnica para comenzar.").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                }
                 controls
             }.frame(maxWidth: .infinity)
         }
+    }
+
+    private var completeTechniqueOverview: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("TÉCNICA COMPLETA · \(model.state.steps.count) PASOS")
+                    .font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.forestText)
+                Text("Revísala antes de iniciar")
+                    .font(.headline).foregroundStyle(CupaTheme.text)
+                Text("“Meta en báscula” es el total que debe marcar al terminar cada paso.")
+                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+            }
+            ForEach(Array(model.state.steps.enumerated()), id: \.element.id) { index, step in
+                if index > 0 { Divider().overlay(CupaTheme.border) }
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 9) {
+                        Text("\(index + 1)")
+                            .font(.caption.bold()).foregroundStyle(CupaTheme.onAccent)
+                            .frame(width: 28, height: 28)
+                            .background(CupaTheme.forest)
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        Text(step.title).font(.subheadline.bold()).foregroundStyle(CupaTheme.text)
+                    }
+                    stepMetrics(step, timeLabel: "TIEMPO", timeValue: durationString(step.durationSeconds))
+                    if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                }
+            }
+        }
+        .padding(14)
+        .background(CupaTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(CupaTheme.border, lineWidth: 1) }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Técnica completa con \(model.state.steps.count) pasos")
+    }
+
+    private func activeStepCard(_ step: PreparationStepSnapshot) -> some View {
+        VStack(spacing: 10) {
+            Text("PASO \(step.number) DE \(model.state.steps.count)").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
+            Text("AHORA · \(step.title)").font(.title3.bold()).multilineTextAlignment(.center)
+            stepMetrics(
+                step,
+                timeLabel: "QUEDAN",
+                timeValue: durationString(max(0, step.durationSeconds - model.stepElapsed))
+            )
+            Text(step.gesture.replacingOccurrences(of: "_", with: " ").capitalized + " · " + step.intensity.capitalized)
+                .font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
+            if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText).multilineTextAlignment(.center) }
+            ProgressView(value: Double(min(model.stepElapsed, max(1, step.durationSeconds))), total: Double(max(1, step.durationSeconds))).tint(CupaTheme.terracotta)
+        }
+        .padding(12)
+        .background(LinearGradient(colors: [CupaTheme.terracotta.opacity(0.12), CupaTheme.forest.opacity(0.08)], startPoint: .leading, endPoint: .trailing))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(CupaTheme.border, lineWidth: 1) }
+    }
+
+    private var executionSequence: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("SECUENCIA COMPLETA").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
+            ForEach(Array(model.state.steps.enumerated()), id: \.element.id) { index, step in
+                let isCurrent = index == model.state.activeStepIndex
+                let isPast = index < model.state.activeStepIndex
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 9) {
+                        Image(systemName: isPast ? "checkmark" : "\(index + 1).circle.fill")
+                            .foregroundStyle(isCurrent ? CupaTheme.terracottaText : isPast ? CupaTheme.forestText : CupaTheme.secondaryText)
+                        Text(step.title).font(.subheadline.bold()).foregroundStyle(CupaTheme.text)
+                        Spacer()
+                        if isCurrent { Text("ACTIVO").font(.caption2.bold()).foregroundStyle(CupaTheme.terracottaText) }
+                    }
+                    stepMetrics(step, timeLabel: "TIEMPO", timeValue: durationString(step.durationSeconds))
+                }
+                .padding(10)
+                .background(isCurrent ? CupaTheme.terracotta.opacity(0.10) : isPast ? CupaTheme.forest.opacity(0.07) : CupaTheme.backgroundAlt.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(isCurrent ? CupaTheme.terracotta : CupaTheme.border, lineWidth: isCurrent ? 1.5 : 1) }
+            }
+        }
+    }
+
+    private func stepMetrics(_ step: PreparationStepSnapshot, timeLabel: String, timeValue: String) -> some View {
+        HStack(spacing: 7) {
+            PreparationMetricTile(label: "AGREGA AHORA", value: "+\(step.waterAddedMl) ml", color: CupaTheme.terracotta)
+            PreparationMetricTile(label: "META EN BÁSCULA", value: "\(step.waterAccumulatedMl) ml", color: CupaTheme.forest)
+            PreparationMetricTile(label: timeLabel, value: timeValue, color: CupaTheme.gold)
+        }
+    }
+
+    private func durationString(_ seconds: Int) -> String {
+        seconds < 60 ? "\(seconds) s" : String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     @ViewBuilder private var controls: some View {
@@ -163,4 +247,24 @@ struct PreparationExecutionView: View {
         }
     }
     private func timeString(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }
+}
+
+private struct PreparationMetricTile: View {
+    let label: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(label).font(.system(size: 8, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.72).foregroundStyle(color)
+            Text(value).font(.subheadline.bold().monospacedDigit()).lineLimit(1).minimumScaleFactor(0.72).foregroundStyle(CupaTheme.text)
+        }
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .padding(.horizontal, 5).padding(.vertical, 5)
+        .background(color.opacity(0.11))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(color.opacity(0.28), lineWidth: 1) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label): \(value)")
+    }
 }

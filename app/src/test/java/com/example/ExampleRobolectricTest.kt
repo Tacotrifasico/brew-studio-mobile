@@ -151,9 +151,18 @@ class ExampleRobolectricTest {
     try {
       val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
       assertEquals("guest", withTimeout(2_000) { viewModel.state.first { it.ownerScopeKey == "guest" }.ownerScopeKey })
+      viewModel.startTimer()
+      val guestSessionId = viewModel.state.value.activePreparationSessionId
 
       session.saveSession("token-a", "owner-a", "a@example.com", "A", "a", null)
       assertEquals("owner-a", withTimeout(2_000) { viewModel.state.first { it.ownerScopeKey == "owner-a" }.ownerScopeKey })
+      val accountState = viewModel.state.value
+      assertEquals(false, accountState.timerRunning)
+      assertEquals(null, accountState.activePrepTechniqueId)
+      assertEquals(null, accountState.activePrepBeanId)
+      assertEquals(null, accountState.activePrepGrinderId)
+      assertEquals(null, accountState.savedCataCupId)
+      assertTrue(guestSessionId != accountState.activePreparationSessionId)
 
       session.clearSession()
       assertEquals("guest", withTimeout(2_000) { viewModel.state.first { it.ownerScopeKey == "guest" }.ownerScopeKey })

@@ -372,7 +372,46 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch { repository.ensureCoreCatalog() }
         viewModelScope.launch {
             activeOwnerId.collect { ownerId ->
-                _state.update { it.copy(ownerScopeKey = ownerId ?: "guest") }
+                val nextScopeKey = ownerId ?: "guest"
+                if (_state.value.ownerScopeKey == nextScopeKey) return@collect
+                timerJob?.cancel()
+                cataTimerJob?.cancel()
+                cataSaveInFlight = false
+                _state.update { current ->
+                    current.copy(
+                        ownerScopeKey = nextScopeKey,
+                        activePrepBean = "Sin grano asignado",
+                        activePrepBeanId = null,
+                        activePrepGrinder = "Sin molino asignado",
+                        activePrepGrinderId = null,
+                        activePrepTechniqueName = BrewTechniqueCatalog.firstTechniqueFor(current.method)?.name
+                            ?: "${current.method} Estándar",
+                        activePrepTechniqueId = null,
+                        activePrepMethod = current.method,
+                        activePrepMethodId = methodIdForName(current.method),
+                        activePrepCoffee = current.coffee,
+                        activePrepWater = current.water,
+                        activePrepRatio = current.ratio,
+                        activePrepSteps = generateQuickSteps(current.method, current.water),
+                        timerRunning = false,
+                        timerPaused = false,
+                        preparationCompleted = false,
+                        activePreparationSessionId = UUID.randomUUID().toString(),
+                        activeCataId = UUID.randomUUID().toString(),
+                        savedCataCupId = null,
+                        elapsedSeconds = 0,
+                        activeStepIndex = 0,
+                        cataMinutesElapsed = 0,
+                        selectedFoundNotes = "",
+                        cataFreeNotes = "",
+                        labRecipeId = null,
+                        labTechniqueId = null,
+                        labBean = "Sin grano asignado",
+                        labBeanId = null,
+                        labGrinder = "Sin molino asignado",
+                        labGrinderId = null
+                    )
+                }
             }
         }
 

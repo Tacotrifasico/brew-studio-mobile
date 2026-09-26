@@ -52,6 +52,7 @@ struct LabGoldenVerifier {
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
         verifySyncedTechniqueAggregateValidation()
+        await verifyAtomicTechniquePullRollback()
         await verifySafeSyncCheckpoint()
         await verifyConditionalUpdateContract()
         await verifyStaleWriteProtection()
@@ -79,6 +80,41 @@ struct LabGoldenVerifier {
         } catch SyncServiceError.invalidTechniqueAggregate { }
         catch { preconditionFailure("Error inesperado: \(error)") }
         context.rollback(); context.activeOwnerId = nil
+    }
+
+    @MainActor private static func verifyAtomicTechniquePullRollback() async {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let owner = UUID(); let techniqueId = UUID(); context.activeOwnerId = owner
+        let suite = "CupaAtomicTechniquePullVerifier.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite); context.activeOwnerId = nil }
+        let timestamp = "2026-09-25T20:00:00Z"
+        let remoteTechnique: [String: Any] = [
+            "id": techniqueId.uuidString, "user_id": owner.uuidString,
+            "name": "Técnica remota incompleta", "method_id": NSNull(), "method_name": "V60",
+            "recipe_id": NSNull(), "bean_id": NSNull(), "grinder_id": NSNull(),
+            "dose_grams": 15.0, "water_ml": 240, "ratio": 16.0, "temperature_c": 93,
+            "execution_mode": "guided", "grind_value": 24.0, "grind_description": "24 clics", "grind_unit": "clicks",
+            "notes": "", "description": "Debe llegar con sus pasos", "total_time_seconds": 120,
+            "visibility": "private", "is_shared": false,
+            "original_author_user_id": NSNull(), "original_author_name": NSNull(), "original_entity_id": NSNull(),
+            "root_entity_id": NSNull(), "imported_from_share_id": NSNull(), "copy_mode": "original",
+            "created_at": timestamp, "updated_at": timestamp, "version": 1, "deleted_at": NSNull()
+        ]
+        let transport = VerifierTechniqueAggregateTransport(techniqueRow: remoteTechnique, stepRows: [])
+        let coordinator = EntitySyncCoordinator(
+            context: context,
+            configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"),
+            transport: transport, defaults: defaults
+        )
+
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+
+        guard case .failed = coordinator.state else { preconditionFailure("El pull incompleto no debió completarse") }
+        let request = NSFetchRequest<TechniqueRecord>(entityName: "TechniqueRecord")
+        request.predicate = NSPredicate(format: "id == %@", techniqueId as CVarArg)
+        precondition((try! context.count(for: request)) == 0)
+        precondition(defaults.object(forKey: "sync.lastSuccessfulAt.v2.\(owner.uuidString.lowercased())") == nil)
+        precondition(transport.requests.filter { $0.httpMethod == "GET" }.count == CoreSyncSchema.descriptors.count)
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -948,5 +984,25 @@ private final class VerifierConflictTransport: NetworkTransport {
             body = Data("[]".utf8)
         }
         return (body, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
+}
+
+private final class VerifierTechniqueAggregateTransport: NetworkTransport {
+    let techniqueRow: [String: Any]; let stepRows: [[String: Any]]
+    var requests: [URLRequest] = []
+    init(techniqueRow: [String: Any], stepRows: [[String: Any]]) {
+        self.techniqueRow = techniqueRow; self.stepRows = stepRows
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        requests.append(request)
+        let rows: [[String: Any]]
+        switch request.url?.lastPathComponent {
+        case "techniques": rows = [techniqueRow]
+        case "technique_steps": rows = stepRows
+        default: rows = []
+        }
+        let data = try JSONSerialization.data(withJSONObject: rows)
+        return (data, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
     }
 }

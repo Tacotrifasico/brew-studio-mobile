@@ -9,12 +9,12 @@ import org.junit.Test
 
 class RemoteTechniqueImportMapperTest {
     @Test
-    fun `remote technique is normalized from its complete pours`() {
+    fun `complete consistent remote technique is imported`() {
         val mapped = RemoteTechniqueImportMapper.map(
-            remote = remoteTechnique(waterMl = 999, ratio = 30f),
+            remote = remoteTechnique(),
             remoteSteps = listOf(
-                remoteStep(order = 2, title = "Vertido", duration = 90, added = 190, target = 999),
-                remoteStep(order = 1, title = "Preinfusión", duration = 30, added = 50, target = 12)
+                remoteStep(order = 2, title = "Vertido", duration = 90, added = 190, target = 240),
+                remoteStep(order = 1, title = "Preinfusión", duration = 30, added = 50, target = 50)
             ),
             localId = "local-technique",
             ownerFallback = "owner"
@@ -35,6 +35,41 @@ class RemoteTechniqueImportMapperTest {
             RemoteTechniqueImportMapper.map(
                 remoteTechnique(),
                 listOf(remoteStep(order = 1, title = "", duration = 0, added = 240, target = 240)),
+                ownerFallback = "owner"
+            )
+        )
+    }
+
+    @Test
+    fun `remote technique with contradictory totals is rejected`() {
+        val validSteps = listOf(
+            remoteStep(order = 1, title = "Preinfusión", duration = 30, added = 50, target = 50),
+            remoteStep(order = 2, title = "Vertido", duration = 90, added = 190, target = 240)
+        )
+        assertNull(RemoteTechniqueImportMapper.map(remoteTechnique(waterMl = 999), validSteps, ownerFallback = "owner"))
+        assertNull(RemoteTechniqueImportMapper.map(remoteTechnique(ratio = 30f), validSteps, ownerFallback = "owner"))
+        assertNull(
+            RemoteTechniqueImportMapper.map(
+                remoteTechnique(),
+                validSteps.mapIndexed { index, step -> if (index == 1) step.copy(targetWaterMl = 999) else step },
+                ownerFallback = "owner"
+            )
+        )
+    }
+
+    @Test
+    fun `remote technique with missing or foreign step sequence is rejected`() {
+        assertNull(
+            RemoteTechniqueImportMapper.map(
+                remoteTechnique(),
+                listOf(remoteStep(order = 2, title = "Vertido", duration = 90, added = 240, target = 240)),
+                ownerFallback = "owner"
+            )
+        )
+        assertNull(
+            RemoteTechniqueImportMapper.map(
+                remoteTechnique(),
+                listOf(remoteStep(order = 1, title = "Vertido", duration = 90, added = 240, target = 240).copy(techniqueId = "otra-técnica")),
                 ownerFallback = "owner"
             )
         )

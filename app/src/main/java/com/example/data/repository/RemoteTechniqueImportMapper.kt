@@ -6,6 +6,7 @@ import com.example.data.remote.models.RemoteTechnique
 import com.example.data.remote.models.RemoteTechniqueStep
 import com.example.data.validation.BrewInputRules
 import java.util.UUID
+import kotlin.math.abs
 
 data class ImportedTechniqueAggregate(
     val technique: Technique,
@@ -22,6 +23,8 @@ object RemoteTechniqueImportMapper {
         val remoteId = remote.id ?: return null
         val methodId = remote.method?.takeIf { it.isNotBlank() } ?: return null
         val orderedSteps = remoteSteps.sortedBy { it.stepOrder }
+        if (orderedSteps.map { it.stepOrder } != (1..orderedSteps.size).toList()) return null
+        if (orderedSteps.any { it.techniqueId != remoteId }) return null
         val normalized = BrewInputRules.normalizeTechnique(
             name = remote.name,
             coffee = remote.coffeeGrams,
@@ -30,14 +33,18 @@ object RemoteTechniqueImportMapper {
             stepDurations = orderedSteps.map { it.durationSec },
             stepWaters = orderedSteps.map { it.waterAddMl }
         ) ?: return null
+        val declaredWater = remote.waterMl ?: return null
+        val declaredRatio = remote.ratio ?: return null
+        if (declaredWater != normalized.waterMl || abs(declaredRatio - normalized.ratio) >= 0.01f) return null
+        if (orderedSteps.map { it.targetWaterMl } != normalized.accumulatedWaterMl.map { it as Int? }) return null
 
         val technique = Technique(
             id = localId,
             name = remote.name.trim(),
             methodId = methodId,
             doseG = requireNotNull(remote.coffeeGrams),
-            waterMl = normalized.waterMl,
-            ratio = normalized.ratio,
+            waterMl = declaredWater,
+            ratio = declaredRatio,
             temperatureC = requireNotNull(remote.temperature),
             grindValue = remote.grindClicks?.toDoubleOrNull(),
             grindDescription = remote.grindClicks?.takeIf { it.isNotBlank() }?.let { "$it clics" },

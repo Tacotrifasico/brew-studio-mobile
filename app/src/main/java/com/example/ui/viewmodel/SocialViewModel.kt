@@ -66,7 +66,6 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
     
     private val authRemoteSource = AuthRemoteDataSource()
     private val socialRemoteSource = SocialRemoteDataSource()
-    private val recipeRemoteSource = RecipeRemoteDataSource()
     private val techniqueRemoteSource = TechniqueRemoteDataSource()
 
     val authRepo = AuthRepository(authRemoteSource, sessionManager)
@@ -82,8 +81,6 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         recipeDao = database.recipeDao(),
         techniqueDao = database.techniqueDao(),
         techniqueStepDao = database.techniqueStepDao(),
-        beanDao = database.beanDao(),
-        recipeRemoteSource = recipeRemoteSource,
         techniqueRemoteSource = techniqueRemoteSource
     )
 

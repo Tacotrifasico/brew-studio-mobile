@@ -2,7 +2,9 @@ package com.example.ui.screens
 
 /**
  * Mantiene honesta la interfaz mientras Axcis completa el backend.
- * Hoy SyncRepository sólo implementa subida y descarga de recetas y técnicas.
+ * Hoy SyncRepository sólo puede representar técnicas sin inventar datos.
+ * Las recetas actuales incluyen ingredientes y pasos que el contrato remoto
+ * heredado todavía no admite.
  */
 data class StoragePendingBreakdown(
     val retryableNow: Int,
@@ -12,13 +14,14 @@ data class StoragePendingBreakdown(
 fun storagePendingBreakdown(
     beans: Int,
     recipes: Int,
-    techniques: Int,
+    retryableTechniques: Int,
+    backendTechniques: Int,
     grinders: Int,
     equipment: Int,
     cups: Int,
     tastings: Int,
     experiments: Int
 ): StoragePendingBreakdown = StoragePendingBreakdown(
-    retryableNow = recipes + techniques,
-    awaitingBackend = beans + grinders + equipment + cups + tastings + experiments
+    retryableNow = retryableTechniques,
+    awaitingBackend = beans + recipes + backendTechniques + grinders + equipment + cups + tastings + experiments
 )

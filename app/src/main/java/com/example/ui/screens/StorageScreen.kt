@@ -58,6 +58,7 @@ import com.example.data.engine.RecipeDraftValidator
 import com.example.data.engine.RecipeIngredientInput
 import com.example.data.engine.RecipeStepInput
 import com.example.data.engine.RecipeTextParser
+import com.example.data.repository.AndroidSyncPolicy
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.BaristaCalcViewModel
 import com.example.ui.viewmodel.FreshnessResult
@@ -127,7 +128,12 @@ private fun OwnerScopedStorageScreen(
     val pendingBreakdown = storagePendingBreakdown(
         beans = state.beansList.count { it.syncStatus != "SYNCED" },
         recipes = state.recipesList.count { it.syncStatus != "SYNCED" },
-        techniques = state.techniquesList.count { !viewModel.isBuiltInTechnique(it.id) && it.syncStatus != "SYNCED" },
+        retryableTechniques = state.techniquesList.count {
+            !viewModel.isBuiltInTechnique(it.id) && AndroidSyncPolicy.canRetryTechnique(it.syncStatus, it.remoteId)
+        },
+        backendTechniques = state.techniquesList.count {
+            !viewModel.isBuiltInTechnique(it.id) && AndroidSyncPolicy.techniqueAwaitsBackend(it.syncStatus, it.remoteId)
+        },
         grinders = state.grindersList.count { it.syncStatus != "SYNCED" },
         equipment = state.equipmentList.count { it.syncStatus != "SYNCED" },
         cups = state.cupsList.count { it.syncStatus != "SYNCED" },
@@ -282,7 +288,7 @@ private fun OwnerScopedStorageScreen(
                         }
                         if (pendingSyncableCount > 0) {
                             Text(
-                                "Recetas y técnicas pueden reintentarse ahora; nunca se ocultan por un fallo de red.",
+                                "Las técnicas pueden reintentarse ahora; nunca se ocultan por un fallo de red.",
                                 fontSize = 9.sp,
                                 color = TextSecundario
                             )

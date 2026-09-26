@@ -90,6 +90,39 @@ class BrewAggregateRoomTest {
     }
 
     @Test
+    fun `shared recipe aggregate replaces ingredients and steps without stale children`() = runBlocking {
+        val recipeId = "99999999-9999-4999-8999-999999999999"
+        val recipe = Recipe(
+            id = recipeId,
+            name = "Receta compartida",
+            suggestedMethodId = "11111111-1111-4000-8000-000000000001",
+            ownerUserId = "owner-a",
+            syncStatus = "PENDING_CREATE"
+        )
+        database.recipeDao().replaceRecipeAggregate(
+            recipe,
+            listOf(
+                RecipeIngredient("ingredient-a", recipeId, "Café", 15f, "GRAMS", 0),
+                RecipeIngredient("ingredient-b", recipeId, "Agua", 240f, "MILLILITERS", 1)
+            ),
+            listOf(
+                RecipeStep("recipe-step-a", recipeId, "Preinfusionar", 1, 30),
+                RecipeStep("recipe-step-b", recipeId, "Completar vertido", 2, 90)
+            )
+        )
+
+        database.recipeDao().replaceRecipeAggregate(
+            recipe.copy(name = "Receta editada", syncStatus = "PENDING_UPDATE"),
+            listOf(RecipeIngredient("ingredient-new", recipeId, "Concentrado", 30f, "GRAMS", 0)),
+            listOf(RecipeStep("recipe-step-new", recipeId, "Mezclar", 1, 45))
+        )
+
+        assertEquals("Receta editada", database.recipeDao().getRecipeById(recipeId)?.name)
+        assertEquals(listOf("ingredient-new"), database.recipeIngredientDao().getIngredientsForRecipeSync(recipeId).map { it.id })
+        assertEquals(listOf("recipe-step-new"), database.recipeStepDao().getStepsForRecipeSync(recipeId).map { it.id })
+    }
+
+    @Test
     fun `prepared technique snapshot remains linked to its tasting`() = runBlocking {
         val techniqueId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
         val cupId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"

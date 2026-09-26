@@ -73,6 +73,9 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         remoteSource = socialRemoteSource,
         authRepo = authRepo,
         recipeDao = database.recipeDao(),
+        recipeIngredientDao = database.recipeIngredientDao(),
+        recipeStepDao = database.recipeStepDao(),
+        brewMethodDao = database.brewMethodDao(),
         techniqueDao = database.techniqueDao(),
         techniqueStepDao = database.techniqueStepDao()
     )
@@ -88,7 +91,7 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
     val domainAuthRepo = AuthRepositoryImpl(authRepo, sessionManager)
     val domainRecipeRepo = RecipeRepositoryImpl(database.recipeDao(), database.recipeIngredientDao(), database.recipeStepDao())
     val domainTechniqueRepo = TechniqueRepositoryImpl(database.techniqueDao(), database.techniqueStepDao())
-    val domainSocialRepo = SocialRepositoryImpl(socialRemoteSource)
+    val domainSocialRepo = SocialRepositoryImpl()
 
     val shareRecipeUseCase = ShareRecipeUseCase(domainAuthRepo, domainRecipeRepo, domainSocialRepo)
     val shareTechniqueUseCase = ShareTechniqueUseCase(domainAuthRepo, domainTechniqueRepo, domainSocialRepo)
@@ -371,11 +374,15 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch {
             try {
-                // Register in domain social repository first to ensure share payload is available
-                val brewShare = mapRemoteShareToBrewShare(share)
-                domainSocialRepo.publish(brewShare)
+                val brewShare = RemoteShareDomainMapper.map(share).getOrElse { error ->
+                    onResult(false, error.message ?: "La publicación está incompleta. No se creó ninguna copia.")
+                    return@launch
+                }
+                // Import/fork use cases need a local immutable snapshot. This must never
+                // re-publish or overwrite the remote share being copied.
+                domainSocialRepo.cache(brewShare)
 
-                val isRecipe = share.entityType == "recipe"
+                val isRecipe = brewShare.entityType == com.example.domain.model.ShareEntityType.RECIPE
                 val result = if (isRecipe) {
                     importRecipeShareUseCase(share.id).map { it.id }
                 } else {
@@ -408,10 +415,13 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch {
             try {
-                val brewShare = mapRemoteShareToBrewShare(share)
-                domainSocialRepo.publish(brewShare)
+                val brewShare = RemoteShareDomainMapper.map(share).getOrElse { error ->
+                    onResult(false, error.message ?: "La publicación está incompleta. No se creó ninguna variante.")
+                    return@launch
+                }
+                domainSocialRepo.cache(brewShare)
 
-                val isRecipe = share.entityType == "recipe"
+                val isRecipe = brewShare.entityType == com.example.domain.model.ShareEntityType.RECIPE
                 val result = if (isRecipe) {
                     forkRecipeShareUseCase(share.id).map { it.id }
                 } else {
@@ -435,76 +445,6 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
                 copyOperationGate.finish("FORK", share.id)
             }
         }
-    }
-
-    private fun mapRemoteShareToBrewShare(share: RemoteShare): com.example.domain.model.BrewShare {
-        val snap = share.payloadSnapshotJson
-        val isRecipe = share.entityType == "recipe"
-        val uid = authRepo.getUserId() ?: "local_user"
-
-        val origAuthorId = share.originalAuthorUserId ?: share.fromUserId
-        val origAuthorName = share.originalAuthorName ?: share.fromName ?: "Barista"
-        val origEntityId = share.originalEntityId ?: share.entityId
-
-        val attribution = com.example.domain.model.Attribution(
-            required = true,
-            mode = null,
-            originalAuthorUserId = origAuthorId,
-            originalAuthorName = origAuthorName,
-            originalEntityId = origEntityId
-        )
-
-        val payload = if (isRecipe) {
-            val domainRecipe = com.example.domain.model.DomainRecipe(
-                id = share.entityId,
-                ownerUserId = share.fromUserId,
-                name = share.name,
-                method = snap["method"] as? String ?: "V60",
-                ingredientsSummary = snap["ingredientsSummary"] as? String ?: "",
-                stepsSummary = snap["stepsSummary"] as? String ?: "",
-                tags = snap["tags"] as? String ?: "",
-                originalAuthorUserId = origAuthorId,
-                originalAuthorName = origAuthorName,
-                originalEntityId = origEntityId,
-                attribution = attribution
-            )
-            com.example.domain.model.SharedPayload.RecipePayload(domainRecipe)
-        } else {
-            val domainTech = com.example.domain.model.PreparationTechnique(
-                id = share.entityId,
-                ownerUserId = share.fromUserId,
-                name = share.name,
-                method = snap["method"] as? String ?: "V60",
-                coffeeGrams = (snap["coffeeGrams"] as? Number)?.toDouble() ?: (snap["doseG"] as? Number)?.toDouble() ?: 15.0,
-                waterMl = (snap["waterMl"] as? Number)?.toDouble() ?: 240.0,
-                grind = (snap["grind"] as? Number)?.toDouble() ?: (snap["grindValue"] as? Number)?.toDouble() ?: 18.0,
-                temperatureC = (snap["temperature"] as? Number)?.toDouble() ?: (snap["temperatureC"] as? Number)?.toDouble() ?: 93.0,
-                totalTimeSeconds = (snap["totalTimeSeconds"] as? Number)?.toInt() ?: 180,
-                executionMode = snap["executionMode"] as? String ?: "GUIDED",
-                executionSteps = emptyList(),
-                originalAuthorUserId = origAuthorId,
-                originalAuthorName = origAuthorName,
-                originalEntityId = origEntityId,
-                attribution = attribution
-            )
-            com.example.domain.model.SharedPayload.TechniquePayload(domainTech)
-        }
-
-        return com.example.domain.model.BrewShare(
-            id = share.id,
-            entityType = if (isRecipe) com.example.domain.model.ShareEntityType.RECIPE else com.example.domain.model.ShareEntityType.TECHNIQUE,
-            entityId = share.entityId,
-            name = share.name,
-            subtitle = share.subtitle,
-            fromUserId = share.fromUserId,
-            fromDisplayName = share.fromName ?: "Barista",
-            fromHandle = share.fromHandle,
-            targetUserId = share.targetUserId,
-            visibility = if (share.visibility == "DIRECT" || share.visibility == "direct") com.example.domain.model.ShareVisibility.DIRECT else com.example.domain.model.ShareVisibility.PUBLIC,
-            message = share.message,
-            attribution = attribution,
-            payload = payload
-        )
     }
 
     fun shareRecipeToFeed(recipe: Recipe, message: String, targetUserId: String? = null, visibility: String = "public", onResult: (Boolean, String) -> Unit) {

@@ -2,6 +2,9 @@ package com.example.data.repository
 
 import com.example.data.database.Recipe
 import com.example.data.database.RecipeDao
+import com.example.data.database.RecipeIngredientDao
+import com.example.data.database.RecipeStepDao
+import com.example.data.database.BrewMethodDao
 import com.example.data.database.Technique
 import com.example.data.database.TechniqueDao
 import com.example.data.database.TechniqueStep
@@ -16,6 +19,9 @@ class SocialRepository(
     private val remoteSource: SocialRemoteDataSource,
     private val authRepo: AuthRepository,
     private val recipeDao: RecipeDao,
+    private val recipeIngredientDao: RecipeIngredientDao,
+    private val recipeStepDao: RecipeStepDao,
+    private val brewMethodDao: BrewMethodDao,
     private val techniqueDao: TechniqueDao,
     private val techniqueStepDao: TechniqueStepDao
 ) {
@@ -54,16 +60,12 @@ class SocialRepository(
         val userName = authRepo.getCachedDisplayName()
         val userHandle = authRepo.getCachedHandle()
         val timestamp = com.example.data.database.currentIso8601()
-
-        val payloadMap: Map<String, Any> = mapOf(
-            "name" to localRecipe.name,
-            "recipeKind" to localRecipe.recipeKind,
-            "intention" to localRecipe.intention,
-            "suggestedMethodId" to (localRecipe.suggestedMethodId ?: ""),
-            "ingredientsSummary" to localRecipe.ingredientsSummary,
-            "stepsSummary" to localRecipe.stepsSummary,
-            "tags" to localRecipe.tags
-        )
+        val ingredients = recipeIngredientDao.getIngredientsForRecipeSync(localRecipe.id)
+        val steps = recipeStepDao.getStepsForRecipeSync(localRecipe.id)
+        val methodName = localRecipe.suggestedMethodId?.let { brewMethodDao.getMethodById(it)?.nameKey }
+            ?: localRecipe.legacyMethodName.orEmpty()
+        val payloadMap = SocialSnapshotFactory.recipe(localRecipe, ingredients, steps, methodName)
+            .getOrElse { return Result.failure(it) }
 
         val remoteShare = RemoteShare(
             id = UUID.randomUUID().toString(),
@@ -101,32 +103,10 @@ class SocialRepository(
         val userName = authRepo.getCachedDisplayName()
         val userHandle = authRepo.getCachedHandle()
         val timestamp = com.example.data.database.currentIso8601()
-
-        val stepsList = steps.map { step ->
-            mapOf(
-                "step_order" to step.stepNumber,
-                "title" to step.title,
-                "duration_sec" to step.durationSeconds,
-                "water_add_ml" to step.waterAddedMl,
-                "target_water_ml" to step.waterAccumulatedMl,
-                "gesture" to step.gesture,
-                "intensity" to step.intensity,
-                "note" to step.stepNote
-            )
-        }
-
-        val payloadMap = mapOf(
-            "name" to localTech.name,
-            "methodId" to localTech.methodId,
-            "doseG" to localTech.doseG,
-            "waterMl" to localTech.waterMl,
-            "ratio" to localTech.ratio,
-            "temperatureC" to localTech.temperatureC,
-            "grindValue" to (localTech.grindValue ?: 18.0),
-            "grindDescription" to (localTech.grindDescription ?: ""),
-            "notes" to localTech.notes,
-            "steps" to stepsList
-        )
+        val methodName = brewMethodDao.getMethodById(localTech.methodId)?.nameKey
+            ?: localTech.legacyMethodName.orEmpty()
+        val payloadMap = SocialSnapshotFactory.technique(localTech, steps, methodName)
+            .getOrElse { return Result.failure(it) }
 
         val remoteShare = RemoteShare(
             id = UUID.randomUUID().toString(),
@@ -160,7 +140,7 @@ class SocialRepository(
 
     suspend fun syncImportedShare(share: RemoteShare, localEntityId: String): Result<String> {
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para importar"))
-        val isRecipe = share.entityType == "recipe"
+        val isRecipe = share.entityType.equals("recipe", ignoreCase = true)
         val flowResult = remoteSource.importShare(share.id, isRecipe)
         flowResult.getOrNull()?.let { remoteId ->
             if (!markLocalCopySynced(localEntityId, remoteId, isRecipe, uid)) {
@@ -172,7 +152,7 @@ class SocialRepository(
 
     suspend fun syncForkedShare(share: RemoteShare, localEntityId: String): Result<String> {
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para crear una variante"))
-        val isRecipe = share.entityType == "recipe"
+        val isRecipe = share.entityType.equals("recipe", ignoreCase = true)
         val flowResult = remoteSource.forkShare(share.id, isRecipe)
         flowResult.getOrNull()?.let { remoteId ->
             if (!markLocalCopySynced(localEntityId, remoteId, isRecipe, uid)) {

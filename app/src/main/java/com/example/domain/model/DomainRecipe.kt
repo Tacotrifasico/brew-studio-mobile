@@ -20,6 +20,7 @@ data class DomainRecipe(
     val ownerUserId: String,
     val name: String,
     val method: String? = null,
+    val methodId: String? = null,
     val recipeKind: String = "BLACK_COFFEE",
     val intention: String = "",
     val ingredients: List<RecipeIngredient> = emptyList(),

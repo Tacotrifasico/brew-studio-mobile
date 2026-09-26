@@ -213,8 +213,23 @@ interface RecipeDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRecipeIngredients(ingredients: List<RecipeIngredient>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRecipeSteps(steps: List<RecipeStep>)
+
     @Query("DELETE FROM recipe_ingredients WHERE recipeId = :recipeId")
     suspend fun deleteRecipeIngredients(recipeId: String)
+
+    @Query("DELETE FROM recipe_steps WHERE recipeId = :recipeId")
+    suspend fun deleteRecipeSteps(recipeId: String)
+
+    @Transaction
+    suspend fun replaceRecipeAggregate(recipe: Recipe, ingredients: List<RecipeIngredient>, steps: List<RecipeStep>) {
+        insertRecipe(recipe)
+        deleteRecipeIngredients(recipe.id)
+        deleteRecipeSteps(recipe.id)
+        if (ingredients.isNotEmpty()) insertRecipeIngredients(ingredients.map { it.copy(recipeId = recipe.id) })
+        if (steps.isNotEmpty()) insertRecipeSteps(steps.map { it.copy(recipeId = recipe.id) })
+    }
 
     @Transaction
     suspend fun saveRecipeWithIngredients(recipe: Recipe, ingredients: List<RecipeIngredient>) {

@@ -34,6 +34,7 @@ class RecipeRepositoryImpl(
             name = recipe.name,
             recipeKind = recipe.recipeKind,
             intention = recipe.intention,
+            suggestedMethodId = recipe.methodId,
             ingredientsSummary = recipe.ingredientsSummary,
             stepsSummary = recipe.stepsSummary,
             tags = recipe.tags,
@@ -45,34 +46,26 @@ class RecipeRepositoryImpl(
             copyMode = recipe.attribution?.mode?.name ?: recipe.socialSource?.copyMode?.name ?: "ORIGINAL",
             syncStatus = "PENDING_CREATE"
         )
-        recipeDao.insertRecipe(roomRecipe)
-
-        if (recipe.ingredients.isNotEmpty()) {
-            val roomIngredients = recipe.ingredients.mapIndexed { idx, ing ->
-                RoomIngredient(
-                    id = ing.id,
-                    recipeId = recipe.id,
-                    name = ing.name,
-                    amount = ing.amount,
-                    unit = ing.unit,
-                    orderIndex = idx
-                )
-            }
-            ingredientDao.insertIngredients(roomIngredients)
+        val roomIngredients = recipe.ingredients.mapIndexed { idx, ing ->
+            RoomIngredient(
+                id = ing.id,
+                recipeId = recipe.id,
+                name = ing.name,
+                amount = ing.amount,
+                unit = ing.unit,
+                orderIndex = idx
+            )
         }
-
-        if (recipe.steps.isNotEmpty()) {
-            val roomSteps = recipe.steps.mapIndexed { idx, st ->
-                RoomStep(
-                    id = st.id,
-                    recipeId = recipe.id,
-                    instruction = st.instruction,
-                    stepNumber = st.stepNumber,
-                    durationSeconds = st.durationSeconds
-                )
-            }
-            stepDao.insertSteps(roomSteps)
+        val roomSteps = recipe.steps.map { st ->
+            RoomStep(
+                id = st.id,
+                recipeId = recipe.id,
+                instruction = st.instruction,
+                stepNumber = st.stepNumber,
+                durationSeconds = st.durationSeconds
+            )
         }
+        recipeDao.replaceRecipeAggregate(roomRecipe, roomIngredients, roomSteps)
     }
 
     private suspend fun roomToDomainSync(room: RoomRecipe): DomainRecipe {
@@ -116,6 +109,7 @@ class RecipeRepositoryImpl(
             ownerUserId = room.ownerUserId ?: "local_user",
             name = room.name,
             method = room.legacyMethodName,
+            methodId = room.suggestedMethodId,
             recipeKind = room.recipeKind,
             intention = room.intention,
             ingredients = ingredients,

@@ -13,6 +13,7 @@ Pendientes que bloquean declarar Android online:
 - Implementar borrado lógico y outbox para cafés, equipo, tazas, catas y experimentos. Hoy su eliminación local es inmediata porque el contrato Android aún no posee una cola de borrado para esas entidades.
 - Resolver envíos directos por alias y verificar muro, buzón, importación y variante contra las tablas canónicas de la rama iOS.
   - Hasta que exista esa RPC, el cliente identifica el campo como temporal, exige un UUID real y bloquea la publicación de recetas/técnicas que aún no tienen identidad remota. Compartir nunca debe cambiar por sí solo el `syncStatus` de la fórmula.
+  - Los snapshots sociales Android ya incluyen ingredientes/pasos reales de recetas y pasos/acumulados reales de técnicas. La importación rechaza snapshots parciales y guarda padre e hijos localmente en una transacción. Implementar las cuatro RPC de copia/variante según la sección **Contrato obligatorio de `payload_snapshot_json`** de `AXCIS_BACKEND_HANDOFF.md`; una RPC no puede confirmar éxito si sólo creó el padre.
 - Ejecutar el protocolo físico con dos cuentas y guardar UUID/capturas como evidencia.
 - Las técnicas se guardan en Room y su biblioteca canónica es **Almacén → Técnicas**; Preparar, Laboratorio y Comunidad deben escribir/importar en esa misma tabla.
 - `Cup.techniqueId` y `Cup.methodId` ya conservan la técnica y el método usados cuando la preparación proviene del Almacén; mantener esos UUID al mapear `cups` y `catas` al backend.

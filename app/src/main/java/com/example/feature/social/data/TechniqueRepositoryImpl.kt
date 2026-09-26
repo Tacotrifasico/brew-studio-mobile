@@ -47,25 +47,21 @@ class TechniqueRepositoryImpl(
             copyMode = technique.attribution?.mode?.name ?: technique.socialSource?.copyMode?.name ?: "ORIGINAL",
             syncStatus = "PENDING_CREATE"
         )
-        techniqueDao.insertTechnique(roomTech)
-
-        if (technique.executionSteps.isNotEmpty()) {
-            val roomSteps = technique.executionSteps.mapIndexed { idx, st ->
-                RoomStep(
-                    id = st.id,
-                    techniqueId = technique.id,
-                    stepNumber = st.stepNumber,
-                    title = st.title,
-                    durationSeconds = st.durationSeconds,
-                    waterAddedMl = st.waterAddedMl,
-                    waterAccumulatedMl = st.waterAccumulatedMl,
-                    intensity = st.intensity,
-                    gesture = st.gesture,
-                    stepNote = st.stepNote
-                )
-            }
-            stepDao.insertSteps(roomSteps)
+        val roomSteps = technique.executionSteps.map { st ->
+            RoomStep(
+                id = st.id,
+                techniqueId = technique.id,
+                stepNumber = st.stepNumber,
+                title = st.title,
+                durationSeconds = st.durationSeconds,
+                waterAddedMl = st.waterAddedMl,
+                waterAccumulatedMl = st.waterAccumulatedMl,
+                intensity = st.intensity,
+                gesture = st.gesture,
+                stepNote = st.stepNote
+            )
         }
+        techniqueDao.replaceTechniqueWithSteps(roomTech, roomSteps)
     }
 
     private suspend fun roomToDomainSync(room: RoomTechnique): PreparationTechnique {

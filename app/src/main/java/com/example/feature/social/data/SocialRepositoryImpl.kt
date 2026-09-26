@@ -1,7 +1,5 @@
 package com.example.feature.social.data
 
-import com.example.data.remote.SocialRemoteDataSource
-import com.example.data.remote.models.RemoteShare
 import com.example.domain.model.*
 import com.example.domain.repository.SocialRepository
 import kotlinx.coroutines.flow.Flow
@@ -9,9 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 
-class SocialRepositoryImpl(
-    private val remoteDataSource: SocialRemoteDataSource? = null
-) : SocialRepository {
+class SocialRepositoryImpl : SocialRepository {
 
     private val sharesState = MutableStateFlow<List<BrewShare>>(emptyList())
 
@@ -28,38 +24,16 @@ class SocialRepositoryImpl(
     }
 
     override suspend fun publish(share: BrewShare): Result<BrewShare> {
+        cache(share)
+        return Result.success(share)
+    }
+
+    /** Stages a snapshot for import/fork use cases without causing any network mutation. */
+    fun cache(share: BrewShare) {
         val current = sharesState.value.toMutableList()
         current.removeAll { it.id == share.id }
         current.add(0, share)
         sharesState.value = current
-
-        // Also publish to remote backend if available
-        remoteDataSource?.let { remote ->
-            try {
-                val remoteShare = RemoteShare(
-                    id = share.id,
-                    entityType = if (share.entityType == ShareEntityType.RECIPE) "recipe" else "technique",
-                    entityId = share.entityId,
-                    fromUserId = share.fromUserId,
-                    fromName = share.fromDisplayName,
-                    fromHandle = share.fromHandle,
-                    targetUserId = share.targetUserId,
-                    visibility = share.visibility.name,
-                    name = share.name,
-                    subtitle = share.subtitle,
-                    message = share.message,
-                    payloadSnapshotJson = emptyMap(),
-                    originalAuthorUserId = share.attribution.originalAuthorUserId,
-                    originalAuthorName = share.attribution.originalAuthorName,
-                    originalEntityId = share.attribution.originalEntityId,
-                    createdAt = "",
-                    updatedAt = ""
-                )
-                remote.shareEntity(remoteShare)
-            } catch (_: Exception) {}
-        }
-
-        return Result.success(share)
     }
 
     override suspend fun toggleLike(shareId: String, userId: String): Result<Boolean> {
@@ -74,11 +48,9 @@ class SocialRepositoryImpl(
         if (likes.contains(userId)) {
             likes.remove(userId)
             isLikedNow = false
-            remoteDataSource?.unlikeShare(shareId, userId)
         } else {
             likes.add(userId)
             isLikedNow = true
-            remoteDataSource?.likeShare(shareId, userId)
         }
 
         current[index] = targetShare.copy(likes = likes)
@@ -99,8 +71,6 @@ class SocialRepositoryImpl(
         val updatedShare = targetShare.copy(saves = saves)
         current[index] = updatedShare
         sharesState.value = current
-
-        remoteDataSource?.saveShare(shareId, currentUserId)
 
         return Result.success(updatedShare)
     }

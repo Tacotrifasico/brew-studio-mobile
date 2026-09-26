@@ -7,7 +7,8 @@ Pendientes que bloquean declarar Android online:
 - Configurar `.env` local con el mismo `SUPABASE_URL` y `SUPABASE_ANON_KEY` usados por Cupa Staging en iOS.
 - Implementar refresh token, `expires_at`, renovación previa a llamadas y almacenamiento cifrado en `SessionManager.kt`/Auth.
 - Mantener el logging HTTP sin cuerpos; nunca imprimir tokens.
-- Reemplazar las constantes provisionales de receta en `SyncRepository.kt` por datos reales y sincronizar ingredientes/pasos, cambios, borrados y conflictos.
+- Implementar el contrato canónico completo de recetas (`recipes`, `recipe_ingredients` y `recipe_steps`). `SyncRepository.kt` ya no sube recetas mediante el contrato heredado porque hacerlo perdería ingredientes/pasos y fabricaría cantidades; permanecen locales y pendientes hasta que el servidor pueda aceptar el agregado completo.
+- Completar técnicas más allá del alta segura actual. Android puede crear la técnica, reintentar únicamente los pasos faltantes e importar agregados remotos completos; actualizaciones, borrados lógicos y conflictos remotos siguen esperando endpoints/contrato de Axcis. Nunca marcar la técnica `SYNCED` si falta un paso o si agua, proporción, acumulados y duración no coinciden.
 - Ampliar `SyncRepository.kt` más allá de recetas y técnicas: `beans`, `instruments`/equipo, `cups`, `catas` y `lab_experiments` ya se guardan localmente con `PENDING_CREATE`/`PENDING_UPDATE`, pero todavía no tienen push/pull remoto en Android. No cambiar esos estados a `SYNCED` hasta recibir confirmación del servidor.
 - Implementar borrado lógico y outbox para cafés, equipo, tazas, catas y experimentos. Hoy su eliminación local es inmediata porque el contrato Android aún no posee una cola de borrado para esas entidades.
 - Resolver envíos directos por alias y verificar muro, buzón, importación y variante contra las tablas canónicas de la rama iOS.

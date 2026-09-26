@@ -137,59 +137,26 @@ class SyncRepository(
             if (pullTechsRes.isSuccess) {
                 val remoteTechs = pullTechsRes.getOrThrow()
                 val localTechs = techniqueDao.getAllTechniques().first().filter { OwnerScopeRules.isVisible(it.ownerUserId, uid) }
-                val defaultMethodUuid = "11111111-1111-4000-8000-000000000001"
 
                 for (remote in remoteTechs) {
                     val matchedLocal = localTechs.find { it.remoteId == remote.id }
                     if (matchedLocal == null && remote.id != null) {
-                        val newLocal = Technique(
-                            name = remote.name,
-                            methodId = remote.method ?: defaultMethodUuid,
-                            doseG = remote.coffeeGrams ?: 15f,
-                            waterMl = remote.waterMl ?: 240,
-                            ratio = remote.ratio ?: 16f,
-                            temperatureC = remote.temperature ?: 93,
-                            grindValue = remote.grindClicks?.toDoubleOrNull() ?: 18.0,
-                            grindDescription = remote.grindClicks?.let { "$it Clicks" } ?: "18 Clicks",
-                            notes = remote.notes ?: "",
-                            totalTimeSeconds = 180,
-                            ownerUserId = remote.ownerUserId ?: remote.userId ?: uid,
-                            ownerDisplayName = remote.ownerDisplayName,
-                            visibility = remote.visibility ?: "PRIVATE",
-                            isShared = remote.isShared ?: false,
-                            originalAuthorUserId = remote.originalAuthorUserId,
-                            originalAuthorName = remote.originalAuthorName,
-                            originalEntityId = remote.originalEntityId,
-                            importedFromShareId = remote.importedFromShareId,
-                            copyMode = remote.copyMode ?: "ORIGINAL",
-                            remoteId = remote.id,
-                            syncStatus = "SYNCED"
-                        )
-                        techniqueDao.insertTechnique(newLocal)
-
                         val stepsRes = techniqueRemoteSource.getTechniqueSteps(remote.id)
                         if (stepsRes.isSuccess) {
-                            val remoteSteps = stepsRes.getOrThrow()
-                            val localMappedSteps = remoteSteps.map { remoteStep ->
-                                TechniqueStep(
-                                    techniqueId = newLocal.id,
-                                    stepNumber = remoteStep.stepOrder,
-                                    title = remoteStep.title ?: "Paso",
-                                    durationSeconds = remoteStep.durationSec ?: 30,
-                                    waterAddedMl = remoteStep.waterAddMl ?: 50,
-                                    waterAccumulatedMl = remoteStep.targetWaterMl ?: 50,
-                                    intensity = remoteStep.intensity ?: "MEDIUM",
-                                    gesture = remoteStep.gesture ?: "CIRCULAR_POUR",
-                                    stepNote = remoteStep.note ?: "",
-                                    remoteId = remoteStep.id,
-                                    syncStatus = "SYNCED"
-                                )
+                            val aggregate = RemoteTechniqueImportMapper.map(
+                                remote = remote,
+                                remoteSteps = stepsRes.getOrThrow(),
+                                ownerFallback = uid
+                            )
+                            if (aggregate == null) {
+                                syncErrors += "La técnica \"${remote.name}\" no se descargó porque está incompleta o sus vertidos son inválidos"
+                            } else {
+                                techniqueDao.insertTechniqueWithSteps(aggregate.technique, aggregate.steps)
+                                techniquesPulled++
                             }
-                            techniqueStepDao.insertSteps(localMappedSteps)
                         } else {
                             syncErrors += "No se pudieron descargar los pasos de \"${remote.name}\""
                         }
-                        techniquesPulled++
                     }
                 }
             } else {

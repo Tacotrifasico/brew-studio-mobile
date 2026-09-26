@@ -209,6 +209,31 @@ fun BrewSetupView(
             .padding(bottom = 60.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // The complete technique is intentionally the first content block. A brewer can
+        // understand the entire sequence before seeing secondary configuration details.
+        if (state.activePrepSteps.isNotEmpty()) {
+            TechniqueStepsOverview(
+                techniqueName = state.activePrepTechniqueName,
+                coffeeGrams = state.activePrepCoffee,
+                waterMl = state.activePrepWater,
+                ratio = state.activePrepRatio,
+                steps = state.activePrepSteps
+            )
+
+            Button(
+                onClick = { viewModel.startTimer() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = c1),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Ya revisé todos los pasos · Iniciar", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
+            }
+        }
+
         // Active profile configuration card (Hero level 3)
         Box(
             modifier = Modifier
@@ -327,26 +352,6 @@ fun BrewSetupView(
             }
         }
 
-        if (state.activePrepSteps.isNotEmpty()) {
-            TechniqueStepsOverview(
-                techniqueName = state.activePrepTechniqueName,
-                steps = state.activePrepSteps
-            )
-
-            Button(
-                onClick = { viewModel.startTimer() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = c1),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Ya revisé los pasos · Iniciar", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
-            }
-        }
-
         // Techniques library section
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -460,6 +465,9 @@ fun BrewSetupView(
 @Composable
 private fun TechniqueStepsOverview(
     techniqueName: String,
+    coffeeGrams: Float,
+    waterMl: Int,
+    ratio: Float,
     steps: List<TechniqueStep>
 ) {
     Card(
@@ -483,7 +491,13 @@ private fun TechniqueStepsOverview(
                 )
                 Text(techniqueName, fontSize = 17.sp, fontWeight = FontWeight.Black, color = TextPrincipal)
                 Text(
-                    "Revísala antes de iniciar. “Total en báscula” es la suma acumulada al terminar cada paso.",
+                    "${formatPrepNumber(coffeeGrams)} g de café · $waterMl ml de agua · 1:${formatPrepNumber(ratio)}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrincipal
+                )
+                Text(
+                    "Lee los pasos de arriba abajo. En cada uno: agrega la cantidad terracota, detente cuando la báscula marque el total verde y respeta el tiempo dorado.",
                     fontSize = 11.sp,
                     color = TextSecundario,
                     lineHeight = 15.sp
@@ -518,20 +532,22 @@ private fun TechniqueStepsOverview(
 @Composable
 private fun PreparationStepMetrics(step: TechniqueStep) {
     val largeText = LocalDensity.current.fontScale >= 1.3f
+    val waterActionLabel = if (step.waterAddedMl > 0) "AGREGA AHORA" else "SIN AGUA NUEVA"
+    val waterActionValue = if (step.waterAddedMl > 0) "+${step.waterAddedMl} ml" else "0 ml"
     if (largeText) {
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            PreparationMetric("AGREGA AHORA", "+${step.waterAddedMl} ml", CafeCalidoOscuro, Modifier.fillMaxWidth())
-            PreparationMetric("TOTAL EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Modifier.fillMaxWidth())
-            PreparationMetric("TIEMPO", formatStepDuration(step.durationSeconds), AccentGold, Modifier.fillMaxWidth())
+            PreparationMetric(waterActionLabel, waterActionValue, CafeCalidoOscuro, Icons.Default.WaterDrop, Modifier.fillMaxWidth())
+            PreparationMetric("TOTAL EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Icons.Default.Scale, Modifier.fillMaxWidth())
+            PreparationMetric("TIEMPO DEL PASO", formatStepDuration(step.durationSeconds), AccentGold, Icons.Default.Timer, Modifier.fillMaxWidth())
         }
     } else {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            PreparationMetric("AGREGA AHORA", "+${step.waterAddedMl} ml", CafeCalidoOscuro, Modifier.weight(1f))
-            PreparationMetric("TOTAL EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Modifier.weight(1f))
-            PreparationMetric("TIEMPO", formatStepDuration(step.durationSeconds), AccentGold, Modifier.weight(1f))
+            PreparationMetric(waterActionLabel, waterActionValue, CafeCalidoOscuro, Icons.Default.WaterDrop, Modifier.weight(1f))
+            PreparationMetric("TOTAL EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Icons.Default.Scale, Modifier.weight(1f))
+            PreparationMetric("TIEMPO DEL PASO", formatStepDuration(step.durationSeconds), AccentGold, Icons.Default.Timer, Modifier.weight(1f))
         }
     }
 }
@@ -541,6 +557,7 @@ private fun PreparationMetric(
     label: String,
     value: String,
     color: Color,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -553,13 +570,19 @@ private fun PreparationMetric(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Text(label, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, color = color, maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(11.dp))
+            Text(label, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, color = color, maxLines = 1)
+        }
         Text(value, fontSize = 15.sp, fontWeight = FontWeight.Black, color = TextPrincipal, maxLines = 1)
     }
 }
 
 private fun formatStepDuration(seconds: Int): String =
     if (seconds < 60) "${seconds} s" else String.format(Locale.getDefault(), "%d:%02d", seconds / 60, seconds % 60)
+
+private fun formatPrepNumber(value: Float): String =
+    if (value % 1f == 0f) String.format(Locale.US, "%.0f", value) else String.format(Locale.US, "%.1f", value)
 
 @Composable
 fun ActiveBrewTimerView(

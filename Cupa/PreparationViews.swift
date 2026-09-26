@@ -100,7 +100,7 @@ struct PreparationExecutionView: View {
                     .font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.forestText)
                 Text("Revísala antes de iniciar")
                     .font(.headline).foregroundStyle(CupaTheme.text)
-                Text("“Meta en báscula” es el total que debe marcar al terminar cada paso.")
+                Text("“Total en báscula” es la suma acumulada al terminar cada paso.")
                     .font(.caption).foregroundStyle(CupaTheme.secondaryText)
             }
             ForEach(Array(model.state.steps.enumerated()), id: \.element.id) { index, step in
@@ -269,7 +269,7 @@ private struct PreparationMetricsRow: View {
 
     @ViewBuilder private var tiles: some View {
         PreparationMetricTile(label: "AGREGA AHORA", value: added, color: CupaTheme.terracotta)
-        PreparationMetricTile(label: "META EN BÁSCULA", value: accumulated, color: CupaTheme.forest)
+        PreparationMetricTile(label: "TOTAL EN BÁSCULA", value: accumulated, color: CupaTheme.forest)
         PreparationMetricTile(label: timeLabel, value: timeValue, color: CupaTheme.gold)
     }
 }

@@ -41,6 +41,16 @@ Esta es la guía operativa para conectar Android e iOS al mismo backend y valida
 - Likes idempotentes, guardados privados, bloqueo reversible y reporte moderable.
 - Actualización, borrado lógico, reintento offline y conflicto por `updated_at`/versión deben funcionar en ambas plataformas.
 
+### Contrato obligatorio de `payload_snapshot_json`
+
+Los clientes ya publican y consumen el mismo snapshot plano. Axcis debe conservarlo completo; no resumirlo ni reconstruir valores por defecto:
+
+- Receta: `name`, `recipeKind`, `intention`, `suggestedMethodId`, `suggestedMethodName`, `tags`, `ingredients[]` (`name`, `amount`, `unit`, `orderIndex`) y `steps[]` (`stepNumber`, `instruction`, `durationSeconds`). Ingredientes y pasos son obligatorios y deben mantener su orden.
+- Técnica: `name`, `method`/`methodName`, `methodId`, `doseG`/`coffeeGrams`, `waterMl`, `ratio`, `temperatureC`/`temperature`, molienda, `executionMode`, `totalTimeSeconds` y `steps[]`. Cada paso incluye `step_order`, `title`, `duration_sec`, `water_add_ml`, `target_water_ml`, `gesture`, `intensity` y `note`.
+- Invariantes de técnica: órdenes consecutivos desde 1; duraciones positivas; agua agregada no negativa; cada `target_water_ml` equivale a la suma acumulada; la suma final coincide con `waterMl`; `waterMl / coffeeGrams` coincide con `ratio`; la suma de duraciones coincide con `totalTimeSeconds`.
+
+Android e iOS rechazan localmente snapshots incompletos o contradictorios y no crean una copia vacía. Las RPC `import_share_as_recipe`, `fork_share_as_recipe`, `import_share_as_technique` y `fork_share_as_technique` deben repetir esas validaciones y crear padre e hijos en una sola transacción. Si una RPC falla, el cliente conserva la copia local como pendiente; nunca debe devolver éxito después de insertar sólo el padre.
+
 ## Configuración segura
 
 Nunca subir `service_role`, `GEMINI_API_KEY`, contraseñas, access tokens ni refresh tokens. Sí pueden vivir en los clientes la URL pública y la publishable/anon key. Desactivar registro de cuerpos HTTP: una respuesta de Auth contiene tokens.

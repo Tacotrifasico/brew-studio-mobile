@@ -842,6 +842,21 @@ struct LabGoldenVerifier {
         ]
         let decoded = try! JSONDecoder().decode(SocialShare.self, from: JSONSerialization.data(withJSONObject: androidShare))
         precondition(decoded.payloadSnapshot.recipe?.name == "V60 Android" && decoded.payloadSnapshot.technique == nil)
+
+        let techniquePayload = SharePayloadSnapshot(
+            kind: "technique", recipe: nil,
+            technique: SharedTechniqueSnapshot(
+                name: "Dos vertidos", methodName: "V60", doseGrams: 15, waterMl: 240, ratio: 16, temperatureC: 93,
+                executionMode: "GUIDED", grindValue: 24, grindDescription: "24 clics", grindUnit: "CLICKS", notes: "",
+                techniqueDescription: "", steps: [
+                    .init(title: "Preinfusión", durationSeconds: 30, waterAddedMl: 50, intensity: "MEDIUM", gesture: "BLOOM", note: ""),
+                    .init(title: "Vertido", durationSeconds: 90, waterAddedMl: 190, intensity: "MEDIUM", gesture: "CIRCULAR_POUR", note: "")
+                ]
+            )
+        )
+        let exported = try! techniquePayload.androidJSONObject() as! [String: Any]
+        let exportedSteps = exported["steps"] as! [[String: Any]]
+        precondition(exportedSteps.compactMap { $0["target_water_ml"] as? Int } == [50, 240])
     }
 
     @MainActor private static func verifyLocalDataIsolation() {

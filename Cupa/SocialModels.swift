@@ -76,9 +76,11 @@ extension SharePayloadSnapshot {
         value["doseG"] = technique.doseGrams; value["coffeeGrams"] = technique.doseGrams
         value["temperature"] = technique.temperatureC; value["grindClicks"] = technique.grindDescription
         value["method"] = technique.methodName
+        var accumulatedWater = 0
         value["steps"] = technique.steps.enumerated().map { index, step in
-            ["step_order": index + 1, "title": step.title, "duration_sec": step.durationSeconds, "water_add_ml": step.waterAddedMl,
-             "target_water_ml": 0, "gesture": step.gesture, "intensity": step.intensity, "note": step.note] as [String: Any]
+            accumulatedWater += step.waterAddedMl
+            return ["step_order": index + 1, "title": step.title, "duration_sec": step.durationSeconds, "water_add_ml": step.waterAddedMl,
+                    "target_water_ml": accumulatedWater, "gesture": step.gesture, "intensity": step.intensity, "note": step.note] as [String: Any]
         }
         return value
     }

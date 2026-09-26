@@ -21,7 +21,8 @@ Esta es la guía operativa para conectar Android e iOS al mismo backend y valida
    - `com.tacotrifasico.cupa.staging://auth/recovery`
 4. Desplegar `gemini-suggestions` y `delete-account`; `GEMINI_API_KEY` vive únicamente como secreto de la Edge Function.
 5. Android: completar refresh token, expiración y almacenamiento cifrado señalados en `SessionManager.kt`. Eliminar el estado falso de “conectado” cuando el JWT venció.
-6. Android: sustituir los valores provisionales señalados en `SyncRepository.kt` y sincronizar hijos reales de recetas/técnicas, borrados y actualizaciones, no sólo altas.
+6. Android: implementar el contrato canónico de recetas con `recipe_ingredients` y `recipe_steps`. `SyncRepository.kt` conserva hoy las recetas localmente en lugar de enviarlas por el contrato heredado, porque ese contrato perdería los hijos y obligaría a inventar cantidades.
+   - Las técnicas ya permiten alta segura, reintento de pasos faltantes e importación de agregados remotos completos. Falta implementar actualizaciones, borrados lógicos y resolución de conflictos; no declarar `SYNCED` un agregado incompleto.
    - Incluir también `beans`, `instruments`/equipo, `cups`, `catas` y `lab_experiments`. Android ya marca las escrituras locales como pendientes y conserva `Cup.techniqueId`/`Cup.methodId`; falta que el backend confirme cada operación antes de pasarla a `SYNCED`.
    - Agregar outbox y borrado lógico para esas entidades. Su borrado Android sigue siendo únicamente local hasta que exista ese contrato remoto.
 7. Confirmar que Android e iOS usan el mismo Staging:
@@ -75,6 +76,7 @@ Repetir el recorrido al revés con nombres diferentes. En Android la receta impo
 2. Forzar cierre y reabrir: la sesión debe renovarse o pedir login, nunca mostrar una comunidad vacía fingiendo estar conectada.
 3. Cerrar sesión A e iniciar B en el mismo teléfono: no deben verse datos privados de A.
 4. Intentar leer por REST una fila privada del otro usuario: RLS debe devolver cero filas o 403.
+5. Interrumpir una descarga entre `techniques` y `technique_steps`: iOS debe conservar el agregado local anterior y Android no debe importar la técnica nueva. Al reintentar, sólo debe aparecer cuando todos los pasos y acumulados sean válidos.
 
 ## Evidencia obligatoria
 

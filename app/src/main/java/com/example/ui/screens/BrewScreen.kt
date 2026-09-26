@@ -324,19 +324,6 @@ fun BrewSetupView(
                     }
                 }
 
-                // Play Button
-                Button(
-                    onClick = { viewModel.startTimer() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Iniciar", tint = c1)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Iniciar Extracción", fontSize = 14.sp, fontWeight = FontWeight.Black, color = c1)
-                }
             }
         }
 
@@ -345,6 +332,19 @@ fun BrewSetupView(
                 techniqueName = state.activePrepTechniqueName,
                 steps = state.activePrepSteps
             )
+
+            Button(
+                onClick = { viewModel.startTimer() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = c1),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Ya revisé los pasos · Iniciar", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
+            }
         }
 
         // Techniques library section
@@ -483,7 +483,7 @@ private fun TechniqueStepsOverview(
                 )
                 Text(techniqueName, fontSize = 17.sp, fontWeight = FontWeight.Black, color = TextPrincipal)
                 Text(
-                    "Revísala antes de iniciar. “Meta en báscula” es el total que debe marcar al terminar cada paso.",
+                    "Revísala antes de iniciar. “Total en báscula” es la suma acumulada al terminar cada paso.",
                     fontSize = 11.sp,
                     color = TextSecundario,
                     lineHeight = 15.sp
@@ -521,7 +521,7 @@ private fun PreparationStepMetrics(step: TechniqueStep) {
     if (largeText) {
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             PreparationMetric("AGREGA AHORA", "+${step.waterAddedMl} ml", CafeCalidoOscuro, Modifier.fillMaxWidth())
-            PreparationMetric("META EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Modifier.fillMaxWidth())
+            PreparationMetric("TOTAL EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Modifier.fillMaxWidth())
             PreparationMetric("TIEMPO", formatStepDuration(step.durationSeconds), AccentGold, Modifier.fillMaxWidth())
         }
     } else {
@@ -530,7 +530,7 @@ private fun PreparationStepMetrics(step: TechniqueStep) {
             horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             PreparationMetric("AGREGA AHORA", "+${step.waterAddedMl} ml", CafeCalidoOscuro, Modifier.weight(1f))
-            PreparationMetric("META EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Modifier.weight(1f))
+            PreparationMetric("TOTAL EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Modifier.weight(1f))
             PreparationMetric("TIEMPO", formatStepDuration(step.durationSeconds), AccentGold, Modifier.weight(1f))
         }
     }

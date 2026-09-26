@@ -14,6 +14,7 @@ enum ConditionalWriteResult {
 
 enum SyncServiceError: LocalizedError {
     case missingDescriptor(String), missingLocalRecord(String), missingUpdatedAt(String), unrecoverableLegacyOperation(String), unresolvedConflict
+    case invalidTechniqueAggregate(String)
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +23,7 @@ enum SyncServiceError: LocalizedError {
         case let .missingUpdatedAt(identifier): "El cambio local \(identifier) no tiene una fecha válida para resolver conflictos."
         case let .unrecoverableLegacyOperation(identifier): "La operación offline heredada \(identifier) no pudo asociarse de forma segura con una tabla."
         case .unresolvedConflict: "El cambio se conservó para reintentar porque el conflicto remoto no pudo resolverse con seguridad."
+        case let .invalidTechniqueAggregate(name): "La técnica remota \(name) no se aplicó porque sus pasos están incompletos o sus cantidades no coinciden."
         }
     }
 }

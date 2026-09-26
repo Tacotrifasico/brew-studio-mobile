@@ -51,6 +51,7 @@ struct LabGoldenVerifier {
         verifySocialContentPolicy()
         verifySocialImportAttribution()
         verifyEntitySyncMapping()
+        verifySyncedTechniqueAggregateValidation()
         await verifySafeSyncCheckpoint()
         await verifyConditionalUpdateContract()
         await verifyStaleWriteProtection()
@@ -60,6 +61,24 @@ struct LabGoldenVerifier {
         verifyLocalAccountDeletion()
         await verifySessionRecovery()
         print("4 golden tests, altitud/unidades, frescura, inventario, reapertura SQLite, agregados, importación de recetas, preparación, cata, ambientes, sesión offline, eliminación local, sincronización multiusuario, IA, perfil y social aprobados")
+    }
+
+    @MainActor private static func verifySyncedTechniqueAggregateValidation() {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let owner = UUID(); context.activeOwnerId = owner
+        let technique = TechniqueRecord(context: context, name: "V60 íntegra", methodId: UUID(), methodName: "V60", recipeId: nil, beanId: nil, grinderId: nil, doseGrams: 15, waterMl: 240, ratio: 16, temperatureC: 93, executionMode: "GUIDED", grindValue: 24, grindDescription: "24 clics", grindUnit: "CLICKS", notes: "", techniqueDescription: "", totalTimeSeconds: 120)
+        technique.ownerId = owner; technique.syncStatus = .synced
+        let first = TechniqueStepRecord(context: context, techniqueId: technique.id, stepNumber: 1, title: "Preinfusión", durationSeconds: 30, waterAddedMl: 50, waterAccumulatedMl: 50, intensity: "MEDIUM", gesture: "BLOOM", stepNote: "", coverage: nil, flow: nil, secondaryAction: nil)
+        let second = TechniqueStepRecord(context: context, techniqueId: technique.id, stepNumber: 2, title: "Vertido", durationSeconds: 90, waterAddedMl: 190, waterAccumulatedMl: 240, intensity: "MEDIUM", gesture: "CIRCULAR_POUR", stepNote: "", coverage: nil, flow: nil, secondaryAction: nil)
+        first.ownerId = owner; second.ownerId = owner
+        try! SyncedTechniqueAggregateValidator.validate(technique: technique, steps: [second, first])
+        second.waterAccumulatedMl = 230
+        do {
+            try SyncedTechniqueAggregateValidator.validate(technique: technique, steps: [first, second])
+            preconditionFailure("Una técnica remota incoherente no debe aceptarse")
+        } catch SyncServiceError.invalidTechniqueAggregate { }
+        catch { preconditionFailure("Error inesperado: \(error)") }
+        context.rollback(); context.activeOwnerId = nil
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -434,6 +453,7 @@ struct LabGoldenVerifier {
         precondition(techniqueSteps.map(\.waterAccumulatedMl) == [50, 150, 240])
         precondition(technique.totalTimeSeconds == 120 && techniqueSteps.first?.secondaryAction == "Agitar")
         techniqueDraft.steps.swapAt(0, 2); techniqueDraft.steps.remove(at: 1); techniqueDraft.steps[0].flow = 2.5
+        techniqueDraft.waterMl = 140; techniqueDraft.ratio = 140.0 / techniqueDraft.doseGrams
         _ = try! repository.saveTechnique(techniqueDraft)
         techniqueSteps = try! repository.techniqueSteps(techniqueId: technique.id)
         precondition(techniqueSteps.map(\.title) == ["Vertido 2", "Bloom"])
@@ -817,7 +837,8 @@ struct LabGoldenVerifier {
         precondition(lab.state.waterMl == 240 && tasting.state.freeNotes.isEmpty)
         calculator.changeCoffee("18"); lab.update { $0.waterMl = 280 }; tasting.state.freeNotes = "Cata B"
         calculator.switchScope(to: ownerA); preparation.switchScope(to: ownerA); lab.switchScope(to: ownerA); tasting.switchScope(to: ownerA)
-        precondition(calculator.coffee == 21 && preparation.state.techniqueName.contains("V60"))
+        precondition(calculator.coffee == 21 && preparation.state.methodName == "V60")
+        precondition(preparation.state.doseGrams == 21 && preparation.state.waterMl == 336 && !preparation.state.steps.isEmpty)
         precondition(lab.state.waterMl == 333 && lab.state.notes == "Hipótesis A" && tasting.state.freeNotes == "Cata A")
         calculator.switchScope(to: ownerB); lab.switchScope(to: ownerB); tasting.switchScope(to: ownerB)
         precondition(calculator.coffee == 18 && lab.state.waterMl == 280 && tasting.state.freeNotes == "Cata B")

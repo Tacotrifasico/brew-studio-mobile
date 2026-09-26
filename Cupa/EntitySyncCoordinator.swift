@@ -33,6 +33,61 @@ enum CoreSyncSchema {
     private static func snake(_ value: String) -> String { value.reduce(into: "") { result, char in if char.isUppercase { result.append("_"); result.append(char.lowercased()) } else { result.append(char) } } }
 }
 
+enum SyncedTechniqueAggregateValidator {
+    static func validate(technique: TechniqueRecord, steps: [TechniqueStepRecord]) throws {
+        let ordered = steps.filter { $0.deletedAt == nil }.sorted { $0.stepNumber < $1.stepNumber }
+        let draft = TechniqueDraftModel(
+            id: technique.id,
+            name: technique.name,
+            methodId: technique.methodId,
+            methodName: technique.methodName,
+            recipeId: technique.recipeId,
+            beanId: technique.beanId,
+            grinderId: technique.grinderId,
+            doseGrams: technique.doseGrams,
+            waterMl: Int(technique.waterMl),
+            ratio: technique.ratio,
+            temperatureC: Int(technique.temperatureC),
+            executionMode: technique.executionMode,
+            grindValue: technique.grindValue,
+            grindDescription: technique.grindDescription,
+            grindUnit: technique.grindUnit,
+            notes: technique.notes,
+            techniqueDescription: technique.techniqueDescription,
+            steps: ordered.map {
+                TechniqueStepDraft(
+                    id: $0.id,
+                    title: $0.title,
+                    durationSeconds: Int($0.durationSeconds),
+                    waterAddedMl: Int($0.waterAddedMl),
+                    intensity: $0.intensity,
+                    gesture: $0.gesture,
+                    note: $0.stepNote,
+                    coverage: $0.coverage,
+                    flow: $0.flow,
+                    secondaryAction: $0.secondaryAction
+                )
+            }
+        )
+        do { try TechniqueDraftValidator.validate(draft) }
+        catch { throw SyncServiceError.invalidTechniqueAggregate(technique.name) }
+
+        var accumulated = 0
+        for step in ordered {
+            accumulated += Int(step.waterAddedMl)
+            guard Int(step.waterAccumulatedMl) == accumulated else {
+                throw SyncServiceError.invalidTechniqueAggregate(technique.name)
+            }
+        }
+        let expectedRatio = Double(technique.waterMl) / technique.doseGrams
+        let expectedTime = ordered.reduce(0) { $0 + Int($1.durationSeconds) }
+        guard abs(technique.ratio - expectedRatio) < 0.01,
+              Int(technique.totalTimeSeconds) == expectedTime else {
+            throw SyncServiceError.invalidTechniqueAggregate(technique.name)
+        }
+    }
+}
+
 @MainActor
 final class EntitySyncCoordinator: ObservableObject {
     enum State: Equatable { case idle, syncing, offline, waitingRetry(Int), completed(Date), failed(String) }
@@ -115,14 +170,47 @@ final class EntitySyncCoordinator: ObservableObject {
         let service = SupabaseDataService(configuration: configuration, transport: transport)
         let since = defaults.object(forKey: checkpointKey(ownerId)) as? Date ?? Date(timeIntervalSince1970: 0)
         var safeCheckpoint = fallbackCheckpoint
+        var downloaded: [(SyncEntityDescriptor, [[String: Any]])] = []
         for (index, descriptor) in CoreSyncSchema.descriptors.enumerated() {
             let batch = try await service.changes(table: descriptor.table, since: since, accessToken: accessToken)
             if index == 0, let serverDate = batch.serverDate { safeCheckpoint = serverDate.addingTimeInterval(-fallbackOverlap) }
             let rows = (try JSONSerialization.jsonObject(with: batch.data)) as? [[String: Any]] ?? []
-            for row in rows { try merge(row, descriptor: descriptor, expectedOwner: ownerId) }
+            downloaded.append((descriptor, rows))
         }
-        if context.hasChanges { try context.save() }
+        do {
+            var affectedTechniqueIds = Set<UUID>()
+            for (descriptor, rows) in downloaded {
+                for row in rows {
+                    try merge(row, descriptor: descriptor, expectedOwner: ownerId)
+                    if descriptor.entityName == "TechniqueRecord",
+                       let value = row["id"] as? String, let id = UUID(uuidString: value) {
+                        affectedTechniqueIds.insert(id)
+                    } else if descriptor.entityName == "TechniqueStepRecord",
+                              let value = row["technique_id"] as? String, let id = UUID(uuidString: value) {
+                        affectedTechniqueIds.insert(id)
+                    }
+                }
+            }
+            try validateTechniqueAggregates(ids: affectedTechniqueIds, ownerId: ownerId)
+            if context.hasChanges { try context.save() }
+        } catch {
+            context.rollback()
+            throw error
+        }
         return safeCheckpoint
+    }
+
+    private func validateTechniqueAggregates(ids: Set<UUID>, ownerId: UUID) throws {
+        for id in ids {
+            let techniqueRequest = NSFetchRequest<TechniqueRecord>(entityName: "TechniqueRecord")
+            techniqueRequest.predicate = NSPredicate(format: "id == %@ AND ownerId == %@", id as CVarArg, ownerId as CVarArg)
+            techniqueRequest.fetchLimit = 1
+            guard let technique = try context.fetch(techniqueRequest).first, technique.deletedAt == nil else { continue }
+            let stepRequest = NSFetchRequest<TechniqueStepRecord>(entityName: "TechniqueStepRecord")
+            stepRequest.predicate = NSPredicate(format: "techniqueId == %@ AND ownerId == %@", id as CVarArg, ownerId as CVarArg)
+            let steps = try context.fetch(stepRequest)
+            try SyncedTechniqueAggregateValidator.validate(technique: technique, steps: steps)
+        }
     }
     private func checkpointKey(_ ownerId: UUID) -> String { "\(checkpointKeyPrefix).\(ownerId.uuidString.lowercased())" }
 

@@ -73,16 +73,16 @@ struct PreparationExecutionView: View {
                 .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-                Text(timeString(model.state.elapsedSeconds)).font(.system(.largeTitle, design: .rounded, weight: .black)).monospacedDigit()
-                    .minimumScaleFactor(0.6).accessibilityLabel("Tiempo transcurrido").accessibilityValue(timeString(model.state.elapsedSeconds))
-                    .foregroundStyle(CupaTheme.espressoText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(CupaTheme.backgroundAlt.opacity(0.82))
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 if model.state.status == .ready {
                     completeTechniqueOverview
                 } else if let step = model.activeStep {
+                    Text(timeString(model.state.elapsedSeconds)).font(.system(.largeTitle, design: .rounded, weight: .black)).monospacedDigit()
+                        .minimumScaleFactor(0.6).accessibilityLabel("Tiempo total transcurrido").accessibilityValue(timeString(model.state.elapsedSeconds))
+                        .foregroundStyle(CupaTheme.espressoText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(CupaTheme.backgroundAlt.opacity(0.82))
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     activeStepCard(step)
                     executionSequence
                 } else {
@@ -100,7 +100,9 @@ struct PreparationExecutionView: View {
                     .font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.forestText)
                 Text("Revísala antes de iniciar")
                     .font(.headline).foregroundStyle(CupaTheme.text)
-                Text("“Total en báscula” es la suma acumulada al terminar cada paso.")
+                Text("\(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g de café · \(model.state.waterMl) ml de agua · 1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))")
+                    .font(.caption.bold()).foregroundStyle(CupaTheme.text)
+                Text("Lee de arriba abajo: agrega la cantidad terracota, detente cuando la báscula marque el total verde y respeta el tiempo dorado.")
                     .font(.caption).foregroundStyle(CupaTheme.secondaryText)
             }
             ForEach(Array(model.state.steps.enumerated()), id: \.element.id) { index, step in
@@ -114,7 +116,7 @@ struct PreparationExecutionView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         Text(step.title).font(.subheadline.bold()).foregroundStyle(CupaTheme.text)
                     }
-                    stepMetrics(step, timeLabel: "TIEMPO", timeValue: durationString(step.durationSeconds))
+                    stepMetrics(step, timeLabel: "TIEMPO DEL PASO", timeValue: durationString(step.durationSeconds))
                     if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
                 }
             }
@@ -133,7 +135,7 @@ struct PreparationExecutionView: View {
             Text("AHORA · \(step.title)").font(.title3.bold()).multilineTextAlignment(.center)
             stepMetrics(
                 step,
-                timeLabel: "QUEDAN",
+                timeLabel: "TIEMPO RESTANTE",
                 timeValue: durationString(max(0, step.durationSeconds - model.stepElapsed))
             )
             Text(step.gesture.replacingOccurrences(of: "_", with: " ").capitalized + " · " + step.intensity.capitalized)
@@ -161,7 +163,7 @@ struct PreparationExecutionView: View {
                         Spacer()
                         if isCurrent { Text("ACTIVO").font(.caption2.bold()).foregroundStyle(CupaTheme.terracottaText) }
                     }
-                    stepMetrics(step, timeLabel: "TIEMPO", timeValue: durationString(step.durationSeconds))
+                    stepMetrics(step, timeLabel: "TIEMPO DEL PASO", timeValue: durationString(step.durationSeconds))
                 }
                 .padding(10)
                 .background(isCurrent ? CupaTheme.terracotta.opacity(0.10) : isPast ? CupaTheme.forest.opacity(0.07) : CupaTheme.backgroundAlt.opacity(0.72))
@@ -173,7 +175,8 @@ struct PreparationExecutionView: View {
 
     private func stepMetrics(_ step: PreparationStepSnapshot, timeLabel: String, timeValue: String) -> some View {
         PreparationMetricsRow(
-            added: "+\(step.waterAddedMl) ml",
+            addedLabel: step.waterAddedMl > 0 ? "AGREGA AHORA" : "SIN AGUA NUEVA",
+            added: step.waterAddedMl > 0 ? "+\(step.waterAddedMl) ml" : "0 ml",
             accumulated: "\(step.waterAccumulatedMl) ml",
             timeLabel: timeLabel,
             timeValue: timeValue
@@ -185,23 +188,35 @@ struct PreparationExecutionView: View {
     }
 
     @ViewBuilder private var controls: some View {
-        HStack {
-            Button { model.previousStep() } label: { Image(systemName: "backward.end") }
-                .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Paso anterior")
-                .disabled(model.state.activeStepIndex == 0)
-            switch model.state.status {
-            case .ready: Button("Iniciar", action: model.start).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent).disabled(model.state.steps.isEmpty)
-            case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta).foregroundStyle(CupaTheme.onTerracotta)
-            case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
-            case .completed: Label("Finalizada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forestText)
+        if model.state.status == .ready {
+            Button(action: model.start) {
+                Label("Ya revisé todos los pasos · Iniciar", systemImage: "play.fill")
+                    .font(.subheadline.bold())
+                    .frame(maxWidth: .infinity, minHeight: 38)
             }
-            Button { model.nextStep() } label: { Image(systemName: "forward.end") }
-                .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Paso siguiente")
-                .disabled(model.state.activeStepIndex >= model.state.steps.count - 1)
-            Button(action: requestReset) { Image(systemName: "arrow.counterclockwise") }
-                .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Reiniciar preparación")
-                .accessibilityIdentifier("preparation.reset")
+            .buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
+            .disabled(model.state.steps.isEmpty)
+        } else {
+            HStack {
+                Button { model.previousStep() } label: { Image(systemName: "backward.end") }
+                    .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Paso anterior")
+                    .disabled(model.state.activeStepIndex == 0)
+                switch model.state.status {
+                case .running: Button("Pausar", action: model.pause).buttonStyle(.borderedProminent).tint(CupaTheme.terracotta).foregroundStyle(CupaTheme.onTerracotta)
+                case .paused: Button("Reanudar", action: model.resume).buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
+                case .completed: Label("Finalizada", systemImage: "checkmark.circle.fill").foregroundStyle(CupaTheme.forestText)
+                case .ready: EmptyView()
+                }
+                Button { model.nextStep() } label: { Image(systemName: "forward.end") }
+                    .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Paso siguiente")
+                    .disabled(model.state.activeStepIndex >= model.state.steps.count - 1)
+            }
+        }
+        if model.state.status != .ready {
+            Button("Reiniciar preparación", action: requestReset)
+                .font(.caption.bold()).foregroundStyle(CupaTheme.secondaryText)
                 .disabled(model.state.steps.isEmpty)
+                .accessibilityIdentifier("preparation.reset")
         }
         if model.state.elapsedSeconds > 0 && model.state.savedAt == nil {
             Button(isSaving ? "Guardando…" : (model.state.status == .completed ? "Guardar sesión finalizada" : "Finalizar y guardar sesión"), action: finish)
@@ -252,6 +267,7 @@ struct PreparationExecutionView: View {
 
 private struct PreparationMetricsRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let addedLabel: String
     let added: String
     let accumulated: String
     let timeLabel: String
@@ -268,9 +284,9 @@ private struct PreparationMetricsRow: View {
     }
 
     @ViewBuilder private var tiles: some View {
-        PreparationMetricTile(label: "AGREGA AHORA", value: added, color: CupaTheme.terracotta)
-        PreparationMetricTile(label: "TOTAL EN BÁSCULA", value: accumulated, color: CupaTheme.forest)
-        PreparationMetricTile(label: timeLabel, value: timeValue, color: CupaTheme.gold)
+        PreparationMetricTile(label: addedLabel, value: added, color: CupaTheme.terracotta, systemImage: "drop.fill")
+        PreparationMetricTile(label: "TOTAL EN BÁSCULA", value: accumulated, color: CupaTheme.forest, systemImage: "scalemass.fill")
+        PreparationMetricTile(label: timeLabel, value: timeValue, color: CupaTheme.gold, systemImage: "timer")
     }
 }
 
@@ -278,10 +294,15 @@ private struct PreparationMetricTile: View {
     let label: String
     let value: String
     let color: Color
+    let systemImage: String
 
     var body: some View {
         VStack(spacing: 2) {
-            Text(label).font(.system(size: 8, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.72).foregroundStyle(color)
+            HStack(spacing: 3) {
+                Image(systemName: systemImage).font(.system(size: 8, weight: .bold))
+                Text(label).font(.system(size: 8, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.65)
+            }
+            .foregroundStyle(color)
             Text(value).font(.subheadline.bold().monospacedDigit()).lineLimit(1).minimumScaleFactor(0.72).foregroundStyle(CupaTheme.text)
         }
         .frame(maxWidth: .infinity, minHeight: 48)

@@ -124,13 +124,18 @@ private fun OwnerScopedStorageScreen(
     var selectedTechniqueSteps by remember { mutableStateOf<List<TechniqueStep>>(emptyList()) }
     var editingTechnique by remember { mutableStateOf<Technique?>(null) }
     var showShareExplanation by remember { mutableStateOf(false) }
-    val pendingSyncableCount = state.beansList.count { it.syncStatus != "SYNCED" } +
-        state.recipesList.count { it.syncStatus != "SYNCED" } +
-        state.techniquesList.count { !viewModel.isBuiltInTechnique(it.id) && it.syncStatus != "SYNCED" }
-    val pendingBackendCount = state.grindersList.count { it.syncStatus != "SYNCED" } +
-        state.equipmentList.count { it.syncStatus != "SYNCED" } +
-        state.cupsList.count { it.syncStatus != "SYNCED" } +
-        state.experimentsList.count { it.syncStatus != "SYNCED" }
+    val pendingBreakdown = storagePendingBreakdown(
+        beans = state.beansList.count { it.syncStatus != "SYNCED" },
+        recipes = state.recipesList.count { it.syncStatus != "SYNCED" },
+        techniques = state.techniquesList.count { !viewModel.isBuiltInTechnique(it.id) && it.syncStatus != "SYNCED" },
+        grinders = state.grindersList.count { it.syncStatus != "SYNCED" },
+        equipment = state.equipmentList.count { it.syncStatus != "SYNCED" },
+        cups = state.cupsList.count { it.syncStatus != "SYNCED" },
+        tastings = state.catasList.count { it.syncStatus != "SYNCED" },
+        experiments = state.experimentsList.count { it.syncStatus != "SYNCED" }
+    )
+    val pendingSyncableCount = pendingBreakdown.retryableNow
+    val pendingBackendCount = pendingBreakdown.awaitingBackend
 
     LaunchedEffect(selectedTechnique?.id, editingTechnique?.id) {
         val id = editingTechnique?.id ?: selectedTechnique?.id
@@ -272,15 +277,26 @@ private fun OwnerScopedStorageScreen(
                             fontWeight = FontWeight.Bold,
                             color = TextPrincipal
                         )
-                        Text(
-                            syncState.syncMessage ?: if (pendingBackendCount > 0) {
-                                "$pendingBackendCount ${if (pendingBackendCount == 1) "registro espera" else "registros esperan"} la integración de backend de Axcis. Siguen seguros en este dispositivo."
-                            } else "Tus datos siguen disponibles aunque no haya conexión.",
-                            fontSize = 9.sp,
-                            color = TextSecundario,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        syncState.syncMessage?.let { message ->
+                            Text(message, fontSize = 9.sp, color = TextSecundario)
+                        }
+                        if (pendingSyncableCount > 0) {
+                            Text(
+                                "Recetas y técnicas pueden reintentarse ahora; nunca se ocultan por un fallo de red.",
+                                fontSize = 9.sp,
+                                color = TextSecundario
+                            )
+                        }
+                        if (pendingBackendCount > 0) {
+                            Text(
+                                "$pendingBackendCount ${if (pendingBackendCount == 1) "registro está guardado" else "registros están guardados"} sólo en este dispositivo y esperan la integración de Axcis.",
+                                fontSize = 9.sp,
+                                color = TextSecundario
+                            )
+                        }
+                        if (syncState.syncMessage == null && pendingSyncableCount == 0 && pendingBackendCount == 0) {
+                            Text("Tus datos siguen disponibles aunque no haya conexión.", fontSize = 9.sp, color = TextSecundario)
+                        }
                     }
                     if (pendingSyncableCount > 0) {
                         TextButton(

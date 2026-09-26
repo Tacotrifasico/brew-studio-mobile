@@ -36,6 +36,7 @@ import com.example.ui.viewmodel.SocialViewModel
 import com.example.ui.viewmodel.SocialUiState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 @Composable
 fun FeedAndInboxTab(viewModel: SocialViewModel, state: SocialUiState) {
@@ -598,12 +599,20 @@ fun ShareComposerSheet(
     var desc by remember { mutableStateOf("") }
     var visMode by remember { mutableStateOf("public") } // "public" or "direct"
     var recipientId by remember { mutableStateOf("") }
+    val directRecipientValid = remember(visMode, recipientId) {
+        if (visMode != "direct") true else try {
+            UUID.fromString(recipientId.trim()) != UUID(0, 0)
+        } catch (_: IllegalArgumentException) {
+            false
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             Button(
                 onClick = { onPost(desc, if (visMode == "direct") recipientId else null, visMode) },
+                enabled = directRecipientValid,
                 colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal)
             ) {
                 Text("Publicar", fontWeight = FontWeight.Bold)
@@ -623,7 +632,7 @@ fun ShareComposerSheet(
                 OutlinedTextField(
                     value = desc,
                     onValueChange = { if (it.length <= 280) desc = it },
-                    label = { Text("Tu opinión (máx. 280 carc.)") },
+                    label = { Text("Tu opinión (máx. 280 caracteres)") },
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 4
                 )
@@ -639,12 +648,12 @@ fun ShareComposerSheet(
                     FilterChip(
                         selected = visMode == "public",
                         onClick = { visMode = "public" },
-                        label = { Text("Muro Público") }
+                        label = { Text("Muro público") }
                     )
                     FilterChip(
                         selected = visMode == "direct",
                         onClick = { visMode = "direct" },
-                        label = { Text("Buzón Directo (Inbox)") }
+                        label = { Text("Buzón directo") }
                     )
                 }
 
@@ -653,9 +662,11 @@ fun ShareComposerSheet(
                     OutlinedTextField(
                         value = recipientId,
                         onValueChange = { recipientId = it },
-                        label = { Text("UUID del receptor Supabase") },
+                        label = { Text("Identificador del receptor") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        isError = recipientId.isNotBlank() && !directRecipientValid,
+                        supportingText = { Text("Temporalmente se usa el UUID de Supabase; el envío por @alias depende de Axcis.") }
                     )
                 }
             }

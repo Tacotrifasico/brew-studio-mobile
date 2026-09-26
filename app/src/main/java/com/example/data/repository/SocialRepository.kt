@@ -10,6 +10,7 @@ import com.example.data.remote.SocialRemoteDataSource
 import com.example.data.remote.models.RemoteInboxItem
 import com.example.data.remote.models.RemoteShare
 import com.example.data.remote.models.RemoteActivityLog
+import java.util.UUID
 
 class SocialRepository(
     private val remoteSource: SocialRemoteDataSource,
@@ -49,8 +50,10 @@ class SocialRepository(
 
     suspend fun shareRecipe(localRecipe: Recipe, message: String, targetUserId: String? = null, visibility: String = "PUBLIC"): Result<RemoteShare> {
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para compartir"))
+        val publication = SocialPublicationPolicy.validate(localRecipe.remoteId, visibility, targetUserId).getOrElse { return Result.failure(it) }
         val userName = authRepo.getCachedDisplayName()
         val userHandle = authRepo.getCachedHandle()
+        val timestamp = com.example.data.database.currentIso8601()
 
         val payloadMap: Map<String, Any> = mapOf(
             "name" to localRecipe.name,
@@ -63,31 +66,30 @@ class SocialRepository(
         )
 
         val remoteShare = RemoteShare(
-            id = "",
+            id = UUID.randomUUID().toString(),
             entityType = "recipe",
-            entityId = localRecipe.remoteId ?: "00000000-0000-0000-0000-000000000000",
+            entityId = publication.entityId,
             fromUserId = uid,
             fromName = userName,
             fromHandle = userHandle,
-            targetUserId = targetUserId,
-            visibility = visibility,
+            targetUserId = publication.targetUserId,
+            visibility = publication.visibility,
             name = localRecipe.name,
             subtitle = "Receta de café",
             message = message,
             payloadSnapshotJson = payloadMap,
             originalAuthorUserId = localRecipe.originalAuthorUserId ?: uid,
             originalAuthorName = localRecipe.originalAuthorName ?: userName,
-            originalEntityId = localRecipe.originalEntityId ?: localRecipe.remoteId ?: "00000000-0000-0000-0000-000000000000",
-            createdAt = "",
-            updatedAt = ""
+            originalEntityId = localRecipe.originalEntityId ?: publication.entityId,
+            createdAt = timestamp,
+            updatedAt = timestamp
         )
 
         val result = remoteSource.shareEntity(remoteShare)
         if (result.isSuccess) {
             recipeDao.insertRecipe(localRecipe.copy(
                 isShared = true,
-                visibility = visibility,
-                syncStatus = "SYNCED"
+                visibility = publication.visibility
             ))
         }
         return result
@@ -95,8 +97,10 @@ class SocialRepository(
 
     suspend fun shareTechnique(localTech: Technique, steps: List<TechniqueStep>, message: String, targetUserId: String? = null, visibility: String = "PUBLIC"): Result<RemoteShare> {
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para compartir"))
+        val publication = SocialPublicationPolicy.validate(localTech.remoteId, visibility, targetUserId).getOrElse { return Result.failure(it) }
         val userName = authRepo.getCachedDisplayName()
         val userHandle = authRepo.getCachedHandle()
+        val timestamp = com.example.data.database.currentIso8601()
 
         val stepsList = steps.map { step ->
             mapOf(
@@ -125,31 +129,30 @@ class SocialRepository(
         )
 
         val remoteShare = RemoteShare(
-            id = "",
+            id = UUID.randomUUID().toString(),
             entityType = "technique",
-            entityId = localTech.remoteId ?: "00000000-0000-0000-0000-000000000000",
+            entityId = publication.entityId,
             fromUserId = uid,
             fromName = userName,
             fromHandle = userHandle,
-            targetUserId = targetUserId,
-            visibility = visibility,
+            targetUserId = publication.targetUserId,
+            visibility = publication.visibility,
             name = localTech.name,
             subtitle = "Técnica de preparación",
             message = message,
             payloadSnapshotJson = payloadMap,
             originalAuthorUserId = localTech.originalAuthorUserId ?: uid,
             originalAuthorName = localTech.originalAuthorName ?: userName,
-            originalEntityId = localTech.originalEntityId ?: localTech.remoteId ?: "00000000-0000-0000-0000-000000000000",
-            createdAt = "",
-            updatedAt = ""
+            originalEntityId = localTech.originalEntityId ?: publication.entityId,
+            createdAt = timestamp,
+            updatedAt = timestamp
         )
 
         val result = remoteSource.shareEntity(remoteShare)
         if (result.isSuccess) {
             techniqueDao.insertTechnique(localTech.copy(
                 isShared = true,
-                visibility = visibility,
-                syncStatus = "SYNCED"
+                visibility = publication.visibility
             ))
         }
         return result

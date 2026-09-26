@@ -12,6 +12,7 @@ Pendientes que bloquean declarar Android online:
 - Ampliar `SyncRepository.kt` más allá de recetas y técnicas: `beans`, `instruments`/equipo, `cups`, `catas` y `lab_experiments` ya se guardan localmente con `PENDING_CREATE`/`PENDING_UPDATE`, pero todavía no tienen push/pull remoto en Android. No cambiar esos estados a `SYNCED` hasta recibir confirmación del servidor.
 - Implementar borrado lógico y outbox para cafés, equipo, tazas, catas y experimentos. Hoy su eliminación local es inmediata porque el contrato Android aún no posee una cola de borrado para esas entidades.
 - Resolver envíos directos por alias y verificar muro, buzón, importación y variante contra las tablas canónicas de la rama iOS.
+  - Hasta que exista esa RPC, el cliente identifica el campo como temporal, exige un UUID real y bloquea la publicación de recetas/técnicas que aún no tienen identidad remota. Compartir nunca debe cambiar por sí solo el `syncStatus` de la fórmula.
 - Ejecutar el protocolo físico con dos cuentas y guardar UUID/capturas como evidencia.
 - Las técnicas se guardan en Room y su biblioteca canónica es **Almacén → Técnicas**; Preparar, Laboratorio y Comunidad deben escribir/importar en esa misma tabla.
 - `Cup.techniqueId` y `Cup.methodId` ya conservan la técnica y el método usados cuando la preparación proviene del Almacén; mantener esos UUID al mapear `cups` y `catas` al backend.

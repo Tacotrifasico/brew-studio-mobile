@@ -165,49 +165,106 @@ private struct GrinderDraft {
     private var resolvedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [brand, model].filter { !$0.isEmpty }.joined(separator: " ") : name }
 }
 
+private struct GrinderEditorFormDraft: Codable, Equatable {
+    var recordId: UUID?
+    var name: String
+    var brand: String
+    var model: String
+    var type: String
+    var unit: String
+    var minimum: Int
+    var maximum: Int
+    var calibration: String
+    var notes: String
+
+    init(record: GrinderRecord?) {
+        recordId = record?.id
+        name = record?.name ?? ""
+        brand = record?.brand ?? ""
+        model = record?.model ?? ""
+        type = record?.grinderType ?? "MANUAL"
+        unit = record?.scaleUnit ?? "CLICKS"
+        minimum = Int(record?.minimumSetting ?? 0)
+        maximum = Int(record?.maximumSetting ?? 40)
+        calibration = record?.calibrationNotes ?? ""
+        notes = record?.notes ?? ""
+    }
+}
+
 private struct GrinderEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var context
     let record: GrinderRecord?
     let onSave: (GrinderDraft) -> Bool
-    @State private var name: String; @State private var brand: String; @State private var model: String
-    @State private var type: String; @State private var unit: String
-    @State private var minimum: Int; @State private var maximum: Int
-    @State private var calibration: String; @State private var notes: String
+    @State private var draft: GrinderEditorFormDraft
+    @State private var loaded = false
+    @State private var isSaving = false
+    @SceneStorage("cupa.grinderEditorDraft.v1") private var storedDraft: Data?
 
     init(record: GrinderRecord?, onSave: @escaping (GrinderDraft) -> Bool) {
         self.record = record; self.onSave = onSave
-        _name = State(initialValue: record?.name ?? ""); _brand = State(initialValue: record?.brand ?? ""); _model = State(initialValue: record?.model ?? "")
-        _type = State(initialValue: record?.grinderType ?? "MANUAL"); _unit = State(initialValue: record?.scaleUnit ?? "CLICKS")
-        _minimum = State(initialValue: Int(record?.minimumSetting ?? 0)); _maximum = State(initialValue: Int(record?.maximumSetting ?? 40))
-        _calibration = State(initialValue: record?.calibrationNotes ?? ""); _notes = State(initialValue: record?.notes ?? "")
+        _draft = State(initialValue: GrinderEditorFormDraft(record: record))
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Identidad") {
-                    TextField("Nombre visible", text: $name); TextField("Marca", text: $brand); TextField("Modelo", text: $model)
-                    Picker("Tipo", selection: $type) { Text("Manual").tag("MANUAL"); Text("Eléctrico").tag("ELECTRIC") }
+                    TextField("Nombre visible", text: $draft.name); TextField("Marca", text: $draft.brand); TextField("Modelo", text: $draft.model)
+                    Picker("Tipo", selection: $draft.type) { Text("Manual").tag("MANUAL"); Text("Eléctrico").tag("ELECTRIC") }
                 }
                 Section("Escala") {
-                    Picker("Unidad", selection: $unit) { ForEach(["CLICKS", "MICRONS", "SETTING_NUMERIC", "DESCRIPTIVE"], id: \.self) { Text(grinderScaleLabel($0)).tag($0) } }
-                    Stepper("Mínimo: \(minimum)", value: $minimum, in: 0...10_000)
-                    Stepper("Máximo: \(maximum)", value: $maximum, in: minimum...10_000)
-                    TextField("Notas de calibración", text: $calibration, axis: .vertical).lineLimit(2...5)
-                    TextField("Notas", text: $notes, axis: .vertical).lineLimit(2...5)
+                    Picker("Unidad", selection: $draft.unit) { ForEach(["CLICKS", "MICRONS", "SETTING_NUMERIC", "DESCRIPTIVE"], id: \.self) { Text(grinderScaleLabel($0)).tag($0) } }
+                    Stepper("Mínimo: \(draft.minimum)", value: $draft.minimum, in: 0...10_000)
+                    Stepper("Máximo: \(draft.maximum)", value: $draft.maximum, in: draft.minimum...10_000)
+                    TextField("Notas de calibración", text: $draft.calibration, axis: .vertical).lineLimit(2...5)
+                    TextField("Notas", text: $draft.notes, axis: .vertical).lineLimit(2...5)
                 }
             }
             .brewScrollableCanvas()
-            .onChange(of: minimum) { _, newValue in maximum = max(maximum, newValue) }
+            .onAppear(perform: load)
+            .onChange(of: draft.minimum) { _, newValue in draft.maximum = max(draft.maximum, newValue) }
+            .onChange(of: draft) { _, value in
+                guard loaded else { return }
+                storedDraft = storingEditorDraft(value, ownerId: context.activeOwnerId, in: storedDraft)
+            }
             .navigationTitle(record == nil ? "Agregar molino" : "Editar molino")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { clearStoredDraft(); dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { if onSave(GrinderDraft(name: name.trimmingCharacters(in: .whitespacesAndNewlines), brand: brand.trimmingCharacters(in: .whitespacesAndNewlines), model: model.trimmingCharacters(in: .whitespacesAndNewlines), type: type, unit: unit, minimum: minimum, maximum: max(minimum, maximum), calibration: calibration.trimmingCharacters(in: .whitespacesAndNewlines), notes: notes.trimmingCharacters(in: .whitespacesAndNewlines))) { dismiss() } }
-                        .disabled(model.trimmingCharacters(in: .whitespaces).isEmpty && name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button(isSaving ? "Guardando…" : "Guardar") {
+                        guard !isSaving else { return }
+                        isSaving = true
+                        let saved = onSave(GrinderDraft(
+                            name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                            brand: draft.brand.trimmingCharacters(in: .whitespacesAndNewlines),
+                            model: draft.model.trimmingCharacters(in: .whitespacesAndNewlines),
+                            type: draft.type,
+                            unit: draft.unit,
+                            minimum: draft.minimum,
+                            maximum: max(draft.minimum, draft.maximum),
+                            calibration: draft.calibration.trimmingCharacters(in: .whitespacesAndNewlines),
+                            notes: draft.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                        ))
+                        if saved { clearStoredDraft(); dismiss() } else { isSaving = false }
+                    }
+                        .disabled((draft.model.trimmingCharacters(in: .whitespaces).isEmpty && draft.name.trimmingCharacters(in: .whitespaces).isEmpty) || isSaving)
                 }
             }
         }
+    }
+
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        if let restored: GrinderEditorFormDraft = scopedEditorDraft(from: storedDraft, ownerId: context.activeOwnerId),
+           restored.recordId == record?.id {
+            draft = restored
+        }
+    }
+
+    private func clearStoredDraft() {
+        storedDraft = removingEditorDraft(ownerId: context.activeOwnerId, from: storedDraft, as: GrinderEditorFormDraft.self)
     }
 }
 
@@ -271,56 +328,114 @@ private struct EquipmentDraft {
     func apply(to record: EquipmentRecord) { record.name = name; record.equipmentType = type; record.brand = brand; record.model = model; record.capacityMl = capacity; record.configuration = configuration; record.notes = notes; record.isFavorite = favorite; record.isActive = active }
 }
 
+private struct EquipmentEditorFormDraft: Codable, Equatable {
+    var recordId: UUID?
+    var name: String
+    var type: String
+    var brand: String
+    var model: String
+    var capacity: String
+    var configuration: String
+    var notes: String
+    var favorite: Bool
+    var active: Bool
+
+    init(record: EquipmentRecord?) {
+        recordId = record?.id
+        name = record?.name ?? ""
+        type = record?.equipmentType ?? "BREWER_METHOD"
+        brand = record?.brand ?? ""
+        model = record?.model ?? ""
+        capacity = record?.capacityMl.map(String.init) ?? ""
+        configuration = record?.configuration ?? ""
+        notes = record?.notes ?? ""
+        favorite = record?.isFavorite ?? true
+        active = record?.isActive ?? true
+    }
+}
+
 private struct EquipmentEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var context
     let record: EquipmentRecord?; let onSave: (EquipmentDraft) -> Bool
-    @State private var name: String; @State private var type: String; @State private var brand: String; @State private var model: String
-    @State private var capacity: String; @State private var configuration: String; @State private var notes: String
-    @State private var favorite: Bool; @State private var active: Bool
+    @State private var draft: EquipmentEditorFormDraft
+    @State private var loaded = false
+    @State private var isSaving = false
+    @SceneStorage("cupa.equipmentEditorDraft.v1") private var storedDraft: Data?
 
     init(record: EquipmentRecord?, onSave: @escaping (EquipmentDraft) -> Bool) {
         self.record = record; self.onSave = onSave
-        _name = State(initialValue: record?.name ?? ""); _type = State(initialValue: record?.equipmentType ?? "BREWER_METHOD")
-        _brand = State(initialValue: record?.brand ?? ""); _model = State(initialValue: record?.model ?? "")
-        _capacity = State(initialValue: record?.capacityMl.map(String.init) ?? ""); _configuration = State(initialValue: record?.configuration ?? "")
-        _notes = State(initialValue: record?.notes ?? ""); _favorite = State(initialValue: record?.isFavorite ?? true); _active = State(initialValue: record?.isActive ?? true)
+        _draft = State(initialValue: EquipmentEditorFormDraft(record: record))
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Equipo") {
-                    TextField("Nombre o descripción", text: $name)
-                    Picker("Categoría", selection: $type) { ForEach(equipmentTypes) { Text($0.label).tag($0.code) } }
-                    TextField("Marca", text: $brand); TextField("Modelo", text: $model)
-                    TextField("Capacidad (ml)", text: $capacity).keyboardType(.numberPad)
+                    TextField("Nombre o descripción", text: $draft.name)
+                    Picker("Categoría", selection: $draft.type) { ForEach(equipmentTypes) { Text($0.label).tag($0.code) } }
+                    TextField("Marca", text: $draft.brand); TextField("Modelo", text: $draft.model)
+                    TextField("Capacidad (ml)", text: $draft.capacity).keyboardType(.numberPad)
                     if !capacityIsValid { Text("Escribe una capacidad entera mayor que cero.").font(.caption).foregroundStyle(.red) }
                 }
                 Section("Configuración") {
-                    TextField("Configuración o especificaciones", text: $configuration, axis: .vertical).lineLimit(2...5)
-                    TextField("Notas", text: $notes, axis: .vertical).lineLimit(2...5)
-                    Toggle(type == "BREWER_METHOD" ? "Mostrar en calculadora" : "Favorito", isOn: $favorite)
-                    Toggle("Equipo activo", isOn: $active)
+                    TextField("Configuración o especificaciones", text: $draft.configuration, axis: .vertical).lineLimit(2...5)
+                    TextField("Notas", text: $draft.notes, axis: .vertical).lineLimit(2...5)
+                    Toggle(draft.type == "BREWER_METHOD" ? "Mostrar en calculadora" : "Favorito", isOn: $draft.favorite)
+                    Toggle("Equipo activo", isOn: $draft.active)
                 }
             }
             .brewScrollableCanvas()
-            .onChange(of: type) { oldValue, newValue in
-                if oldValue == "BREWER_METHOD" || newValue == "BREWER_METHOD" { favorite = newValue == "BREWER_METHOD" }
+            .onAppear(perform: load)
+            .onChange(of: draft.type) { oldValue, newValue in
+                if oldValue == "BREWER_METHOD" || newValue == "BREWER_METHOD" { draft.favorite = newValue == "BREWER_METHOD" }
+            }
+            .onChange(of: draft) { _, value in
+                guard loaded else { return }
+                storedDraft = storingEditorDraft(value, ownerId: context.activeOwnerId, in: storedDraft)
             }
             .navigationTitle(record == nil ? "Agregar equipo" : "Editar equipo")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { clearStoredDraft(); dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { if onSave(EquipmentDraft(name: name.trimmingCharacters(in: .whitespacesAndNewlines), type: type, brand: brand.trimmingCharacters(in: .whitespacesAndNewlines), model: model.trimmingCharacters(in: .whitespacesAndNewlines), capacity: parsedCapacity, configuration: configuration.trimmingCharacters(in: .whitespacesAndNewlines), notes: notes.trimmingCharacters(in: .whitespacesAndNewlines), favorite: favorite, active: active)) { dismiss() } }
-                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !capacityIsValid)
+                    Button(isSaving ? "Guardando…" : "Guardar") {
+                        guard !isSaving else { return }
+                        isSaving = true
+                        let saved = onSave(EquipmentDraft(
+                            name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                            type: draft.type,
+                            brand: draft.brand.trimmingCharacters(in: .whitespacesAndNewlines),
+                            model: draft.model.trimmingCharacters(in: .whitespacesAndNewlines),
+                            capacity: parsedCapacity,
+                            configuration: draft.configuration.trimmingCharacters(in: .whitespacesAndNewlines),
+                            notes: draft.notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                            favorite: draft.favorite,
+                            active: draft.active
+                        ))
+                        if saved { clearStoredDraft(); dismiss() } else { isSaving = false }
+                    }
+                        .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !capacityIsValid || isSaving)
                 }
             }
         }
     }
 
-    private var normalizedCapacity: String { capacity.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var normalizedCapacity: String { draft.capacity.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var parsedCapacity: Int? { normalizedCapacity.isEmpty ? nil : Int(normalizedCapacity) }
     private var capacityIsValid: Bool { normalizedCapacity.isEmpty || (parsedCapacity ?? 0) > 0 }
+
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        if let restored: EquipmentEditorFormDraft = scopedEditorDraft(from: storedDraft, ownerId: context.activeOwnerId),
+           restored.recordId == record?.id {
+            draft = restored
+        }
+    }
+
+    private func clearStoredDraft() {
+        storedDraft = removingEditorDraft(ownerId: context.activeOwnerId, from: storedDraft, as: EquipmentEditorFormDraft.self)
+    }
 }
 
 private struct EquipmentDetailView: View {

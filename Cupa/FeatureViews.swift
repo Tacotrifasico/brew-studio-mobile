@@ -1206,6 +1206,7 @@ private struct CupHistoryView: View {
                                 Spacer()
                                 Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").foregroundStyle(CupaTheme.goldText)
                             }
+                            if cup.syncStatus != .synced { inventorySyncBadge(cup.syncStatus) }
                             Text("\(cup.techniqueNameSnapshot) · \(cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))) g → \(cup.executedWaterMl) ml")
                                 .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
                             HStack {
@@ -1378,10 +1379,8 @@ private struct CoffeeInventoryView: View {
                     Spacer()
                     Text(bean.inventoryStatus.label.uppercased()).font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
                     CoffeeFreshnessBadge(state: freshness.state)
-                    if bean.syncStatus != .synced {
-                        Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(CupaTheme.goldText)
-                    }
                 }
+                if bean.syncStatus != .synced { inventorySyncBadge(bean.syncStatus) }
                 Text("\(bean.brand.isEmpty ? "Sin tostador" : bean.brand) · Tueste \(bean.roastLevel.lowercased())")
                     .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
                 Text("\(bean.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles")

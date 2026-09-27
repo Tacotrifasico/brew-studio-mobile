@@ -153,6 +153,46 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `double tapping storage saves creates one grinder equipment recipe and experiment`() = runBlocking {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+    val mainLooper = org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+    val suffix = java.util.UUID.randomUUID().toString()
+    val grinderModel = "Molino-$suffix"
+    val equipmentName = "Báscula-$suffix"
+    val recipeName = "Receta-$suffix"
+    val experimentName = "Hipótesis-$suffix"
+
+    repeat(2) { viewModel.addGrinder("Marca", grinderModel, "0–40", "Calibrado") }
+    repeat(2) { viewModel.addEquipment(equipmentName, "SCALE", "Precisión 0.1 g") }
+    repeat(2) {
+      viewModel.addRecipe(
+        name = recipeName,
+        ingredientsList = listOf(com.example.data.engine.RecipeIngredientInput(name = "Café", amount = "18", unit = "G")),
+        stepsList = listOf(com.example.data.engine.RecipeStepInput(instruction = "Preparar"))
+      )
+    }
+    repeat(2) { viewModel.addExperiment(experimentName, 15f, 240, 16f, 92, "Media", "Prueba") }
+
+    repeat(300) {
+      mainLooper.idle()
+      val state = viewModel.state.value
+      val allVisible = state.grindersList.any { it.model == grinderModel } &&
+        state.equipmentList.any { it.name == equipmentName } &&
+        state.recipesList.any { it.name == recipeName } &&
+        state.experimentsList.any { it.experimentHypothesis == experimentName }
+      if (allVisible) return@repeat
+      Thread.sleep(20)
+    }
+
+    val state = viewModel.state.value
+    assertEquals(1, state.grindersList.count { it.model == grinderModel })
+    assertEquals(1, state.equipmentList.count { it.name == equipmentName })
+    assertEquals(1, state.recipesList.count { it.name == recipeName })
+    assertEquals(1, state.experimentsList.count { it.experimentHypothesis == experimentName })
+  }
+
+  @Test
   fun `selected calculator favorite persists until it is removed`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val preferences = context.getSharedPreferences("favorite_test", Context.MODE_PRIVATE)

@@ -403,6 +403,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     private var cataSaveInFlight = false
     private val techniqueDuplicateInFlight = mutableSetOf<String>()
     private val beanSaveInFlight = mutableSetOf<String>()
+    private val storageSaveInFlight = mutableSetOf<String>()
 
     init {
         viewModelScope.launch { repository.ensureCoreCatalog() }
@@ -1919,6 +1920,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun addEquipment(name: String, type: String, notes: String, onCompleted: (Boolean) -> Unit = {}) {
+        val saveKey = "equipment:${activeOwnerId.value ?: "guest"}:${type.trim().lowercase(Locale.getDefault())}:${name.trim().lowercase(Locale.getDefault())}"
+        if (!storageSaveInFlight.add(saveKey)) return
         viewModelScope.launch {
             try {
                 val isMethodType = type.equals("BREWER_METHOD", ignoreCase = true) ||
@@ -1952,6 +1955,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             } catch (_: Exception) {
                 showToast("No se pudo guardar el equipo. Tus datos siguen en pantalla para reintentar.")
                 onCompleted(false)
+            } finally {
+                storageSaveInFlight.remove(saveKey)
             }
         }
     }
@@ -2039,6 +2044,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun addGrinder(brand: String, model: String, clicks: String, calibracion: String, onCreated: ((Instrument) -> Unit)? = null, onCompleted: (Boolean) -> Unit = {}) {
+        val saveKey = "grinder:${activeOwnerId.value ?: "guest"}:${brand.trim().lowercase(Locale.getDefault())}:${model.trim().lowercase(Locale.getDefault())}"
+        if (!storageSaveInFlight.add(saveKey)) return
         viewModelScope.launch {
             try {
                 val inst = Instrument(
@@ -2057,6 +2064,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             } catch (_: Exception) {
                 showToast("No se pudo guardar el molino. Tus datos siguen en pantalla para reintentar.")
                 onCompleted(false)
+            } finally {
+                storageSaveInFlight.remove(saveKey)
             }
         }
     }
@@ -2088,6 +2097,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             onCompleted(false)
             return
         }
+        val saveKey = "recipe:${activeOwnerId.value ?: "guest"}:${recipeId ?: name.trim().lowercase(Locale.getDefault())}"
+        if (!storageSaveInFlight.add(saveKey)) return
         viewModelScope.launch {
             val existing = _state.value.recipesList.firstOrNull { it.id == recipeId }
             val source = _state.value.recipesList.firstOrNull { it.id == sourceRecipeId }
@@ -2133,6 +2144,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             } catch (_: Exception) {
                 showToast("No se pudo guardar la receta. Tus datos siguen en pantalla para reintentar.")
                 onCompleted(false)
+            } finally {
+                storageSaveInFlight.remove(saveKey)
             }
         }
     }
@@ -2162,6 +2175,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             onCompleted(false)
             return
         }
+        val saveKey = "experiment:${activeOwnerId.value ?: "guest"}:${methodName.trim().lowercase(Locale.getDefault())}:$coffeeGrams:$waterMl:$temp:$grindSize"
+        if (!storageSaveInFlight.add(saveKey)) return
         viewModelScope.launch {
             try {
                 val exp = LabExperiment(
@@ -2184,6 +2199,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             } catch (_: Exception) {
                 showToast("No se pudo guardar el experimento. Tus datos siguen en pantalla para reintentar.")
                 onCompleted(false)
+            } finally {
+                storageSaveInFlight.remove(saveKey)
             }
         }
     }

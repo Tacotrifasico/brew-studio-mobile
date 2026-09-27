@@ -492,7 +492,7 @@ private fun TechniqueStepsOverview(
                 )
                 Text(techniqueName, fontSize = 17.sp, fontWeight = FontWeight.Black, color = TextPrincipal)
                 Text(
-                    "${formatPrepNumber(coffeeGrams)} g de café · $waterMl ml de agua · 1:${formatPrepNumber(ratio)}",
+                    "${formatPrepNumber(coffeeGrams)} g de café · $waterMl ml de agua · 1:${formatPrepNumber(ratio)} · ${formatStepDuration(steps.sumOf { it.durationSeconds })}",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrincipal
@@ -565,6 +565,82 @@ private fun PreparationStepMetrics(
             PreparationMetric("2 · BÁSCULA", "${step.waterAccumulatedMl} ml", "total acumulado", AcentoPrincipal, Icons.Default.Scale, Modifier.weight(1f))
             PreparationMetric("3 · TIEMPO", timeValue, timeHelper, AccentGold, Icons.Default.Timer, Modifier.weight(1f))
         }
+    }
+}
+
+@Composable
+private fun ActiveStepInstructions(
+    step: TechniqueStep,
+    remainingSeconds: Int
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = if (step.waterAddedMl > 0) {
+                    "Agrega ahora ${step.waterAddedMl} mililitros. La báscula debe marcar ${step.waterAccumulatedMl} mililitros. Tiempo restante ${formatStepDuration(remainingSeconds)}."
+                } else {
+                    "No agregues agua. Mantén la báscula en ${step.waterAccumulatedMl} mililitros. Tiempo restante ${formatStepDuration(remainingSeconds)}."
+                }
+            },
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ActiveInstructionBand(
+            icon = Icons.Default.WaterDrop,
+            label = if (step.waterAddedMl > 0) "1 · AGREGA AHORA" else "1 · NO AGREGUES AGUA",
+            value = if (step.waterAddedMl > 0) "+${step.waterAddedMl} ml" else "0 ml",
+            helper = if (step.waterAddedMl > 0) "Cantidad de este vertido" else "Espera sin verter",
+            color = CafeCalidoOscuro
+        )
+        ActiveInstructionBand(
+            icon = Icons.Default.Scale,
+            label = "2 · LA BÁSCULA DEBE MARCAR",
+            value = "${step.waterAccumulatedMl} ml",
+            helper = "Total acumulado desde el inicio",
+            color = AcentoPrincipal
+        )
+        ActiveInstructionBand(
+            icon = Icons.Default.Timer,
+            label = "3 · TIEMPO DE ESTE PASO",
+            value = formatStepDuration(remainingSeconds),
+            helper = "Tiempo restante",
+            color = AccentGold
+        )
+    }
+}
+
+@Composable
+private fun ActiveInstructionBand(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    helper: String,
+    color: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(color.copy(alpha = 0.12f))
+            .border(1.dp, color.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(color.copy(alpha = 0.17f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(11.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = color, letterSpacing = 0.4.sp)
+            Text(helper, fontSize = 10.sp, fontWeight = FontWeight.Medium, color = TextSecundario)
+        }
+        Text(value, fontSize = 23.sp, fontWeight = FontWeight.Black, color = TextPrincipal, maxLines = 1)
     }
 }
 
@@ -690,11 +766,7 @@ fun ActiveBrewTimerView(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     activeStep?.let {
-                        PreparationStepMetrics(
-                            step = it,
-                            timeValue = formatStepDuration(remainingCurrentStep),
-                            timeHelper = "restante"
-                        )
+                        ActiveStepInstructions(step = it, remainingSeconds = remainingCurrentStep)
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))

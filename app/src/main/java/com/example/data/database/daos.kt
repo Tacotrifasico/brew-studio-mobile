@@ -53,11 +53,11 @@ interface UserMethodPreferenceDao {
     @Query("SELECT * FROM user_method_preferences WHERE isPinnedToCalculator = 1 AND isActive = 1 ORDER BY addedAt ASC")
     fun getPinnedPreferences(): Flow<List<UserMethodPreference>>
 
-    @Query("SELECT * FROM user_method_preferences WHERE methodId = :methodId LIMIT 1")
-    suspend fun getPreferenceByMethodId(methodId: String): UserMethodPreference?
+    @Query("SELECT * FROM user_method_preferences WHERE methodId = :methodId AND userId = :userId LIMIT 1")
+    suspend fun getPreferenceByMethodId(methodId: String, userId: String): UserMethodPreference?
 
-    @Query("SELECT * FROM user_method_preferences WHERE sourceInstrumentId = :instrumentId LIMIT 1")
-    suspend fun getPreferenceByInstrumentId(instrumentId: String): UserMethodPreference?
+    @Query("SELECT * FROM user_method_preferences WHERE sourceInstrumentId = :instrumentId AND userId = :userId LIMIT 1")
+    suspend fun getPreferenceByInstrumentId(instrumentId: String, userId: String): UserMethodPreference?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPreference(pref: UserMethodPreference)
@@ -65,8 +65,8 @@ interface UserMethodPreferenceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPreferences(prefs: List<UserMethodPreference>)
 
-    @Query("UPDATE user_method_preferences SET isPinnedToCalculator = :isPinned WHERE methodId = :methodId")
-    suspend fun setPinnedStatus(methodId: String, isPinned: Boolean)
+    @Query("UPDATE user_method_preferences SET isPinnedToCalculator = :isPinned WHERE methodId = :methodId AND userId = :userId")
+    suspend fun setPinnedStatus(methodId: String, userId: String, isPinned: Boolean)
 
     @Query("DELETE FROM user_method_preferences WHERE sourceInstrumentId = :instrumentId")
     suspend fun deletePreferenceByInstrumentId(instrumentId: String)

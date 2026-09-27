@@ -4,6 +4,8 @@ import com.example.data.database.BrewMethod
 import com.example.data.database.Technique
 import com.example.data.database.TechniqueStep
 import com.example.data.database.UserMethodPreference
+import java.nio.charset.StandardCharsets
+import java.util.UUID
 
 data class CatalogStep(
     val title: String,
@@ -42,10 +44,18 @@ object BrewTechniqueCatalog {
     val preferences = methods.mapIndexed { index, method ->
         UserMethodPreference(
             id = "33333333-3333-4000-8000-${(index + 1).toString().padStart(12, '0')}",
+            userId = "guest",
             methodId = method.id,
             isPinnedToCalculator = true,
             isActive = true,
             addedAt = "2026-01-${(index + 1).toString().padStart(2, '0')}T00:00:00Z"
+        )
+    }
+
+    fun preferencesFor(scopeKey: String): List<UserMethodPreference> = preferences.map { preference ->
+        preference.copy(
+            id = UUID.nameUUIDFromBytes("brew-method-pref:$scopeKey:${preference.methodId}".toByteArray(StandardCharsets.UTF_8)).toString(),
+            userId = scopeKey
         )
     }
 

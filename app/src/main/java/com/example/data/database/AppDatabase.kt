@@ -9,6 +9,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import java.time.Instant
 import java.util.UUID
 
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Preferences created before account scoping belonged to the local
+        // guest profile. Never attribute them to whichever account logs in
+        // first after the update.
+        db.execSQL("UPDATE `user_method_preferences` SET `userId` = 'guest' WHERE `userId` = 'local_user' OR TRIM(`userId`) = ''")
+    }
+}
+
 val MIGRATION_7_8 = object : Migration(7, 8) {
     override fun migrate(db: SupportSQLiteDatabase) {
         // Legacy calculator favorites were device-local. Keep them as guest
@@ -922,7 +931,7 @@ private fun String?.isNull_or_Empty(): Boolean {
         CataFlavorNote::class,
         LabExperiment::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -956,7 +965,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "brew_studio_database_v2"
                 )
-                .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build()
                 INSTANCE = instance
                 instance

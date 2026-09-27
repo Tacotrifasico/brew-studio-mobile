@@ -385,45 +385,49 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             activeOwnerId.collect { ownerId ->
                 val nextScopeKey = ownerId ?: "guest"
-                if (_state.value.ownerScopeKey == nextScopeKey) return@collect
-                timerJob?.cancel()
-                cataTimerJob?.cancel()
-                cataSaveInFlight = false
-                _state.update { current ->
-                    current.copy(
-                        ownerScopeKey = nextScopeKey,
-                        activePrepBean = "Sin grano asignado",
-                        activePrepBeanId = null,
-                        activePrepGrinder = "Sin molino asignado",
-                        activePrepGrinderId = null,
-                        activePrepTechniqueName = BrewTechniqueCatalog.firstTechniqueFor(current.method)?.name
-                            ?: "${current.method} Estándar",
-                        activePrepTechniqueId = null,
-                        activePrepMethod = current.method,
-                        activePrepMethodId = methodIdForName(current.method),
-                        activePrepCoffee = current.coffee,
-                        activePrepWater = current.water,
-                        activePrepRatio = current.ratio,
-                        activePrepSteps = generateQuickSteps(current.method, current.water),
-                        timerRunning = false,
-                        timerPaused = false,
-                        preparationCompleted = false,
-                        activePreparationSessionId = UUID.randomUUID().toString(),
-                        activeCataId = UUID.randomUUID().toString(),
-                        savedCataCupId = null,
-                        elapsedSeconds = 0,
-                        activeStepIndex = 0,
-                        cataMinutesElapsed = 0,
-                        selectedFoundNotes = "",
-                        cataFreeNotes = "",
-                        labRecipeId = null,
-                        labTechniqueId = null,
-                        labBean = "Sin grano asignado",
-                        labBeanId = null,
-                        labGrinder = "Sin molino asignado",
-                        labGrinderId = null
-                    )
+                if (_state.value.ownerScopeKey != nextScopeKey) {
+                    timerJob?.cancel()
+                    cataTimerJob?.cancel()
+                    cataSaveInFlight = false
+                    _state.update { current ->
+                        current.copy(
+                            ownerScopeKey = nextScopeKey,
+                            activePrepBean = "Sin grano asignado",
+                            activePrepBeanId = null,
+                            activePrepGrinder = "Sin molino asignado",
+                            activePrepGrinderId = null,
+                            activePrepTechniqueName = BrewTechniqueCatalog.firstTechniqueFor(current.method)?.name
+                                ?: "${current.method} Estándar",
+                            activePrepTechniqueId = null,
+                            activePrepMethod = current.method,
+                            activePrepMethodId = methodIdForName(current.method),
+                            activePrepCoffee = current.coffee,
+                            activePrepWater = current.water,
+                            activePrepRatio = current.ratio,
+                            activePrepSteps = generateQuickSteps(current.method, current.water),
+                            timerRunning = false,
+                            timerPaused = false,
+                            preparationCompleted = false,
+                            activePreparationSessionId = UUID.randomUUID().toString(),
+                            activeCataId = UUID.randomUUID().toString(),
+                            savedCataCupId = null,
+                            elapsedSeconds = 0,
+                            activeStepIndex = 0,
+                            cataMinutesElapsed = 0,
+                            selectedFoundNotes = "",
+                            cataFreeNotes = "",
+                            labRecipeId = null,
+                            labTechniqueId = null,
+                            labBean = "Sin grano asignado",
+                            labBeanId = null,
+                            labGrinder = "Sin molino asignado",
+                            labGrinderId = null
+                        )
+                    }
                 }
+                // Seeding is idempotent and must not block subsequent account
+                // changes (for example, a fast logout right after login).
+                viewModelScope.launch { repository.ensureMethodPreferences(nextScopeKey) }
             }
         }
 
@@ -483,12 +487,14 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 repository.allInstruments,
                 activeOwnerId
             ) { brewMethods, prefs, instruments, ownerId ->
+                val scopeKey = ownerId ?: "guest"
+                val scopedPreferences = prefs.filter { it.userId == scopeKey }
                 val scopedInstruments = instruments.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) }
                 val userItems = mutableListOf<com.example.data.domain.UserMethodItem>()
                 val existingPrefMethodIds = mutableSetOf<String>()
                 val existingInstrumentIds = mutableSetOf<String?>()
 
-                prefs.forEach { pref ->
+                scopedPreferences.forEach { pref ->
                     val bm = brewMethods.find { it.id == pref.methodId }
                     if (bm != null) {
                         val name = when (bm.code.lowercase()) {
@@ -575,9 +581,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 instrument.type.contains("metodo", true) || instrument.type.contains("método", true)
         }.forEach { instrument ->
             val method = repository.getOrCreateBrewMethodForInstrument(instrument.name)
-            if (repository.getPreferenceByMethodId(method.id) == null) {
+            val scopeKey = activeOwnerId.value ?: "guest"
+            if (repository.getPreferenceByMethodId(method.id, scopeKey) == null) {
                 repository.insertUserMethodPreference(
-                    UserMethodPreference(methodId = method.id, sourceInstrumentId = instrument.id)
+                    UserMethodPreference(userId = scopeKey, methodId = method.id, sourceInstrumentId = instrument.id)
                 )
             }
             createStarterTechniquesFor(method, method.defaultRatio)
@@ -1804,7 +1811,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun setMethodPinned(methodId: String, isPinned: Boolean) {
         viewModelScope.launch {
-            repository.setMethodPinnedStatus(methodId, isPinned)
+            repository.setMethodPinnedStatus(methodId, activeOwnerId.value ?: "guest", isPinned)
         }
     }
 
@@ -1816,14 +1823,16 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun toggleMethodPinnedForInstrument(instrumentId: String) {
         viewModelScope.launch {
-            val pref = repository.getPreferenceByInstrumentId(instrumentId)
+            val scopeKey = activeOwnerId.value ?: "guest"
+            val pref = repository.getPreferenceByInstrumentId(instrumentId, scopeKey)
             if (pref != null) {
-                repository.setMethodPinnedStatus(pref.methodId, !pref.isPinnedToCalculator)
+                repository.setMethodPinnedStatus(pref.methodId, scopeKey, !pref.isPinnedToCalculator)
             } else {
                 val inst = _state.value.equipmentList.find { it.id == instrumentId }
                 if (inst != null) {
                     val bm = repository.getOrCreateBrewMethodForInstrument(inst.name)
                     val newPref = UserMethodPreference(
+                        userId = scopeKey,
                         methodId = bm.id,
                         sourceInstrumentId = inst.id,
                         isPinnedToCalculator = true,
@@ -1840,9 +1849,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         _state.update { it.copy(pendingPinDialogInstrument = null) }
         if (inst != null) {
             viewModelScope.launch {
-                val pref = repository.getPreferenceByInstrumentId(inst.id)
+                val scopeKey = activeOwnerId.value ?: "guest"
+                val pref = repository.getPreferenceByInstrumentId(inst.id, scopeKey)
                 if (pref != null) {
-                    repository.setMethodPinnedStatus(pref.methodId, isPinned)
+                    repository.setMethodPinnedStatus(pref.methodId, scopeKey, isPinned)
                 }
             }
         }
@@ -1869,8 +1879,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 )
                 repository.insertInstrument(inst)
                 if (isMethodType) {
+                    val scopeKey = activeOwnerId.value ?: "guest"
                     val bm = repository.getOrCreateBrewMethodForInstrument(name.trim())
                     val pref = UserMethodPreference(
+                        userId = scopeKey,
                         methodId = bm.id,
                         sourceInstrumentId = inst.id,
                         isPinnedToCalculator = true,
@@ -1904,10 +1916,11 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 if (it.defaultRatio == defaultRatio) it else it.copy(defaultRatio = defaultRatio)
             }
             repository.insertBrewMethod(method)
-            val existing = repository.getPreferenceByMethodId(method.id)
+            val scopeKey = activeOwnerId.value ?: "guest"
+            val existing = repository.getPreferenceByMethodId(method.id, scopeKey)
             repository.insertUserMethodPreference(
                 existing?.copy(isPinnedToCalculator = true, isActive = true, sourceInstrumentId = existing.sourceInstrumentId ?: inst.id)
-                    ?: UserMethodPreference(methodId = method.id, sourceInstrumentId = inst.id)
+                    ?: UserMethodPreference(userId = scopeKey, methodId = method.id, sourceInstrumentId = inst.id)
             )
             createStarterTechniquesFor(method, defaultRatio)
             val water = (_state.value.coffee * defaultRatio).toInt().coerceAtLeast(1)

@@ -239,4 +239,38 @@ class BrewAggregateRoomTest {
             assertTrue(cursor.isNull(1))
         }
     }
+
+    @Test
+    fun `migration eight to nine keeps method preferences in guest scope`() {
+        val sqlite = database.openHelper.writableDatabase
+        sqlite.execSQL("DELETE FROM user_method_preferences")
+        sqlite.execSQL("INSERT INTO user_method_preferences (id, userId, methodId, isPinnedToCalculator, isActive, sourceInstrumentId, addedAt) VALUES ('legacy-pref', 'local_user', 'method-v60', 0, 1, NULL, '2026-01-01T00:00:00Z')")
+
+        MIGRATION_8_9.migrate(sqlite)
+
+        sqlite.query("SELECT userId, isPinnedToCalculator FROM user_method_preferences WHERE id = 'legacy-pref'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("guest", cursor.getString(0))
+            assertEquals(0, cursor.getInt(1))
+        }
+    }
+
+    @Test
+    fun `method pinning and equipment lookup stay inside the active account`() = runBlocking {
+        val dao = database.userMethodPreferenceDao()
+        val methodId = "method-v60"
+        dao.insertPreferences(
+            listOf(
+                UserMethodPreference(id = "pref-a", userId = "owner-a", methodId = methodId, sourceInstrumentId = "brewer-a", isPinnedToCalculator = true),
+                UserMethodPreference(id = "pref-b", userId = "owner-b", methodId = methodId, sourceInstrumentId = "brewer-b", isPinnedToCalculator = true)
+            )
+        )
+
+        dao.setPinnedStatus(methodId, "owner-a", false)
+
+        assertEquals(false, dao.getPreferenceByMethodId(methodId, "owner-a")?.isPinnedToCalculator)
+        assertEquals(true, dao.getPreferenceByMethodId(methodId, "owner-b")?.isPinnedToCalculator)
+        assertEquals("pref-a", dao.getPreferenceByInstrumentId("brewer-a", "owner-a")?.id)
+        assertNull(dao.getPreferenceByInstrumentId("brewer-a", "owner-b"))
+    }
 }

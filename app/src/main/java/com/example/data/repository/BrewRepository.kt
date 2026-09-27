@@ -35,16 +35,16 @@ class BrewRepository(
     val userMethodPreferences: Flow<List<UserMethodPreference>> = userMethodPreferenceDao?.getAllActivePreferences() ?: kotlinx.coroutines.flow.flowOf(emptyList())
     val pinnedUserMethodPreferences: Flow<List<UserMethodPreference>> = userMethodPreferenceDao?.getPinnedPreferences() ?: kotlinx.coroutines.flow.flowOf(emptyList())
 
-    suspend fun setMethodPinnedStatus(methodId: String, isPinned: Boolean) {
-        userMethodPreferenceDao?.setPinnedStatus(methodId, isPinned)
+    suspend fun setMethodPinnedStatus(methodId: String, scopeKey: String, isPinned: Boolean) {
+        userMethodPreferenceDao?.setPinnedStatus(methodId, scopeKey, isPinned)
     }
 
-    suspend fun getPreferenceByMethodId(methodId: String): UserMethodPreference? {
-        return userMethodPreferenceDao?.getPreferenceByMethodId(methodId)
+    suspend fun getPreferenceByMethodId(methodId: String, scopeKey: String): UserMethodPreference? {
+        return userMethodPreferenceDao?.getPreferenceByMethodId(methodId, scopeKey)
     }
 
-    suspend fun getPreferenceByInstrumentId(instrumentId: String): UserMethodPreference? {
-        return userMethodPreferenceDao?.getPreferenceByInstrumentId(instrumentId)
+    suspend fun getPreferenceByInstrumentId(instrumentId: String, scopeKey: String): UserMethodPreference? {
+        return userMethodPreferenceDao?.getPreferenceByInstrumentId(instrumentId, scopeKey)
     }
 
     suspend fun insertUserMethodPreference(pref: UserMethodPreference) {
@@ -77,15 +77,18 @@ class BrewRepository(
         BrewTechniqueCatalog.methods.forEach { method ->
             if (brewMethodDao?.getMethodById(method.id) == null) brewMethodDao?.insertMethod(method)
         }
-        BrewTechniqueCatalog.preferences.forEach { preference ->
-            if (userMethodPreferenceDao?.getPreferenceByMethodId(preference.methodId) == null) {
-                userMethodPreferenceDao?.insertPreference(preference)
-            }
-        }
         BrewTechniqueCatalog.techniques.forEach { template ->
             if (techniqueDao.getTechniqueById(template.id) == null) {
                 val technique = BrewTechniqueCatalog.entity(template)
                 insertTechnique(technique, BrewTechniqueCatalog.steps(template, technique.waterMl))
+            }
+        }
+    }
+
+    suspend fun ensureMethodPreferences(scopeKey: String) {
+        BrewTechniqueCatalog.preferencesFor(scopeKey).forEach { preference ->
+            if (userMethodPreferenceDao?.getPreferenceByMethodId(preference.methodId, scopeKey) == null) {
+                userMethodPreferenceDao?.insertPreference(preference)
             }
         }
     }

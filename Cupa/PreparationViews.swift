@@ -102,7 +102,7 @@ struct PreparationExecutionView: View {
                     .font(.headline).foregroundStyle(CupaTheme.text)
                 Text("\(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g de café · \(model.state.waterMl) ml de agua · 1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))")
                     .font(.caption.bold()).foregroundStyle(CupaTheme.text)
-                Text("Lee de arriba abajo: agrega la cantidad terracota, detente cuando la báscula marque el total verde y respeta el tiempo dorado.")
+                Text("Sigue siempre el mismo orden: 1) vierte la cantidad terracota, 2) detente en el total verde de la báscula y 3) respeta el tiempo dorado.")
                     .font(.caption).foregroundStyle(CupaTheme.secondaryText)
             }
             ForEach(Array(model.state.steps.enumerated()), id: \.element.id) { index, step in
@@ -192,10 +192,12 @@ struct PreparationExecutionView: View {
 
     private func stepMetrics(_ step: PreparationStepSnapshot, timeLabel: String, timeValue: String) -> some View {
         PreparationMetricsRow(
-            addedLabel: step.waterAddedMl > 0 ? "AGREGA AHORA" : "SIN AGUA NUEVA",
+            addedLabel: step.waterAddedMl > 0 ? "1 · VIERTE" : "1 · ESPERA",
             added: step.waterAddedMl > 0 ? "+\(step.waterAddedMl) ml" : "0 ml",
+            addedHelper: step.waterAddedMl > 0 ? "agrega ahora" : "sin verter",
             accumulated: "\(step.waterAccumulatedMl) ml",
-            timeLabel: timeLabel,
+            timeLabel: "3 · TIEMPO",
+            timeHelper: timeLabel == "TIEMPO RESTANTE" ? "restante" : "del paso",
             timeValue: timeValue
         )
     }
@@ -300,8 +302,10 @@ private struct PreparationMetricsRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let addedLabel: String
     let added: String
+    let addedHelper: String
     let accumulated: String
     let timeLabel: String
+    let timeHelper: String
     let timeValue: String
 
     var body: some View {
@@ -315,15 +319,16 @@ private struct PreparationMetricsRow: View {
     }
 
     @ViewBuilder private var tiles: some View {
-        PreparationMetricTile(label: addedLabel, value: added, color: CupaTheme.terracotta, systemImage: "drop.fill")
-        PreparationMetricTile(label: "TOTAL EN BÁSCULA", value: accumulated, color: CupaTheme.forest, systemImage: "scalemass.fill")
-        PreparationMetricTile(label: timeLabel, value: timeValue, color: CupaTheme.gold, systemImage: "timer")
+        PreparationMetricTile(label: addedLabel, value: added, helper: addedHelper, color: CupaTheme.terracotta, systemImage: "drop.fill")
+        PreparationMetricTile(label: "2 · BÁSCULA", value: accumulated, helper: "total acumulado", color: CupaTheme.forest, systemImage: "scalemass.fill")
+        PreparationMetricTile(label: timeLabel, value: timeValue, helper: timeHelper, color: CupaTheme.gold, systemImage: "timer")
     }
 }
 
 private struct PreparationMetricTile: View {
     let label: String
     let value: String
+    let helper: String
     let color: Color
     let systemImage: String
 
@@ -334,14 +339,15 @@ private struct PreparationMetricTile: View {
                 Text(label).font(.system(size: 8, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.65)
             }
             .foregroundStyle(color)
-            Text(value).font(.subheadline.bold().monospacedDigit()).lineLimit(1).minimumScaleFactor(0.72).foregroundStyle(CupaTheme.text)
+            Text(value).font(.headline.bold().monospacedDigit()).lineLimit(1).minimumScaleFactor(0.72).foregroundStyle(CupaTheme.text)
+            Text(helper).font(.system(size: 8, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7).foregroundStyle(color)
         }
-        .frame(maxWidth: .infinity, minHeight: 48)
+        .frame(maxWidth: .infinity, minHeight: 58)
         .padding(.horizontal, 5).padding(.vertical, 5)
         .background(color.opacity(0.11))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(color.opacity(0.28), lineWidth: 1) }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(label): \(value)")
+        .accessibilityLabel("\(label): \(value), \(helper)")
     }
 }

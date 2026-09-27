@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -505,7 +506,17 @@ private fun TechniqueStepsOverview(
             }
             steps.forEachIndexed { index, step ->
                 if (index > 0) HorizontalDivider(color = BordeSuave.copy(alpha = 0.65f))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.clearAndSetSemantics {
+                        contentDescription = preparationStepAccessibilityLabel(
+                            step = step,
+                            position = index + 1,
+                            totalSteps = steps.size,
+                            status = "Por revisar"
+                        )
+                    },
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -583,6 +594,22 @@ private fun formatStepDuration(seconds: Int): String =
 
 private fun formatPrepNumber(value: Float): String =
     if (value % 1f == 0f) String.format(Locale.US, "%.0f", value) else String.format(Locale.US, "%.1f", value)
+
+internal fun preparationStepAccessibilityLabel(
+    step: TechniqueStep,
+    position: Int,
+    totalSteps: Int,
+    status: String
+): String {
+    val waterAction = if (step.waterAddedMl > 0) {
+        "Agrega ${step.waterAddedMl} mililitros"
+    } else {
+        "Sin agua nueva"
+    }
+    return "Paso $position de $totalSteps. $status. ${step.title}. $waterAction. " +
+        "Total en báscula ${step.waterAccumulatedMl} mililitros. " +
+        "Tiempo del paso ${formatStepDuration(step.durationSeconds)}."
+}
 
 @Composable
 fun ActiveBrewTimerView(
@@ -758,10 +785,28 @@ fun ActiveBrewTimerView(
         itemsIndexed(steps) { idx, step ->
             val isCurrent = idx == currentIndex
             val isPast = idx < currentIndex
+            val statusLabel = when {
+                isPast -> "COMPLETADO"
+                isCurrent -> "ACTIVO"
+                else -> "PENDIENTE"
+            }
+            val statusColor = when {
+                isPast -> AcentoSecundario
+                isCurrent -> AcentoPrincipal
+                else -> TextSecundario
+            }
             
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clearAndSetSemantics {
+                        contentDescription = preparationStepAccessibilityLabel(
+                            step = step,
+                            position = idx + 1,
+                            totalSteps = steps.size,
+                            status = statusLabel.lowercase(Locale.getDefault()).replaceFirstChar { it.titlecase(Locale.getDefault()) }
+                        )
+                    }
                     .border(
                         width = if (isCurrent) 1.5.dp else 1.dp,
                         color = if (isCurrent) AcentoPrincipal else if (isPast) Color.Transparent else BordeSuave.copy(alpha = 0.5f),
@@ -800,18 +845,16 @@ fun ActiveBrewTimerView(
                                 color = if (isCurrent) TextPrincipal else if (isPast) TextSecundario else TextPrincipal.copy(alpha = 0.8f),
                                 modifier = Modifier.weight(1f)
                             )
-                            if (isCurrent) {
-                                Text(
-                                    "ACTIVO",
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = AcentoPrincipal,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(AcentoPrincipal.copy(alpha = 0.15f))
-                                        .padding(horizontal = 7.dp, vertical = 3.dp)
-                                )
-                            }
+                            Text(
+                                statusLabel,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = statusColor,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(statusColor.copy(alpha = 0.15f))
+                                    .padding(horizontal = 7.dp, vertical = 3.dp)
+                            )
                         }
                         PreparationStepMetrics(step = step)
                         if (step.stepNote.isNotBlank()) {

@@ -149,6 +149,23 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `preparation step accessibility says action total time and status without relying on color`() {
+    val step = com.example.data.database.TechniqueStep(
+      techniqueId = "technique-a",
+      stepNumber = 2,
+      title = "Vertido central",
+      durationSeconds = 75,
+      waterAddedMl = 120,
+      waterAccumulatedMl = 180
+    )
+
+    assertEquals(
+      "Paso 2 de 3. Activo. Vertido central. Agrega 120 mililitros. Total en báscula 180 mililitros. Tiempo del paso 1:15.",
+      com.example.ui.screens.preparationStepAccessibilityLabel(step, 2, 3, "Activo")
+    )
+  }
+
+  @Test
   fun `owner scope changes reset account-bound screen identity`() = runBlocking {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val session = com.example.data.remote.SessionManager(application)

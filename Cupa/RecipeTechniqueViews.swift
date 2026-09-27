@@ -483,10 +483,18 @@ private struct RecipeEditorView: View {
     private func clearStoredDraft() { storedDraft = removingEditorDraft(ownerId: context.activeOwnerId, from: storedDraft, as: RecipeDraftModel.self) }
 }
 
+private struct RecipeImportTextDraft: Codable, Equatable {
+    var rawText = ""
+}
+
 private struct RecipeImporterView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var context
     let onParsed: (RecipeDraftModel) -> Void
     @State private var rawText = ""
+    @State private var loaded = false
+    @State private var isProcessing = false
+    @SceneStorage("cupa.recipeImporterDraft.v1") private var storedDraft: Data?
 
     var body: some View {
         NavigationStack {
@@ -501,15 +509,38 @@ private struct RecipeImporterView: View {
             }
             .brewScrollableCanvas()
             .navigationTitle("Importar receta")
+            .onAppear(perform: load)
+            .onChange(of: rawText) { _, value in
+                guard loaded else { return }
+                storedDraft = storingEditorDraft(RecipeImportTextDraft(rawText: value), ownerId: context.activeOwnerId, in: storedDraft)
+            }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { clearStoredDraft(); dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Procesar") { onParsed(RecipeTextParser.parse(rawText)) }
-                        .disabled(rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(isProcessing ? "Procesando…" : "Procesar") {
+                        guard !isProcessing else { return }
+                        isProcessing = true
+                        let parsed = RecipeTextParser.parse(rawText)
+                        clearStoredDraft()
+                        onParsed(parsed)
+                    }
+                        .disabled(rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isProcessing)
                         .accessibilityIdentifier("recipes.import.process")
                 }
             }
         }
+    }
+
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        if let restored: RecipeImportTextDraft = scopedEditorDraft(from: storedDraft, ownerId: context.activeOwnerId) {
+            rawText = restored.rawText
+        }
+    }
+
+    private func clearStoredDraft() {
+        storedDraft = removingEditorDraft(ownerId: context.activeOwnerId, from: storedDraft, as: RecipeImportTextDraft.self)
     }
 }
 

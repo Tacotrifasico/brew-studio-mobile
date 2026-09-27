@@ -106,7 +106,7 @@ private fun OwnerScopedStorageScreen(
     onNavigateToPreparation: () -> Unit,
     onNavigateToCommunity: () -> Unit
 ) {
-    var selectedCategory by remember { mutableStateOf("Café") }
+    var selectedCategory by rememberSaveable { mutableStateOf("Café") }
     var pendingDeletion by remember { mutableStateOf<StorageDeletionRequest?>(null) }
     
     // Bottom Sheet Triggers
@@ -123,7 +123,7 @@ private fun OwnerScopedStorageScreen(
     var selectedRecipeForDetail by remember { mutableStateOf<Recipe?>(null) }
     var showRecipeImporterDialog by remember { mutableStateOf(false) }
     var importedRecipeDraft by remember { mutableStateOf<RecipeDraft?>(null) }
-    var showTechniqueCreator by remember { mutableStateOf(false) }
+    var showTechniqueCreator by rememberSaveable { mutableStateOf(false) }
     var selectedTechniqueId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTechniqueSteps by remember { mutableStateOf<List<TechniqueStep>>(emptyList()) }
     var editingTechniqueId by rememberSaveable { mutableStateOf<String?>(null) }

@@ -49,7 +49,7 @@ fun BrewScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
-    var isCreatingCustom by remember { mutableStateOf(false) }
+    var isCreatingCustom by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.ownerScopeKey) { isCreatingCustom = false }
 
     Box(
@@ -161,9 +161,9 @@ fun BrewSetupView(
     state: com.example.ui.viewmodel.BaristaCalcState
 ) {
     val scrollState = rememberScrollState()
-    var showAddMethodDialog by remember { mutableStateOf(false) }
-    var newMethodName by remember { mutableStateOf("") }
-    var newMethodRatio by remember { mutableStateOf("16") }
+    var showAddMethodDialog by rememberSaveable { mutableStateOf(false) }
+    var newMethodName by rememberSaveable { mutableStateOf("") }
+    var newMethodRatio by rememberSaveable { mutableStateOf("16") }
     val activeMethodId = viewModel.methodIdForName(state.activePrepMethod)
     val matchingTechniques = state.techniquesList.filter { it.methodId == activeMethodId }
 
@@ -498,7 +498,7 @@ private fun TechniqueStepsOverview(
                     color = TextPrincipal
                 )
                 Text(
-                    "Lee los pasos de arriba abajo. En cada uno: agrega la cantidad terracota, detente cuando la báscula marque el total verde y respeta el tiempo dorado.",
+                    "Sigue siempre el mismo orden: 1) vierte la cantidad terracota, 2) detente en el total verde de la báscula y 3) respeta el tiempo dorado.",
                     fontSize = 11.sp,
                     color = TextSecundario,
                     lineHeight = 15.sp
@@ -541,24 +541,29 @@ private fun TechniqueStepsOverview(
 }
 
 @Composable
-private fun PreparationStepMetrics(step: TechniqueStep) {
+private fun PreparationStepMetrics(
+    step: TechniqueStep,
+    timeValue: String = formatStepDuration(step.durationSeconds),
+    timeHelper: String = "del paso"
+) {
     val largeText = LocalDensity.current.fontScale >= 1.3f
-    val waterActionLabel = if (step.waterAddedMl > 0) "AGREGA AHORA" else "SIN AGUA NUEVA"
+    val waterActionLabel = if (step.waterAddedMl > 0) "1 · VIERTE" else "1 · ESPERA"
     val waterActionValue = if (step.waterAddedMl > 0) "+${step.waterAddedMl} ml" else "0 ml"
+    val waterActionHelper = if (step.waterAddedMl > 0) "agrega ahora" else "sin verter"
     if (largeText) {
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            PreparationMetric(waterActionLabel, waterActionValue, CafeCalidoOscuro, Icons.Default.WaterDrop, Modifier.fillMaxWidth())
-            PreparationMetric("TOTAL EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Icons.Default.Scale, Modifier.fillMaxWidth())
-            PreparationMetric("TIEMPO DEL PASO", formatStepDuration(step.durationSeconds), AccentGold, Icons.Default.Timer, Modifier.fillMaxWidth())
+            PreparationMetric(waterActionLabel, waterActionValue, waterActionHelper, CafeCalidoOscuro, Icons.Default.WaterDrop, Modifier.fillMaxWidth())
+            PreparationMetric("2 · BÁSCULA", "${step.waterAccumulatedMl} ml", "detente en este total", AcentoPrincipal, Icons.Default.Scale, Modifier.fillMaxWidth())
+            PreparationMetric("3 · TIEMPO", timeValue, timeHelper, AccentGold, Icons.Default.Timer, Modifier.fillMaxWidth())
         }
     } else {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            PreparationMetric(waterActionLabel, waterActionValue, CafeCalidoOscuro, Icons.Default.WaterDrop, Modifier.weight(1f))
-            PreparationMetric("TOTAL EN BÁSCULA", "${step.waterAccumulatedMl} ml", AcentoPrincipal, Icons.Default.Scale, Modifier.weight(1f))
-            PreparationMetric("TIEMPO DEL PASO", formatStepDuration(step.durationSeconds), AccentGold, Icons.Default.Timer, Modifier.weight(1f))
+            PreparationMetric(waterActionLabel, waterActionValue, waterActionHelper, CafeCalidoOscuro, Icons.Default.WaterDrop, Modifier.weight(1f))
+            PreparationMetric("2 · BÁSCULA", "${step.waterAccumulatedMl} ml", "total acumulado", AcentoPrincipal, Icons.Default.Scale, Modifier.weight(1f))
+            PreparationMetric("3 · TIEMPO", timeValue, timeHelper, AccentGold, Icons.Default.Timer, Modifier.weight(1f))
         }
     }
 }
@@ -567,13 +572,14 @@ private fun PreparationStepMetrics(step: TechniqueStep) {
 private fun PreparationMetric(
     label: String,
     value: String,
+    helper: String,
     color: Color,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
-            .semantics(mergeDescendants = true) { contentDescription = "$label: $value" }
+            .semantics(mergeDescendants = true) { contentDescription = "$label: $value, $helper" }
             .clip(RoundedCornerShape(12.dp))
             .background(color.copy(alpha = 0.12f))
             .border(1.dp, color.copy(alpha = 0.28f), RoundedCornerShape(12.dp))
@@ -583,9 +589,10 @@ private fun PreparationMetric(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(11.dp))
-            Text(label, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, color = color, maxLines = 1)
+            Text(label, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = color, maxLines = 1)
         }
-        Text(value, fontSize = 15.sp, fontWeight = FontWeight.Black, color = TextPrincipal, maxLines = 1)
+        Text(value, fontSize = 17.sp, fontWeight = FontWeight.Black, color = TextPrincipal, maxLines = 1)
+        Text(helper, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = color, maxLines = 1)
     }
 }
 
@@ -682,7 +689,13 @@ fun ActiveBrewTimerView(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    activeStep?.let { PreparationStepMetrics(step = it) }
+                    activeStep?.let {
+                        PreparationStepMetrics(
+                            step = it,
+                            timeValue = formatStepDuration(remainingCurrentStep),
+                            timeHelper = "restante"
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -894,7 +907,7 @@ fun CreateTechniqueFormView(
     val state by viewModel.state.collectAsState()
 
     var name by rememberSaveable { mutableStateOf("") }
-    var isSaving by rememberSaveable { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
     
     // Method Picker state
     val availableMethods = if (state.userMethods.isNotEmpty()) state.userMethods else listOf(
@@ -908,8 +921,8 @@ fun CreateTechniqueFormView(
     )
     var selectedMethodId by rememberSaveable { mutableStateOf(availableMethods.firstOrNull()?.methodId ?: "11111111-1111-4000-8000-000000000001") }
     var methodDropdownExpanded by remember { mutableStateOf(false) }
-    var showAddMethodDialog by remember { mutableStateOf(false) }
-    var newMethodInputName by remember { mutableStateOf("") }
+    var showAddMethodDialog by rememberSaveable { mutableStateOf(false) }
+    var newMethodInputName by rememberSaveable { mutableStateOf("") }
 
     var coffee by rememberSaveable { mutableStateOf("15.0") }
     var water by rememberSaveable { mutableStateOf("240") }
@@ -917,10 +930,10 @@ fun CreateTechniqueFormView(
 
     // Grinder Picker state
     val grinders = state.grindersList.ifEmpty { state.equipmentList.filter { it.type == "GRINDER" } }
-    var selectedGrinderId by remember { mutableStateOf<String?>(grinders.firstOrNull()?.id) }
-    var selectedGrinderName by remember { mutableStateOf(grinders.firstOrNull()?.name ?: "Molino Manual") }
+    var selectedGrinderId by rememberSaveable { mutableStateOf<String?>(grinders.firstOrNull()?.id) }
+    var selectedGrinderName by rememberSaveable { mutableStateOf(grinders.firstOrNull()?.name ?: "Molino Manual") }
     var grinderDropdownExpanded by remember { mutableStateOf(false) }
-    var showAddGrinderDialog by remember { mutableStateOf(false) }
+    var showAddGrinderDialog by rememberSaveable { mutableStateOf(false) }
 
     var clicks by rememberSaveable { mutableStateOf("24") }
     var notes by rememberSaveable { mutableStateOf("") }
@@ -967,10 +980,10 @@ fun CreateTechniqueFormView(
     )
 
     if (showAddGrinderDialog) {
-        var newBrand by remember { mutableStateOf("") }
-        var newModel by remember { mutableStateOf("") }
-        var newClicks by remember { mutableStateOf("20") }
-        var newNotes by remember { mutableStateOf("") }
+        var newBrand by rememberSaveable { mutableStateOf("") }
+        var newModel by rememberSaveable { mutableStateOf("") }
+        var newClicks by rememberSaveable { mutableStateOf("20") }
+        var newNotes by rememberSaveable { mutableStateOf("") }
 
         AlertDialog(
             onDismissRequest = { showAddGrinderDialog = false },

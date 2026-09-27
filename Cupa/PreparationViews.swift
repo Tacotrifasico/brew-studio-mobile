@@ -100,7 +100,7 @@ struct PreparationExecutionView: View {
                     .font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.forestText)
                 Text("Revísala antes de iniciar")
                     .font(.headline).foregroundStyle(CupaTheme.text)
-                Text("\(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g de café · \(model.state.waterMl) ml de agua · 1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))")
+                Text("\(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g de café · \(model.state.waterMl) ml de agua · 1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1)))) · \(durationString(model.state.steps.reduce(0) { $0 + $1.durationSeconds }))")
                     .font(.caption.bold()).foregroundStyle(CupaTheme.text)
                 Text("Sigue siempre el mismo orden: 1) vierte la cantidad terracota, 2) detente en el total verde de la báscula y 3) respeta el tiempo dorado.")
                     .font(.caption).foregroundStyle(CupaTheme.secondaryText)
@@ -135,11 +135,7 @@ struct PreparationExecutionView: View {
         VStack(spacing: 10) {
             Text("PASO \(step.number) DE \(model.state.steps.count)").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
             Text("AHORA · \(step.title)").font(.title3.bold()).multilineTextAlignment(.center)
-            stepMetrics(
-                step,
-                timeLabel: "TIEMPO RESTANTE",
-                timeValue: durationString(max(0, step.durationSeconds - model.stepElapsed))
-            )
+            activeStepInstructions(step, remainingSeconds: max(0, step.durationSeconds - model.stepElapsed))
             Text(step.gesture.replacingOccurrences(of: "_", with: " ").capitalized + " · " + step.intensity.capitalized)
                 .font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
             if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText).multilineTextAlignment(.center) }
@@ -199,6 +195,38 @@ struct PreparationExecutionView: View {
             timeLabel: "3 · TIEMPO",
             timeHelper: timeLabel == "TIEMPO RESTANTE" ? "restante" : "del paso",
             timeValue: timeValue
+        )
+    }
+
+    private func activeStepInstructions(_ step: PreparationStepSnapshot, remainingSeconds: Int) -> some View {
+        VStack(spacing: 8) {
+            ActiveInstructionBand(
+                label: step.waterAddedMl > 0 ? "1 · AGREGA AHORA" : "1 · NO AGREGUES AGUA",
+                value: step.waterAddedMl > 0 ? "+\(step.waterAddedMl) ml" : "0 ml",
+                helper: step.waterAddedMl > 0 ? "Cantidad de este vertido" : "Espera sin verter",
+                color: CupaTheme.terracotta,
+                systemImage: "drop.fill"
+            )
+            ActiveInstructionBand(
+                label: "2 · LA BÁSCULA DEBE MARCAR",
+                value: "\(step.waterAccumulatedMl) ml",
+                helper: "Total acumulado desde el inicio",
+                color: CupaTheme.forest,
+                systemImage: "scalemass.fill"
+            )
+            ActiveInstructionBand(
+                label: "3 · TIEMPO DE ESTE PASO",
+                value: durationString(remainingSeconds),
+                helper: "Tiempo restante",
+                color: CupaTheme.gold,
+                systemImage: "timer"
+            )
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            step.waterAddedMl > 0
+                ? "Agrega ahora \(step.waterAddedMl) mililitros. La báscula debe marcar \(step.waterAccumulatedMl) mililitros. Tiempo restante \(durationString(remainingSeconds))."
+                : "No agregues agua. Mantén la báscula en \(step.waterAccumulatedMl) mililitros. Tiempo restante \(durationString(remainingSeconds))."
         )
     }
 
@@ -349,5 +377,40 @@ private struct PreparationMetricTile: View {
         .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(color.opacity(0.28), lineWidth: 1) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(label): \(value), \(helper)")
+    }
+}
+
+private struct ActiveInstructionBand: View {
+    let label: String
+    let value: String
+    let helper: String
+    let color: Color
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 11) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 38, height: 38)
+                .background(color.opacity(0.17))
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label).font(.caption2.bold()).tracking(0.4).foregroundStyle(color)
+                    .lineLimit(1).minimumScaleFactor(0.72)
+                Text(helper).font(.caption2).foregroundStyle(CupaTheme.secondaryText)
+            }
+            Spacer(minLength: 6)
+            Text(value)
+                .font(.title3.bold().monospacedDigit())
+                .foregroundStyle(CupaTheme.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(color.opacity(0.11))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(color.opacity(0.30), lineWidth: 1) }
     }
 }

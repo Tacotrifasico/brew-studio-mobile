@@ -930,14 +930,16 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             if (tech != null) {
                 val current = _state.value
                 val dbSteps = repository.getStepsForTechniqueSync(techId)
-                val finalSteps = if (dbSteps.isNotEmpty()) {
-                    BrewTechniqueCatalog.scaleSteps(dbSteps, tech.waterMl, current.activePrepWater)
-                } else generateQuickSteps(current.activePrepMethod, current.activePrepWater)
                 val methodName = current.allBrewMethods.firstOrNull { it.id == tech.methodId }?.let { methodDisplayName(it) }
                     ?: BrewTechniqueCatalog.methodName(tech.methodId)
+                val finalSteps = if (dbSteps.isNotEmpty()) dbSteps else generateQuickSteps(methodName, tech.waterMl)
+                timerJob?.cancel()
                 _state.update { it.copy(
                     activePrepMethod = methodName,
                     activePrepMethodId = tech.methodId,
+                    activePrepCoffee = tech.doseG,
+                    activePrepWater = tech.waterMl,
+                    activePrepRatio = tech.ratio,
                     activePrepTemp = tech.temperatureC,
                     activePrepTechniqueName = tech.name,
                     activePrepTechniqueId = tech.id,
@@ -948,7 +950,15 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     activePrepBean = current.beansList.firstOrNull { it.id == tech.beanId }?.name
                         ?: current.activePrepBean,
                     activePrepClicks = (tech.grindValue ?: 18.0).toInt(),
-                    activePrepSteps = finalSteps
+                    activePrepSteps = finalSteps,
+                    timerRunning = false,
+                    timerPaused = false,
+                    preparationCompleted = false,
+                    elapsedSeconds = 0,
+                    activeStepIndex = 0,
+                    activePreparationSessionId = UUID.randomUUID().toString(),
+                    activeCataId = UUID.randomUUID().toString(),
+                    savedCataCupId = null
                 ) }
             }
         }

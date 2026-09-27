@@ -245,4 +245,62 @@ class ExampleRobolectricTest {
     assertTrue(viewModel.state.value.labNotes.contains("Textura: sedosa"))
     assertTrue(viewModel.state.value.labNotes.contains("Limpieza: alta"))
   }
+
+  @Test
+  fun `storage technique opens preparation with its own quantities and pours`() = runBlocking {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val session = com.example.data.remote.SessionManager(application)
+    session.clearSession()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+    val mainLooper = org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+    val techniqueName = "Técnica almacén ${java.util.UUID.randomUUID()}"
+    val saved = kotlinx.coroutines.CompletableDeferred<Boolean>()
+
+    viewModel.createAndSaveTechnique(
+      name = techniqueName,
+      methodId = "11111111-1111-4000-8000-000000000002",
+      coffee = 20f,
+      temp = 88,
+      grinderId = null,
+      grinderName = "Manual",
+      clicks = 17,
+      notes = "Prueba directa",
+      stepTitles = listOf("Carga", "Presión"),
+      stepTimes = listOf(40, 50),
+      stepWaters = listOf(80, 180)
+    ) { saved.complete(it) }
+
+    repeat(200) {
+      mainLooper.idle()
+      if (saved.isCompleted) return@repeat
+      Thread.sleep(20)
+    }
+    assertTrue(saved.isCompleted && saved.await())
+    repeat(200) {
+      mainLooper.idle()
+      if (viewModel.state.value.techniquesList.any { it.name == techniqueName }) return@repeat
+      Thread.sleep(20)
+    }
+    val technique = viewModel.state.value.techniquesList.first { it.name == techniqueName }
+    viewModel.onCoffeeChanged("15")
+    viewModel.onRatioChanged("16")
+    viewModel.startTimer()
+
+    viewModel.loadPrepTechnique(technique.id)
+    repeat(200) {
+      mainLooper.idle()
+      if (viewModel.state.value.activePrepTechniqueId == technique.id && viewModel.state.value.activePrepSteps.size == 2) return@repeat
+      Thread.sleep(20)
+    }
+    val loaded = viewModel.state.value
+
+    assertEquals(20f, loaded.activePrepCoffee)
+    assertEquals(260, loaded.activePrepWater)
+    assertEquals(13f, loaded.activePrepRatio)
+    assertEquals(88, loaded.activePrepTemp)
+    assertEquals(listOf(80, 260), loaded.activePrepSteps.map { it.waterAccumulatedMl })
+    assertEquals(false, loaded.timerRunning)
+    assertEquals(0, loaded.elapsedSeconds)
+    assertEquals(0, loaded.activeStepIndex)
+  }
 }

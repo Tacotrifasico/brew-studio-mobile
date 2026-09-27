@@ -402,6 +402,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     private var cataTimerJob: Job? = null
     private var cataSaveInFlight = false
     private val techniqueDuplicateInFlight = mutableSetOf<String>()
+    private val beanSaveInFlight = mutableSetOf<String>()
 
     init {
         viewModelScope.launch { repository.ensureCoreCatalog() }
@@ -1730,43 +1731,54 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         firstUseDate: String,
         notes: String,
         status: String,
-        stockGrams: Float
+        stockGrams: Float,
+        onCompleted: (Boolean) -> Unit = {}
     ) {
+        val saveKey = id ?: "new:${activeOwnerId.value ?: "guest"}:${name.trim().lowercase(Locale.getDefault())}"
+        if (!beanSaveInFlight.add(saveKey)) return
         viewModelScope.launch {
-            val existing = _state.value.beansList.firstOrNull { it.id == id }
-            val bean = existing?.copy(
-                roaster = roaster,
-                name = name,
-                origin = origin,
-                altitude = altitude,
-                process = process,
-                roastDate = roastDate,
-                firstUseDate = firstUseDate,
-                notes = notes,
-                status = status,
-                stockGrams = stockGrams,
-                updatedAt = currentIso8601(),
-                syncStatus = pendingWriteStatus(existing.remoteId)
-            ) ?: Bean(
-                id = id ?: UUID.randomUUID().toString(),
-                roaster = roaster,
-                name = name,
-                origin = origin,
-                altitude = altitude,
-                process = process,
-                roastDate = roastDate,
-                firstUseDate = firstUseDate,
-                notes = notes,
-                status = status,
-                stockGrams = stockGrams,
-                ownerUserId = activeOwnerId.value,
-                syncStatus = "PENDING_CREATE"
-            )
-            repository.insertBean(bean)
-            if (id == null) {
-                showToast("Grano de café '$name' ingresado al Almacén.")
-            } else {
-                showToast("Grano de café '$name' actualizado.")
+            try {
+                val existing = _state.value.beansList.firstOrNull { it.id == id }
+                val bean = existing?.copy(
+                    roaster = roaster,
+                    name = name,
+                    origin = origin,
+                    altitude = altitude,
+                    process = process,
+                    roastDate = roastDate,
+                    firstUseDate = firstUseDate,
+                    notes = notes,
+                    status = status,
+                    stockGrams = stockGrams,
+                    updatedAt = currentIso8601(),
+                    syncStatus = pendingWriteStatus(existing.remoteId)
+                ) ?: Bean(
+                    id = id ?: UUID.randomUUID().toString(),
+                    roaster = roaster,
+                    name = name,
+                    origin = origin,
+                    altitude = altitude,
+                    process = process,
+                    roastDate = roastDate,
+                    firstUseDate = firstUseDate,
+                    notes = notes,
+                    status = status,
+                    stockGrams = stockGrams,
+                    ownerUserId = activeOwnerId.value,
+                    syncStatus = "PENDING_CREATE"
+                )
+                repository.insertBean(bean)
+                if (id == null) {
+                    showToast("Grano de café '$name' ingresado al Almacén.")
+                } else {
+                    showToast("Grano de café '$name' actualizado.")
+                }
+                onCompleted(true)
+            } catch (_: Exception) {
+                showToast("No se pudo guardar el café. Tus datos siguen en pantalla para reintentar.")
+                onCompleted(false)
+            } finally {
+                beanSaveInFlight.remove(saveKey)
             }
         }
     }

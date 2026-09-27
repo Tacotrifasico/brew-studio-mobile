@@ -1,5 +1,6 @@
 package com.example.data.engine
 
+import java.io.Serializable
 import java.util.UUID
 
 data class RecipeIngredientInput(
@@ -7,12 +8,12 @@ data class RecipeIngredientInput(
     val amount: String = "",
     val unit: String = "G",
     val id: String = UUID.randomUUID().toString()
-)
+) : Serializable
 
 data class RecipeStepInput(
     val instruction: String = "",
     val id: String = UUID.randomUUID().toString()
-)
+) : Serializable
 
 data class RecipeDraft(
     val id: String = UUID.randomUUID().toString(),
@@ -25,7 +26,7 @@ data class RecipeDraft(
     val steps: List<RecipeStepInput> = emptyList(),
     val tags: String = "",
     val isFavorite: Boolean = false
-)
+) : Serializable
 
 object RecipeDraftValidator {
     fun message(

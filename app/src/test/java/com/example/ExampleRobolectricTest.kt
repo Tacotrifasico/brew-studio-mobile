@@ -123,6 +123,36 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `double tapping bean save creates only one inventory record`() = runBlocking {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+    val mainLooper = org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+    val uniqueName = "Café doble toque ${java.util.UUID.randomUUID()}"
+
+    repeat(2) {
+      viewModel.saveBean(
+        roaster = "Tostador prueba",
+        name = uniqueName,
+        origin = "México",
+        altitude = "1800",
+        process = "Lavado",
+        roastDate = "2026-09-20",
+        firstUseDate = "",
+        notes = "Protección contra doble guardado",
+        status = "cerrado",
+        stockGrams = 250f
+      )
+    }
+
+    repeat(200) {
+      mainLooper.idle()
+      if (viewModel.state.value.beansList.any { it.name == uniqueName }) return@repeat
+      Thread.sleep(20)
+    }
+    assertEquals(1, viewModel.state.value.beansList.count { it.name == uniqueName })
+  }
+
+  @Test
   fun `selected calculator favorite persists until it is removed`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val preferences = context.getSharedPreferences("favorite_test", Context.MODE_PRIVATE)

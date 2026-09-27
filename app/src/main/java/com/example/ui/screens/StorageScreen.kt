@@ -29,6 +29,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -110,26 +111,29 @@ private fun OwnerScopedStorageScreen(
     var pendingDeletion by remember { mutableStateOf<StorageDeletionRequest?>(null) }
     
     // Bottom Sheet Triggers
-    var activeBeanDetail by remember { mutableStateOf<Bean?>(null) }
-    var activeBeanEdit by remember { mutableStateOf<Bean?>(null) }
-    var isAddingNewBean by remember { mutableStateOf(false) }
+    var activeBeanDetailId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeBeanEditId by rememberSaveable { mutableStateOf<String?>(null) }
+    var isAddingNewBean by rememberSaveable { mutableStateOf(false) }
+    val activeBeanDetail = state.beansList.firstOrNull { it.id == activeBeanDetailId }
+    val activeBeanEdit = state.beansList.firstOrNull { it.id == activeBeanEditId }
     
     // Other categories creation triggers
-    var isAddingNewOther by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-    var recipeFilterMode by remember { mutableStateOf("Todas") }
+    var isAddingNewOther by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var recipeFilterMode by rememberSaveable { mutableStateOf("Todas") }
 
     // Recipe detail & importer triggers
-    var selectedRecipeForDetail by remember { mutableStateOf<Recipe?>(null) }
-    var showRecipeImporterDialog by remember { mutableStateOf(false) }
-    var importedRecipeDraft by remember { mutableStateOf<RecipeDraft?>(null) }
+    var selectedRecipeForDetailId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showRecipeImporterDialog by rememberSaveable { mutableStateOf(false) }
+    var importedRecipeDraft by rememberSaveable { mutableStateOf<RecipeDraft?>(null) }
+    val selectedRecipeForDetail = state.recipesList.firstOrNull { it.id == selectedRecipeForDetailId }
     var showTechniqueCreator by rememberSaveable { mutableStateOf(false) }
     var selectedTechniqueId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTechniqueSteps by remember { mutableStateOf<List<TechniqueStep>>(emptyList()) }
     var editingTechniqueId by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedTechnique = state.techniquesList.firstOrNull { it.id == selectedTechniqueId }
     val editingTechnique = state.techniquesList.firstOrNull { it.id == editingTechniqueId }
-    var showShareExplanation by remember { mutableStateOf(false) }
+    var showShareExplanation by rememberSaveable { mutableStateOf(false) }
     val pendingBreakdown = storagePendingBreakdown(
         beans = state.beansList.count { it.syncStatus != "SYNCED" },
         recipes = state.recipesList.count { it.syncStatus != "SYNCED" },
@@ -402,10 +406,10 @@ private fun OwnerScopedStorageScreen(
                         items(activeBeans) { bean ->
                             BeanItemCard(
                                 bean = bean,
-                                onDetailRequest = { activeBeanDetail = bean },
+                                onDetailRequest = { activeBeanDetailId = bean.id },
                                 onBrewSelected = { viewModel.selectBeanForBrewing(bean) },
                                 onLabSelected = { viewModel.selectBeanForLab(bean) },
-                                onEditSelected = { activeBeanEdit = bean },
+                                onEditSelected = { activeBeanEditId = bean.id },
                                 onDelete = {
                                     pendingDeletion = StorageDeletionRequest(
                                         title = "¿Eliminar ${bean.name}?",
@@ -434,7 +438,7 @@ private fun OwnerScopedStorageScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .border(1.dp, BordeSuave.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                                    .clickable { activeBeanDetail = bean },
+                                    .clickable { activeBeanDetailId = bean.id },
                                 colors = CardDefaults.cardColors(containerColor = SurfaceCard.copy(alpha = 0.6f)),
                                 shape = RoundedCornerShape(16.dp)
                             ) {
@@ -602,7 +606,7 @@ private fun OwnerScopedStorageScreen(
                         items(filteredRecipes) { recipe ->
                             RecipeItemCard(
                                 recipe = recipe,
-                                onClick = { selectedRecipeForDetail = recipe },
+                                onClick = { selectedRecipeForDetailId = recipe.id },
                                 onDelete = {
                                     pendingDeletion = StorageDeletionRequest(
                                         title = "¿Eliminar ${recipe.name}?",
@@ -707,13 +711,12 @@ private fun OwnerScopedStorageScreen(
     // Detail Sheet
     if (activeBeanDetail != null) {
         BeanDetailSheet(
-            bean = activeBeanDetail!!,
+            bean = activeBeanDetail,
             viewModel = viewModel,
-            onDismiss = { activeBeanDetail = null },
+            onDismiss = { activeBeanDetailId = null },
             onEdit = {
-                val bean = activeBeanDetail
-                activeBeanDetail = null
-                activeBeanEdit = bean
+                activeBeanDetailId = null
+                activeBeanEditId = activeBeanDetail.id
             }
         )
     }
@@ -732,7 +735,7 @@ private fun OwnerScopedStorageScreen(
         AddEditBeanSheet(
             beanToEdit = activeBeanEdit,
             viewModel = viewModel,
-            onDismiss = { activeBeanEdit = null }
+            onDismiss = { activeBeanEditId = null }
         )
     }
 
@@ -740,26 +743,26 @@ private fun OwnerScopedStorageScreen(
     selectedRecipeForDetail?.let { recipe ->
         SavedRecipeDetailDialog(
             recipe = recipe,
-            onDismiss = { selectedRecipeForDetail = null },
+            onDismiss = { selectedRecipeForDetailId = null },
             onDelete = {
                 viewModel.deleteRecipe(recipe)
-                selectedRecipeForDetail = null
+                selectedRecipeForDetailId = null
             },
             onFavoriteToggle = {
                 viewModel.toggleRecipeFavorite(recipe)
-                selectedRecipeForDetail = recipe.copy(isFavorite = !recipe.isFavorite)
+                selectedRecipeForDetailId = recipe.id
             },
             onEdit = {
                 importedRecipeDraft = recipe.toRecipeDraft(isClone = false)
                 selectedCategory = "Recetas"
                 isAddingNewOther = true
-                selectedRecipeForDetail = null
+                selectedRecipeForDetailId = null
             },
             onClone = {
                 importedRecipeDraft = recipe.toRecipeDraft(isClone = true)
                 selectedCategory = "Recetas"
                 isAddingNewOther = true
-                selectedRecipeForDetail = null
+                selectedRecipeForDetailId = null
             }
         )
     }
@@ -1072,6 +1075,16 @@ private data class TechniqueStepEditDraft(
 private val TechniqueStepEditDraftListSaver = listSaver<List<TechniqueStepEditDraft>, TechniqueStepEditDraft>(
     save = { it },
     restore = { it }
+)
+
+private val RecipeIngredientDraftListSaver = listSaver<SnapshotStateList<RecipeIngredientInput>, RecipeIngredientInput>(
+    save = { it.toList() },
+    restore = { saved -> mutableStateListOf<RecipeIngredientInput>().apply { addAll(saved) } }
+)
+
+private val RecipeStepDraftListSaver = listSaver<SnapshotStateList<RecipeStepInput>, RecipeStepInput>(
+    save = { it.toList() },
+    restore = { saved -> mutableStateListOf<RecipeStepInput>().apply { addAll(saved) } }
 )
 
 @Composable
@@ -1872,16 +1885,25 @@ fun AddEditBeanSheet(
     viewModel: BaristaCalcViewModel,
     onDismiss: () -> Unit
 ) {
-    var name by remember { mutableStateOf(beanToEdit?.name ?: "") }
-    var roaster by remember { mutableStateOf(beanToEdit?.roaster ?: "") }
-    var origin by remember { mutableStateOf(beanToEdit?.origin ?: "") }
-    var altitude by remember { mutableStateOf(beanToEdit?.altitude ?: "") }
-    var process by remember { mutableStateOf(beanToEdit?.process ?: "") }
-    var roastDate by remember { mutableStateOf(beanToEdit?.roastDate ?: "") }
-    var firstUseDate by remember { mutableStateOf(beanToEdit?.firstUseDate ?: "") }
-    var notes by remember { mutableStateOf(beanToEdit?.notes ?: "") }
-    var status by remember { mutableStateOf(beanToEdit?.status ?: "cerrado") }
-    var stockGrams by remember { mutableStateOf(beanToEdit?.stockGrams?.toString() ?: "210") }
+    val draftKey = beanToEdit?.id ?: "new-bean"
+    var name by rememberSaveable(draftKey) { mutableStateOf(beanToEdit?.name ?: "") }
+    var roaster by rememberSaveable(draftKey) { mutableStateOf(beanToEdit?.roaster ?: "") }
+    var origin by rememberSaveable(draftKey) { mutableStateOf(beanToEdit?.origin ?: "") }
+    var altitude by rememberSaveable(draftKey) { mutableStateOf(beanToEdit?.altitude ?: "") }
+    var process by rememberSaveable(draftKey) { mutableStateOf(beanToEdit?.process ?: "") }
+    var roastDate by rememberSaveable(draftKey) { mutableStateOf(beanToEdit?.roastDate ?: "") }
+    var firstUseDate by rememberSaveable(draftKey) { mutableStateOf(beanToEdit?.firstUseDate ?: "") }
+    var notes by rememberSaveable(draftKey) { mutableStateOf(beanToEdit?.notes ?: "") }
+    var status by rememberSaveable(draftKey) { mutableStateOf(beanToEdit?.status ?: "cerrado") }
+    var stockGrams by rememberSaveable(draftKey) { mutableStateOf(beanToEdit?.stockGrams?.toString() ?: "210") }
+    var isSaving by remember(draftKey) { mutableStateOf(false) }
+    val stockValue = stockGrams.replace(',', '.').toFloatOrNull()
+    val validationMessage = when {
+        name.isBlank() -> "Escribe el nombre del café."
+        roaster.isBlank() -> "Escribe el tostador o la marca."
+        stockValue == null || !stockValue.isFinite() || stockValue < 0f -> "El stock debe ser 0 g o más."
+        else -> null
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -2032,10 +2054,13 @@ fun AddEditBeanSheet(
                 // Actions
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     StyledPrimaryButton(
-                        text = if (beanToEdit != null) "Guardar Cambios" else "Archivar Grano en Almacén",
+                        text = if (isSaving) "Guardando…" else if (beanToEdit != null) "Guardar Cambios" else "Archivar Grano en Almacén",
                         icon = Icons.Default.Check,
+                        enabled = validationMessage == null && !isSaving,
                         onClick = {
-                            if (name.isNotBlank() && roaster.isNotBlank()) {
+                            val validStock = stockValue
+                            if (validationMessage == null && validStock != null && !isSaving) {
+                                isSaving = true
                                 viewModel.saveBean(
                                     id = beanToEdit?.id,
                                     roaster = roaster,
@@ -2047,12 +2072,19 @@ fun AddEditBeanSheet(
                                     firstUseDate = firstUseDate,
                                     notes = notes,
                                     status = status,
-                                    stockGrams = stockGrams.toFloatOrNull() ?: 250f
+                                    stockGrams = validStock,
+                                    onCompleted = { success ->
+                                        isSaving = false
+                                        if (success) onDismiss()
+                                    }
                                 )
-                                onDismiss()
                             }
                         }
                     )
+
+                    validationMessage?.let {
+                        Text(it, color = Advertencia, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    }
 
                     StyledSecondaryButton(
                         text = "Cancelar",
@@ -2666,7 +2698,7 @@ fun RecipeImporterDialog(
     onDismiss: () -> Unit,
     onDraftParsed: (RecipeDraft) -> Unit
 ) {
-    var rawText by remember { mutableStateOf("") }
+    var rawText by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2843,10 +2875,10 @@ fun AddingFormSelector(
             when (category) {
                 "Molinos" -> {
                     var isSaving by remember { mutableStateOf(false) }
-                    var brand by remember { mutableStateOf("") }
-                    var model by remember { mutableStateOf("") }
-                    var clickRange by remember { mutableStateOf("0–40 clics") }
-                    var calibracion by remember { mutableStateOf("") }
+                    var brand by rememberSaveable { mutableStateOf("") }
+                    var model by rememberSaveable { mutableStateOf("") }
+                    var clickRange by rememberSaveable { mutableStateOf("0–40 clics") }
+                    var calibracion by rememberSaveable { mutableStateOf("") }
                     val validationMessage = if (model.isBlank()) "Escribe el modelo del molino." else null
 
                     FormHeaderWithBlob(
@@ -2908,14 +2940,15 @@ fun AddingFormSelector(
                 }
                 "Recetas" -> {
                     var isSaving by remember(initialDraft) { mutableStateOf(false) }
-                    var name by remember(initialDraft) { mutableStateOf(initialDraft?.name ?: "") }
-                    var recipeKind by remember(initialDraft) { mutableStateOf(initialDraft?.recipeKind ?: "BLACK_COFFEE") }
-                    var intention by remember(initialDraft) { mutableStateOf(initialDraft?.intention ?: "") }
-                    var suggestedMethod by remember(initialDraft) { mutableStateOf(initialDraft?.suggestedMethod ?: "") }
-                    var tagsText by remember(initialDraft) { mutableStateOf(initialDraft?.tags ?: "") }
-                    var isFavorite by remember(initialDraft) { mutableStateOf(initialDraft?.isFavorite ?: false) }
+                    val recipeDraftKey = initialDraft?.id ?: "new-recipe"
+                    var name by rememberSaveable(recipeDraftKey) { mutableStateOf(initialDraft?.name ?: "") }
+                    var recipeKind by rememberSaveable(recipeDraftKey) { mutableStateOf(initialDraft?.recipeKind ?: "BLACK_COFFEE") }
+                    var intention by rememberSaveable(recipeDraftKey) { mutableStateOf(initialDraft?.intention ?: "") }
+                    var suggestedMethod by rememberSaveable(recipeDraftKey) { mutableStateOf(initialDraft?.suggestedMethod ?: "") }
+                    var tagsText by rememberSaveable(recipeDraftKey) { mutableStateOf(initialDraft?.tags ?: "") }
+                    var isFavorite by rememberSaveable(recipeDraftKey) { mutableStateOf(initialDraft?.isFavorite ?: false) }
 
-                    val ingredientsList = remember(initialDraft) {
+                    val ingredientsList = rememberSaveable(recipeDraftKey, saver = RecipeIngredientDraftListSaver) {
                         if (!initialDraft?.ingredients.isNullOrEmpty()) {
                             mutableStateListOf<RecipeIngredientInput>().apply { addAll(initialDraft!!.ingredients) }
                         } else {
@@ -2926,7 +2959,7 @@ fun AddingFormSelector(
                         }
                     }
 
-                    val stepsList = remember(initialDraft) {
+                    val stepsList = rememberSaveable(recipeDraftKey, saver = RecipeStepDraftListSaver) {
                         if (!initialDraft?.steps.isNullOrEmpty()) {
                             mutableStateListOf<RecipeStepInput>().apply { addAll(initialDraft!!.steps) }
                         } else {
@@ -3310,10 +3343,10 @@ fun AddingFormSelector(
                 }
                 "Tazas" -> {
                     var isSaving by remember { mutableStateOf(false) }
-                    var beanName by remember { mutableStateOf("") }
-                    var method by remember { mutableStateOf("V60") }
-                    var foundNotes by remember { mutableStateOf("") }
-                    var comment by remember { mutableStateOf("") }
+                    var beanName by rememberSaveable { mutableStateOf("") }
+                    var method by rememberSaveable { mutableStateOf("V60") }
+                    var foundNotes by rememberSaveable { mutableStateOf("") }
+                    var comment by rememberSaveable { mutableStateOf("") }
                     val validationMessage = if (beanName.isBlank()) "Escribe el nombre del café catado." else null
 
                     FormHeaderWithBlob(
@@ -3384,12 +3417,12 @@ fun AddingFormSelector(
                 }
                 "Ciencia" -> {
                     var isSaving by remember { mutableStateOf(false) }
-                    var method by remember { mutableStateOf("V60") }
-                    var coffeeStr by remember { mutableStateOf("15") }
-                    var waterStr by remember { mutableStateOf("240") }
-                    var tempStr by remember { mutableStateOf("93") }
-                    var grindSize by remember { mutableStateOf("Media") }
-                    var notes by remember { mutableStateOf("") }
+                    var method by rememberSaveable { mutableStateOf("V60") }
+                    var coffeeStr by rememberSaveable { mutableStateOf("15") }
+                    var waterStr by rememberSaveable { mutableStateOf("240") }
+                    var tempStr by rememberSaveable { mutableStateOf("93") }
+                    var grindSize by rememberSaveable { mutableStateOf("Media") }
+                    var notes by rememberSaveable { mutableStateOf("") }
                     val coffeeValue = coffeeStr.replace(',', '.').toFloatOrNull()
                     val waterValue = waterStr.toIntOrNull()
                     val temperatureValue = tempStr.toIntOrNull()
@@ -3477,9 +3510,9 @@ fun AddingFormSelector(
                 }
                 else -> { // "Equipos"
                     var isSaving by remember { mutableStateOf(false) }
-                    var name by remember { mutableStateOf("") }
-                    var type by remember { mutableStateOf("método") }
-                    var notes by remember { mutableStateOf("") }
+                    var name by rememberSaveable { mutableStateOf("") }
+                    var type by rememberSaveable { mutableStateOf("método") }
+                    var notes by rememberSaveable { mutableStateOf("") }
                     val validationMessage = if (name.isBlank()) "Escribe el nombre o la descripción del equipo." else null
 
                     FormHeaderWithBlob(

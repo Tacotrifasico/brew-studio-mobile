@@ -5,13 +5,48 @@ import com.example.data.database.Recipe
 import com.example.data.database.RecipeIngredient
 import com.example.data.engine.IngredientSuggestionEngine
 import com.example.data.engine.RecipeTextParser
+import com.example.data.engine.RecipeDraft
 import com.example.data.engine.RecipeDraftValidator
 import com.example.data.engine.RecipeIngredientInput
 import com.example.data.engine.RecipeStepInput
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.ObjectInputStream
+import java.io.ObjectOutputStream
 
 class RecipeModuleTest {
+
+    @Test
+    fun recipeDraftRoundTripPreservesDynamicRowsForStateRestoration() {
+        val draft = RecipeDraft(
+            id = "draft-rotation",
+            name = "Receta en progreso",
+            recipeKind = "SIGNATURE",
+            intention = "Conservar lo escrito al recrear la pantalla",
+            ingredients = listOf(
+                RecipeIngredientInput(name = "Café", amount = "18", unit = "G", id = "ingredient-1"),
+                RecipeIngredientInput(name = "Agua", amount = "270", unit = "ML", id = "ingredient-2")
+            ),
+            steps = listOf(
+                RecipeStepInput(instruction = "Preinfusión", id = "step-1"),
+                RecipeStepInput(instruction = "Vertido final", id = "step-2")
+            ),
+            tags = "prueba, borrador",
+            isFavorite = true
+        )
+
+        val bytes = ByteArrayOutputStream().use { output ->
+            ObjectOutputStream(output).use { it.writeObject(draft) }
+            output.toByteArray()
+        }
+        val restored = ObjectInputStream(ByteArrayInputStream(bytes)).use { it.readObject() as RecipeDraft }
+
+        assertEquals(draft, restored)
+        assertEquals("ingredient-2", restored.ingredients.last().id)
+        assertEquals("step-2", restored.steps.last().id)
+    }
 
     @Test
     fun recipeDraftValidationRejectsInvalidAmountsAndIncompleteRows() {

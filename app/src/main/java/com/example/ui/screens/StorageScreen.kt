@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,6 +68,7 @@ import com.example.ui.viewmodel.FreshnessState
 import com.example.ui.viewmodel.SocialUiState
 import com.example.ui.viewmodel.calculateBeanFreshness
 import java.text.SimpleDateFormat
+import java.io.Serializable
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,9 +124,11 @@ private fun OwnerScopedStorageScreen(
     var showRecipeImporterDialog by remember { mutableStateOf(false) }
     var importedRecipeDraft by remember { mutableStateOf<RecipeDraft?>(null) }
     var showTechniqueCreator by remember { mutableStateOf(false) }
-    var selectedTechnique by remember { mutableStateOf<Technique?>(null) }
+    var selectedTechniqueId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTechniqueSteps by remember { mutableStateOf<List<TechniqueStep>>(emptyList()) }
-    var editingTechnique by remember { mutableStateOf<Technique?>(null) }
+    var editingTechniqueId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedTechnique = state.techniquesList.firstOrNull { it.id == selectedTechniqueId }
+    val editingTechnique = state.techniquesList.firstOrNull { it.id == editingTechniqueId }
     var showShareExplanation by remember { mutableStateOf(false) }
     val pendingBreakdown = storagePendingBreakdown(
         beans = state.beansList.count { it.syncStatus != "SYNCED" },
@@ -646,7 +651,7 @@ private fun OwnerScopedStorageScreen(
                                 technique = technique,
                                 methodName = methodName,
                                 isBuiltIn = viewModel.isBuiltInTechnique(technique.id),
-                                onClick = { selectedTechnique = technique },
+                                onClick = { selectedTechniqueId = technique.id },
                                 onDelete = { viewModel.deleteTechnique(technique.id) }
                             )
                         }
@@ -796,24 +801,24 @@ private fun OwnerScopedStorageScreen(
             methodName = state.userMethods.firstOrNull { it.methodId == technique.methodId }?.name
                 ?: technique.legacyMethodName ?: "Método guardado",
             isBuiltIn = viewModel.isBuiltInTechnique(technique.id),
-            onDismiss = { selectedTechnique = null },
+            onDismiss = { selectedTechniqueId = null },
             onPrepare = {
                 viewModel.loadPrepTechnique(technique.id)
-                selectedTechnique = null
+                selectedTechniqueId = null
                 onNavigateToPreparation()
             },
             onEdit = {
-                editingTechnique = technique
-                selectedTechnique = null
+                editingTechniqueId = technique.id
+                selectedTechniqueId = null
             },
             onDuplicate = {
                 viewModel.duplicateTechnique(technique.id)
-                selectedTechnique = null
+                selectedTechniqueId = null
             },
             onShare = { showShareExplanation = true },
             onDelete = {
                 viewModel.deleteTechnique(technique.id)
-                selectedTechnique = null
+                selectedTechniqueId = null
             }
         )
     }
@@ -822,11 +827,11 @@ private fun OwnerScopedStorageScreen(
         TechniqueStorageEditorDialog(
             technique = technique,
             initialSteps = selectedTechniqueSteps,
-            onDismiss = { editingTechnique = null },
+            onDismiss = { editingTechniqueId = null },
             onSave = { updated, steps, onCompleted ->
                 viewModel.updateTechnique(updated, steps) { success ->
                     onCompleted(success)
-                    if (success) editingTechnique = null
+                    if (success) editingTechniqueId = null
                 }
             }
         )
@@ -840,7 +845,7 @@ private fun OwnerScopedStorageScreen(
             confirmButton = {
                 Button(onClick = {
                     showShareExplanation = false
-                    selectedTechnique = null
+                    selectedTechniqueId = null
                     onNavigateToCommunity()
                 }) { Text("Abrir Comunidad") }
             },
@@ -1062,6 +1067,11 @@ private data class TechniqueStepEditDraft(
     val gesture: String,
     val intensity: String,
     val note: String
+) : Serializable
+
+private val TechniqueStepEditDraftListSaver = listSaver<List<TechniqueStepEditDraft>, TechniqueStepEditDraft>(
+    save = { it },
+    restore = { it }
 )
 
 @Composable
@@ -1072,15 +1082,13 @@ private fun TechniqueStorageEditorDialog(
     onSave: (Technique, List<TechniqueStep>, (Boolean) -> Unit) -> Unit
 ) {
     var isSaving by remember(technique.id) { mutableStateOf(false) }
-    var name by remember(technique.id) { mutableStateOf(technique.name) }
-    var coffee by remember(technique.id) { mutableStateOf(technique.doseG.toString()) }
-    var water by remember(technique.id) { mutableStateOf(technique.waterMl.toString()) }
-    var temperature by remember(technique.id) { mutableStateOf(technique.temperatureC.toString()) }
-    var notes by remember(technique.id) { mutableStateOf(technique.notes) }
-    val drafts = remember(technique.id, initialSteps) {
-        mutableStateListOf<TechniqueStepEditDraft>().apply {
-            addAll(initialSteps.map { TechniqueStepEditDraft(it.id, it.remoteId, it.title, it.durationSeconds.toString(), it.waterAddedMl.toString(), it.gesture, it.intensity, it.stepNote) })
-        }
+    var name by rememberSaveable(technique.id) { mutableStateOf(technique.name) }
+    var coffee by rememberSaveable(technique.id) { mutableStateOf(technique.doseG.toString()) }
+    var water by rememberSaveable(technique.id) { mutableStateOf(technique.waterMl.toString()) }
+    var temperature by rememberSaveable(technique.id) { mutableStateOf(technique.temperatureC.toString()) }
+    var notes by rememberSaveable(technique.id) { mutableStateOf(technique.notes) }
+    var drafts by rememberSaveable(technique.id, initialSteps, stateSaver = TechniqueStepEditDraftListSaver) {
+        mutableStateOf(initialSteps.map { TechniqueStepEditDraft(it.id, it.remoteId, it.title, it.durationSeconds.toString(), it.waterAddedMl.toString(), it.gesture, it.intensity, it.stepNote) })
     }
     val coffeeValue = coffee.replace(',', '.').toFloatOrNull()
     val waterValue = water.toIntOrNull()
@@ -1122,19 +1130,19 @@ private fun TechniqueStorageEditorDialog(
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text("Paso ${index + 1}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                                    IconButton(onClick = { drafts.removeAt(index) }) { Icon(Icons.Default.RemoveCircleOutline, contentDescription = "Quitar paso") }
+                                    IconButton(onClick = { drafts = drafts.toMutableList().also { it.removeAt(index) } }) { Icon(Icons.Default.RemoveCircleOutline, contentDescription = "Quitar paso") }
                                 }
-                                StyledOutlinedTextField(value = draft.title, onValueChange = { drafts[index] = draft.copy(title = it) }, label = "Título")
+                                StyledOutlinedTextField(value = draft.title, onValueChange = { value -> drafts = drafts.toMutableList().also { it[index] = draft.copy(title = value) } }, label = "Título")
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    StyledOutlinedTextField(value = draft.duration, onValueChange = { drafts[index] = draft.copy(duration = it) }, label = "Segundos", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
-                                    StyledOutlinedTextField(value = draft.water, onValueChange = { drafts[index] = draft.copy(water = it) }, label = "Agua (ml)", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+                                    StyledOutlinedTextField(value = draft.duration, onValueChange = { value -> drafts = drafts.toMutableList().also { it[index] = draft.copy(duration = value) } }, label = "Segundos", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+                                    StyledOutlinedTextField(value = draft.water, onValueChange = { value -> drafts = drafts.toMutableList().also { it[index] = draft.copy(water = value) } }, label = "Agua (ml)", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
                                 }
-                                StyledOutlinedTextField(value = draft.note, onValueChange = { drafts[index] = draft.copy(note = it) }, label = "Nota")
+                                StyledOutlinedTextField(value = draft.note, onValueChange = { value -> drafts = drafts.toMutableList().also { it[index] = draft.copy(note = value) } }, label = "Nota")
                             }
                         }
                     }
                     item {
-                        OutlinedButton(onClick = { drafts.add(TechniqueStepEditDraft(UUID.randomUUID().toString(), null, "", "30", "0", "CIRCULAR_POUR", "MEDIUM", "")) }, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { drafts = drafts + TechniqueStepEditDraft(UUID.randomUUID().toString(), null, "", "30", "0", "CIRCULAR_POUR", "MEDIUM", "") }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Agregar paso")
                         }
                     }

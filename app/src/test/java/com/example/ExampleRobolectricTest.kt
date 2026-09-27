@@ -135,12 +135,17 @@ class ExampleRobolectricTest {
       label = "V60 · 18g · 1:15"
     )
     val first = com.example.ui.viewmodel.CalculatorFavoriteStore(preferences)
-    first.select(favorite.id)
+    first.select(favorite.id, "owner-a")
 
     val restored = com.example.ui.viewmodel.CalculatorFavoriteStore(preferences)
-    assertEquals(favorite, restored.selectedPreset(listOf(favorite)))
-    restored.clearIfSelected(favorite.id)
-    assertEquals(null, com.example.ui.viewmodel.CalculatorFavoriteStore(preferences).selectedId())
+    assertEquals(favorite, restored.selectedPreset(listOf(favorite), "owner-a"))
+    assertEquals(null, restored.selectedPreset(listOf(favorite), "owner-b"))
+    restored.select("favorite-owner-b", "owner-b")
+    assertEquals(favorite.id, restored.selectedId("owner-a"))
+    assertEquals("favorite-owner-b", restored.selectedId("owner-b"))
+    restored.clearIfSelected(favorite.id, "owner-a")
+    assertEquals(null, com.example.ui.viewmodel.CalculatorFavoriteStore(preferences).selectedId("owner-a"))
+    assertEquals("favorite-owner-b", restored.selectedId("owner-b"))
   }
 
   @Test

@@ -223,4 +223,20 @@ class BrewAggregateRoomTest {
             assertEquals(4, pinnedCount)
         }
     }
+
+    @Test
+    fun `migration seven to eight preserves calculator favorites as guest data`() {
+        val sqlite = database.openHelper.writableDatabase
+        sqlite.execSQL("DROP TABLE IF EXISTS ratio_presets")
+        sqlite.execSQL("CREATE TABLE ratio_presets (id TEXT NOT NULL PRIMARY KEY, methodName TEXT NOT NULL, coffeeGrams REAL NOT NULL, ratio REAL NOT NULL, label TEXT NOT NULL)")
+        sqlite.execSQL("INSERT INTO ratio_presets VALUES ('legacy-favorite', 'V60', 18, 15, 'V60 · 18 g · 1:15')")
+
+        MIGRATION_7_8.migrate(sqlite)
+
+        sqlite.query("SELECT id, ownerUserId FROM ratio_presets WHERE id = 'legacy-favorite'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("legacy-favorite", cursor.getString(0))
+            assertTrue(cursor.isNull(1))
+        }
+    }
 }

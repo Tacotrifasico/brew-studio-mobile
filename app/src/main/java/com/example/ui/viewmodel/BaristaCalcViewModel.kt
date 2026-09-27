@@ -288,13 +288,25 @@ data class BaristaCalcState(
 internal class CalculatorFavoriteStore(
     private val preferences: android.content.SharedPreferences
 ) {
-    private val key = "selected_favorite_preset_id"
+    private val legacyKey = "selected_favorite_preset_id"
+    private fun key(ownerId: String?) = "$legacyKey.scope.${ownerId ?: "guest"}"
 
-    fun select(id: String) { preferences.edit().putString(key, id).apply() }
-    fun selectedId(): String? = preferences.getString(key, null)
-    fun selectedPreset(saved: List<RatioPreset>): RatioPreset? = selectedId()?.let { id -> saved.firstOrNull { it.id == id } }
-    fun clearIfSelected(id: String) {
-        if (selectedId() == id) preferences.edit().remove(key).apply()
+    fun select(id: String, ownerId: String? = null) {
+        preferences.edit().putString(key(ownerId), id).apply()
+    }
+
+    fun selectedId(ownerId: String? = null): String? {
+        preferences.getString(key(ownerId), null)?.let { return it }
+        val legacy = preferences.getString(legacyKey, null) ?: return null
+        preferences.edit().putString(key(ownerId), legacy).remove(legacyKey).apply()
+        return legacy
+    }
+
+    fun selectedPreset(saved: List<RatioPreset>, ownerId: String? = null): RatioPreset? =
+        selectedId(ownerId)?.let { id -> saved.firstOrNull { it.id == id } }
+
+    fun clearIfSelected(id: String, ownerId: String? = null) {
+        if (selectedId(ownerId) == id) preferences.edit().remove(key(ownerId)).apply()
     }
 }
 
@@ -303,7 +315,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     private val favoriteStore = CalculatorFavoriteStore(
         application.getSharedPreferences("brew_studio_calculator_preferences", android.content.Context.MODE_PRIVATE)
     )
-    private var favoriteSelectionRestored = false
+    private var favoriteRestoredScopeKey: String? = null
 
     private val database = AppDatabase.getDatabase(application)
     private val sessionManager = SessionManager(application)
@@ -417,9 +429,11 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
         // Collect DB changes and update states
         viewModelScope.launch {
-            repository.allPresets.collect { list ->
+            combine(repository.allPresets, activeOwnerId) { list, ownerId ->
+                ownerId to list.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) }
+            }.collect { (ownerId, list) ->
                 _state.update { it.copy(savedRatioPresets = list) }
-                restoreSelectedFavorite(list)
+                restoreSelectedFavorite(list, ownerId)
             }
         }
         viewModelScope.launch {
@@ -802,7 +816,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
             if (existing != null) {
                 repository.deletePreset(existing)
-                favoriteStore.clearIfSelected(existing.id)
+                favoriteStore.clearIfSelected(existing.id, activeOwnerId.value)
                 showToast("Proporción eliminada de los guardados de la Calculadora.")
             } else {
                 val coffeeStr = if (currentCoffee % 1 == 0f) currentCoffee.toInt().toString() else currentCoffee.toString()
@@ -813,7 +827,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     methodName = currentMethod,
                     coffeeGrams = currentCoffee,
                     ratio = currentRatio,
-                    label = label
+                    label = label,
+                    ownerUserId = activeOwnerId.value
                 )
                 repository.insertPreset(newPreset)
                 rememberSelectedFavorite(newPreset.id)
@@ -823,18 +838,19 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun rememberSelectedFavorite(id: String) {
-        favoriteStore.select(id)
+        favoriteStore.select(id, activeOwnerId.value)
     }
 
-    private fun restoreSelectedFavorite(saved: List<RatioPreset>) {
-        if (favoriteSelectionRestored) return
-        val selectedId = favoriteStore.selectedId()
+    private fun restoreSelectedFavorite(saved: List<RatioPreset>, ownerId: String?) {
+        val scopeKey = ownerId ?: "guest"
+        if (favoriteRestoredScopeKey == scopeKey) return
+        val selectedId = favoriteStore.selectedId(ownerId)
         if (selectedId == null) {
-            favoriteSelectionRestored = true
+            favoriteRestoredScopeKey = scopeKey
             return
         }
-        val favorite = favoriteStore.selectedPreset(saved) ?: return
-        favoriteSelectionRestored = true
+        val favorite = favoriteStore.selectedPreset(saved, ownerId) ?: return
+        favoriteRestoredScopeKey = scopeKey
         applyPreset(
             BaristaPreset(
                 id = favorite.id,

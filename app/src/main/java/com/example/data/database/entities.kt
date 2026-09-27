@@ -22,7 +22,8 @@ data class RatioPreset(
     val methodName: String,
     val coffeeGrams: Float,
     val ratio: Float,
-    val label: String
+    val label: String,
+    val ownerUserId: String? = null
 )
 
 @Entity(tableName = "ratio_last_used")

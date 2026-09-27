@@ -498,8 +498,20 @@ struct LabGoldenVerifier {
         defer { defaults.removePersistentDomain(forName: suite) }
         let preparation = PreparationModel(defaults: defaults); preparation.load(technique: technique, steps: techniqueSteps)
         precondition(preparation.state.techniqueId == technique.id && preparation.state.steps.map(\.title) == ["Vertido 2", "Bloom"])
+        let originalAuthor = UUID()
+        technique.visibility = "PUBLIC"; technique.isShared = true
+        technique.originalAuthorUserId = originalAuthor; technique.originalAuthorName = "Autora original"
+        try! context.save()
+        let techniqueCopy = try! repository.duplicateTechnique(technique)
+        let copiedSteps = try! repository.techniqueSteps(techniqueId: techniqueCopy.id)
+        precondition(techniqueCopy.name == "Copia de V60 guiada" && techniqueCopy.copyMode == "FORK")
+        precondition(techniqueCopy.visibility == "PRIVATE" && !techniqueCopy.isShared)
+        precondition(techniqueCopy.originalEntityId == technique.id && techniqueCopy.originalAuthorUserId == originalAuthor)
+        precondition(copiedSteps.map(\.title) == ["Vertido 2", "Bloom"])
+        precondition(copiedSteps.map(\.waterAccumulatedMl) == [90, 140])
         try! repository.deleteTechnique(technique)
         precondition(try! repository.techniqueSteps(techniqueId: technique.id).isEmpty)
+        precondition(try! repository.techniqueSteps(techniqueId: techniqueCopy.id).count == 2)
     }
 
     private static func verifyRecipeTextImport() {

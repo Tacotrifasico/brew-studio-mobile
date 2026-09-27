@@ -119,6 +119,8 @@ struct PreparationExecutionView: View {
                     stepMetrics(step, timeLabel: "TIEMPO DEL PASO", timeValue: durationString(step.durationSeconds))
                     if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(stepAccessibilityLabel(step, position: index + 1, status: "Por revisar"))
             }
         }
         .padding(14)
@@ -147,6 +149,16 @@ struct PreparationExecutionView: View {
         .background(LinearGradient(colors: [CupaTheme.terracotta.opacity(0.12), CupaTheme.forest.opacity(0.08)], startPoint: .leading, endPoint: .trailing))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(CupaTheme.border, lineWidth: 1) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            stepAccessibilityLabel(
+                step,
+                position: model.state.activeStepIndex + 1,
+                status: "Activo",
+                timeLabel: "Tiempo restante",
+                timeValue: durationString(max(0, step.durationSeconds - model.stepElapsed))
+            )
+        )
     }
 
     private var executionSequence: some View {
@@ -155,13 +167,16 @@ struct PreparationExecutionView: View {
             ForEach(Array(model.state.steps.enumerated()), id: \.element.id) { index, step in
                 let isCurrent = index == model.state.activeStepIndex
                 let isPast = index < model.state.activeStepIndex
+                let status = isPast ? "Completado" : (isCurrent ? "Activo" : "Pendiente")
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 9) {
                         Image(systemName: isPast ? "checkmark" : "\(index + 1).circle.fill")
                             .foregroundStyle(isCurrent ? CupaTheme.terracottaText : isPast ? CupaTheme.forestText : CupaTheme.secondaryText)
                         Text(step.title).font(.subheadline.bold()).foregroundStyle(CupaTheme.text)
                         Spacer()
-                        if isCurrent { Text("ACTIVO").font(.caption2.bold()).foregroundStyle(CupaTheme.terracottaText) }
+                        Text(status.uppercased())
+                            .font(.caption2.bold())
+                            .foregroundStyle(isCurrent ? CupaTheme.terracottaText : isPast ? CupaTheme.forestText : CupaTheme.secondaryText)
                     }
                     stepMetrics(step, timeLabel: "TIEMPO DEL PASO", timeValue: durationString(step.durationSeconds))
                 }
@@ -169,6 +184,8 @@ struct PreparationExecutionView: View {
                 .background(isCurrent ? CupaTheme.terracotta.opacity(0.10) : isPast ? CupaTheme.forest.opacity(0.07) : CupaTheme.backgroundAlt.opacity(0.72))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(isCurrent ? CupaTheme.terracotta : CupaTheme.border, lineWidth: isCurrent ? 1.5 : 1) }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(stepAccessibilityLabel(step, position: index + 1, status: status))
             }
         }
     }
@@ -185,6 +202,20 @@ struct PreparationExecutionView: View {
 
     private func durationString(_ seconds: Int) -> String {
         seconds < 60 ? "\(seconds) s" : String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private func stepAccessibilityLabel(
+        _ step: PreparationStepSnapshot,
+        position: Int,
+        status: String,
+        timeLabel: String = "Tiempo del paso",
+        timeValue: String? = nil
+    ) -> String {
+        let waterAction = step.waterAddedMl > 0
+            ? "Agrega \(step.waterAddedMl) mililitros"
+            : "Sin agua nueva"
+        return "Paso \(position) de \(model.state.steps.count). \(status). \(step.title). \(waterAction). " +
+            "Total en báscula \(step.waterAccumulatedMl) mililitros. \(timeLabel) \(timeValue ?? durationString(step.durationSeconds))."
     }
 
     @ViewBuilder private var controls: some View {

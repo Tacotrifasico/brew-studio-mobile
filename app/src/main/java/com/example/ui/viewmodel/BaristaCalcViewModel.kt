@@ -80,16 +80,38 @@ fun parseDateDaysDiff(dateStr: String): Int? {
 internal fun Technique.forkedCopy(
     copyId: String,
     ownerUserId: String?,
+    ownerDisplayName: String?,
     timestamp: String
 ): Technique = copy(
     id = copyId,
     name = "Copia de $name",
     ownerUserId = ownerUserId,
+    ownerDisplayName = ownerDisplayName?.takeIf { it.isNotBlank() },
+    visibility = "PRIVATE",
     isShared = false,
     originalEntityId = originalEntityId ?: id,
     rootEntityId = rootEntityId ?: originalEntityId ?: id,
     importedFromShareId = importedFromShareId,
     copyMode = "FORK",
+    remoteId = null,
+    syncStatus = "PENDING_CREATE",
+    serverVersion = 1,
+    expectedVersion = 1,
+    lastSyncedAt = null,
+    createdAt = timestamp,
+    updatedAt = timestamp
+)
+
+internal fun TechniqueStep.forkedStepCopy(
+    copyId: String,
+    targetTechniqueId: String,
+    targetStepNumber: Int,
+    timestamp: String
+): TechniqueStep = copy(
+    id = copyId,
+    techniqueId = targetTechniqueId,
+    stepNumber = targetStepNumber,
+    targetWaterMl = waterAccumulatedMl,
     remoteId = null,
     syncStatus = "PENDING_CREATE",
     serverVersion = 1,
@@ -1041,19 +1063,19 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             val source = _state.value.techniquesList.firstOrNull { it.id == techId } ?: return@launch
             val sourceSteps = repository.getStepsForTechniqueSync(techId)
             val copyId = UUID.randomUUID().toString()
-            val copy = source.forkedCopy(copyId, activeOwnerId.value, currentIso8601())
+            val timestamp = currentIso8601()
+            val copy = source.forkedCopy(
+                copyId = copyId,
+                ownerUserId = activeOwnerId.value,
+                ownerDisplayName = sessionManager.getDisplayName(),
+                timestamp = timestamp
+            )
             val copiedSteps = sourceSteps.mapIndexed { index, step ->
-                step.copy(
-                    id = UUID.randomUUID().toString(),
-                    techniqueId = copyId,
-                    stepNumber = index + 1,
-                    remoteId = null,
-                    syncStatus = "PENDING_CREATE",
-                    serverVersion = 1,
-                    expectedVersion = 1,
-                    lastSyncedAt = null,
-                    createdAt = currentIso8601(),
-                    updatedAt = currentIso8601()
+                step.forkedStepCopy(
+                    copyId = UUID.randomUUID().toString(),
+                    targetTechniqueId = copyId,
+                    targetStepNumber = index + 1,
+                    timestamp = timestamp
                 )
             }
             repository.insertTechnique(copy, copiedSteps)

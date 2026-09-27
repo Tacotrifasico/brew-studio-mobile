@@ -401,6 +401,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     private var timerJob: Job? = null
     private var cataTimerJob: Job? = null
     private var cataSaveInFlight = false
+    private val techniqueDuplicateInFlight = mutableSetOf<String>()
 
     init {
         viewModelScope.launch { repository.ensureCoreCatalog() }
@@ -1069,27 +1070,38 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         repository.getStepsForTechniqueSync(techId)
 
     fun duplicateTechnique(techId: String) {
+        if (!techniqueDuplicateInFlight.add(techId)) {
+            showToast("La copia de esta técnica ya está en proceso.")
+            return
+        }
         viewModelScope.launch {
-            val source = _state.value.techniquesList.firstOrNull { it.id == techId } ?: return@launch
-            val sourceSteps = repository.getStepsForTechniqueSync(techId)
-            val copyId = UUID.randomUUID().toString()
-            val timestamp = currentIso8601()
-            val copy = source.forkedCopy(
-                copyId = copyId,
-                ownerUserId = activeOwnerId.value,
-                ownerDisplayName = sessionManager.getDisplayName(),
-                timestamp = timestamp
-            )
-            val copiedSteps = sourceSteps.mapIndexed { index, step ->
-                step.forkedStepCopy(
-                    copyId = UUID.randomUUID().toString(),
-                    targetTechniqueId = copyId,
-                    targetStepNumber = index + 1,
+            try {
+                val source = _state.value.techniquesList.firstOrNull { it.id == techId }
+                    ?: return@launch
+                val sourceSteps = repository.getStepsForTechniqueSync(techId)
+                val copyId = UUID.randomUUID().toString()
+                val timestamp = currentIso8601()
+                val copy = source.forkedCopy(
+                    copyId = copyId,
+                    ownerUserId = activeOwnerId.value,
+                    ownerDisplayName = sessionManager.getDisplayName(),
                     timestamp = timestamp
                 )
+                val copiedSteps = sourceSteps.mapIndexed { index, step ->
+                    step.forkedStepCopy(
+                        copyId = UUID.randomUUID().toString(),
+                        targetTechniqueId = copyId,
+                        targetStepNumber = index + 1,
+                        timestamp = timestamp
+                    )
+                }
+                repository.insertTechnique(copy, copiedSteps)
+                showToast("Técnica duplicada en el Almacén.")
+            } catch (_: Exception) {
+                showToast("No se pudo duplicar la técnica. El original permanece intacto.")
+            } finally {
+                techniqueDuplicateInFlight.remove(techId)
             }
-            repository.insertTechnique(copy, copiedSteps)
-            showToast("Técnica duplicada en el Almacén.")
         }
     }
 

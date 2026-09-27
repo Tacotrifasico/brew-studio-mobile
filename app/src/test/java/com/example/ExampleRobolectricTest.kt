@@ -302,5 +302,16 @@ class ExampleRobolectricTest {
     assertEquals(false, loaded.timerRunning)
     assertEquals(0, loaded.elapsedSeconds)
     assertEquals(0, loaded.activeStepIndex)
+
+    viewModel.duplicateTechnique(technique.id)
+    viewModel.duplicateTechnique(technique.id)
+    repeat(200) {
+      mainLooper.idle()
+      if (viewModel.state.value.techniquesList.count { it.name == "Copia de $techniqueName" } == 1) return@repeat
+      Thread.sleep(20)
+    }
+    val copies = viewModel.state.value.techniquesList.filter { it.name == "Copia de $techniqueName" }
+    assertEquals(1, copies.size)
+    assertEquals(2, viewModel.getTechniqueSteps(copies.single().id).size)
   }
 }

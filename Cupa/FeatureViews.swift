@@ -1668,67 +1668,81 @@ private struct CoffeeBeanDraft {
     }
 }
 
+private struct CoffeeBeanEditorFormDraft: Codable, Equatable {
+    var recordId: UUID?
+    var name: String
+    var brand: String
+    var origin: String
+    var producer: String
+    var variety: String
+    var process: String
+    var altitude: String
+    var roastLevel: String
+    var hasRoastDate: Bool
+    var roastDate: Date
+    var hasOpenedDate: Bool
+    var openedDate: Date
+    var initialQuantity: String
+    var remainingQuantity: String
+    var notes: String
+
+    init(record: CoffeeBeanRecord?) {
+        recordId = record?.id
+        name = record?.name ?? ""
+        brand = record?.brand ?? ""
+        origin = record?.origin ?? ""
+        producer = record?.producer ?? ""
+        variety = record?.variety ?? ""
+        process = record?.process ?? ""
+        altitude = record?.altitudeMeters.map(String.init) ?? ""
+        roastLevel = record?.roastLevel ?? "Medio"
+        hasRoastDate = record?.roastDate != nil
+        roastDate = record?.roastDate ?? .now
+        hasOpenedDate = record?.openedDate != nil
+        openedDate = record?.openedDate ?? .now
+        initialQuantity = record.map { String(format: "%.1f", $0.initialQuantityGrams) } ?? "250.0"
+        remainingQuantity = record.map { String(format: "%.1f", $0.remainingQuantityGrams) } ?? "250.0"
+        notes = record?.notes ?? ""
+    }
+}
+
 private struct CoffeeBeanEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var context
     private let record: CoffeeBeanRecord?
     private let onSave: (CoffeeBeanDraft) -> String?
-    @State private var name: String
-    @State private var brand: String
-    @State private var origin: String
-    @State private var producer: String
-    @State private var variety: String
-    @State private var process: String
-    @State private var altitude: String
-    @State private var roastLevel: String
-    @State private var hasRoastDate: Bool
-    @State private var roastDate: Date
-    @State private var hasOpenedDate: Bool
-    @State private var openedDate: Date
-    @State private var initialQuantity: String
-    @State private var remainingQuantity: String
-    @State private var notes: String
+    @State private var draft: CoffeeBeanEditorFormDraft
+    @State private var loaded = false
+    @State private var isSaving = false
     @State private var saveError: String?
+    @SceneStorage("cupa.coffeeBeanEditorDraft.v1") private var storedDraft: Data?
 
     init(record: CoffeeBeanRecord?, onSave: @escaping (CoffeeBeanDraft) -> String?) {
         self.record = record
         self.onSave = onSave
-        _name = State(initialValue: record?.name ?? "")
-        _brand = State(initialValue: record?.brand ?? "")
-        _origin = State(initialValue: record?.origin ?? "")
-        _producer = State(initialValue: record?.producer ?? "")
-        _variety = State(initialValue: record?.variety ?? "")
-        _process = State(initialValue: record?.process ?? "")
-        _altitude = State(initialValue: record?.altitudeMeters.map { String($0) } ?? "")
-        _roastLevel = State(initialValue: record?.roastLevel ?? "Medio")
-        _hasRoastDate = State(initialValue: record?.roastDate != nil)
-        _roastDate = State(initialValue: record?.roastDate ?? .now)
-        _hasOpenedDate = State(initialValue: record?.openedDate != nil)
-        _openedDate = State(initialValue: record?.openedDate ?? .now)
-        _initialQuantity = State(initialValue: record.map { String(format: "%.1f", $0.initialQuantityGrams) } ?? "250.0")
-        _remainingQuantity = State(initialValue: record.map { String(format: "%.1f", $0.remainingQuantityGrams) } ?? "250.0")
-        _notes = State(initialValue: record?.notes ?? "")
+        _draft = State(initialValue: CoffeeBeanEditorFormDraft(record: record))
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Identidad") {
-                    TextField("Nombre del café", text: $name)
-                    TextField("Marca o tostador", text: $brand)
-                    TextField("Origen", text: $origin)
-                    TextField("Productor", text: $producer)
-                    TextField("Variedad", text: $variety)
-                    TextField("Proceso", text: $process)
-                    TextField("Altitud (msnm)", text: $altitude).keyboardType(.numberPad)
+                    TextField("Nombre del café", text: $draft.name)
+                    TextField("Marca o tostador", text: $draft.brand)
+                    TextField("Origen", text: $draft.origin)
+                    TextField("Productor", text: $draft.producer)
+                    TextField("Variedad", text: $draft.variety)
+                    TextField("Proceso", text: $draft.process)
+                    TextField("Altitud (msnm)", text: $draft.altitude).keyboardType(.numberPad)
                 }
                 Section("Tueste y apertura") {
-                    Picker("Tueste", selection: $roastLevel) {
+                    Picker("Tueste", selection: $draft.roastLevel) {
                     ForEach(["Claro", "Medio", "Oscuro"], id: \.self) { Text($0) }
                     }
-                    Toggle("Con fecha de tueste", isOn: $hasRoastDate)
-                    if hasRoastDate { DatePicker("Fecha de tueste", selection: $roastDate, displayedComponents: .date) }
-                    Toggle("Bolsa abierta", isOn: $hasOpenedDate)
-                    if hasOpenedDate { DatePicker("Fecha de apertura", selection: $openedDate, displayedComponents: .date) }
+                    Toggle("Con fecha de tueste", isOn: $draft.hasRoastDate)
+                    if draft.hasRoastDate { DatePicker("Fecha de tueste", selection: $draft.roastDate, displayedComponents: .date) }
+                    Toggle("Bolsa abierta", isOn: $draft.hasOpenedDate)
+                    if draft.hasOpenedDate { DatePicker("Fecha de apertura", selection: $draft.openedDate, displayedComponents: .date) }
                 }
                 Section("Frescura estimada") {
                     HStack { CoffeeFreshnessBadge(state: freshness.state); Spacer(); Text(freshness.openStatusDetails).font(.caption).foregroundStyle(.secondary) }
@@ -1739,41 +1753,49 @@ private struct CoffeeBeanEditor: View {
                     }
                 }
                 Section("Inventario") {
-                    TextField("Cantidad inicial (g)", text: $initialQuantity).keyboardType(.decimalPad)
-                    TextField("Cantidad restante (g)", text: $remainingQuantity).keyboardType(.decimalPad)
+                    TextField("Cantidad inicial (g)", text: $draft.initialQuantity).keyboardType(.decimalPad)
+                    TextField("Cantidad restante (g)", text: $draft.remainingQuantity).keyboardType(.decimalPad)
                     if let validationMessage { Text(validationMessage).font(.caption).foregroundStyle(.red) }
-                    TextField("Notas", text: $notes, axis: .vertical).lineLimit(3...8)
+                    TextField("Notas", text: $draft.notes, axis: .vertical).lineLimit(3...8)
                 }
             }
             .navigationTitle(record == nil ? "Agregar café" : "Editar café")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { clearStoredDraft(); dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") {
+                    Button(isSaving ? "Guardando…" : "Guardar") {
+                        guard !isSaving else { return }
                         let values: CoffeeBeanValidatedInput
                         do { values = try validatedInput() }
                         catch { saveError = error.localizedDescription; return }
+                        isSaving = true
                         let error = onSave(CoffeeBeanDraft(
-                            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                            brand: brand.trimmingCharacters(in: .whitespacesAndNewlines),
-                            origin: origin.trimmingCharacters(in: .whitespacesAndNewlines),
-                            producer: producer.trimmingCharacters(in: .whitespacesAndNewlines),
-                            variety: variety.trimmingCharacters(in: .whitespacesAndNewlines),
-                            process: process.trimmingCharacters(in: .whitespacesAndNewlines),
+                            name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                            brand: draft.brand.trimmingCharacters(in: .whitespacesAndNewlines),
+                            origin: draft.origin.trimmingCharacters(in: .whitespacesAndNewlines),
+                            producer: draft.producer.trimmingCharacters(in: .whitespacesAndNewlines),
+                            variety: draft.variety.trimmingCharacters(in: .whitespacesAndNewlines),
+                            process: draft.process.trimmingCharacters(in: .whitespacesAndNewlines),
                             altitudeMeters: values.altitudeMeters,
-                            roastLevel: roastLevel,
-                            roastDate: hasRoastDate ? roastDate : nil,
-                            openedDate: hasOpenedDate ? openedDate : nil,
+                            roastLevel: draft.roastLevel,
+                            roastDate: draft.hasRoastDate ? draft.roastDate : nil,
+                            openedDate: draft.hasOpenedDate ? draft.openedDate : nil,
                             initialQuantityGrams: values.initialQuantityGrams,
                             remainingQuantityGrams: values.remainingQuantityGrams,
-                            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                            notes: draft.notes.trimmingCharacters(in: .whitespacesAndNewlines)
                         ))
-                        if let error { saveError = error } else { dismiss() }
+                        if let error { isSaving = false; saveError = error }
+                        else { clearStoredDraft(); dismiss() }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || validationMessage != nil)
+                    .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || validationMessage != nil || isSaving)
                 }
             }
             .brewScrollableCanvas()
+            .onAppear(perform: load)
+            .onChange(of: draft) { _, value in
+                guard loaded else { return }
+                storedDraft = storingEditorDraft(value, ownerId: context.activeOwnerId, in: storedDraft)
+            }
             .alert("No se pudo guardar el café", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
                 Button("Aceptar") {}
             } message: { Text(saveError ?? "") }
@@ -1782,11 +1804,11 @@ private struct CoffeeBeanEditor: View {
 
     private func validatedInput() throws -> CoffeeBeanValidatedInput {
         try CoffeeBeanInputValidator.validate(
-            altitudeText: altitude,
-            initialQuantityText: initialQuantity,
-            remainingQuantityText: remainingQuantity,
-            roastDate: hasRoastDate ? roastDate : nil,
-            openedDate: hasOpenedDate ? openedDate : nil
+            altitudeText: draft.altitude,
+            initialQuantityText: draft.initialQuantity,
+            remainingQuantityText: draft.remainingQuantity,
+            roastDate: draft.hasRoastDate ? draft.roastDate : nil,
+            openedDate: draft.hasOpenedDate ? draft.openedDate : nil
         )
     }
 
@@ -1797,8 +1819,21 @@ private struct CoffeeBeanEditor: View {
 
     private var freshness: CoffeeFreshnessResult {
         CoffeeFreshnessEngine.evaluate(
-            roastDate: hasRoastDate ? roastDate : nil,
-            openedDate: hasOpenedDate ? openedDate : nil
+            roastDate: draft.hasRoastDate ? draft.roastDate : nil,
+            openedDate: draft.hasOpenedDate ? draft.openedDate : nil
         )
+    }
+
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        if let restored: CoffeeBeanEditorFormDraft = scopedEditorDraft(from: storedDraft, ownerId: context.activeOwnerId),
+           restored.recordId == record?.id {
+            draft = restored
+        }
+    }
+
+    private func clearStoredDraft() {
+        storedDraft = removingEditorDraft(ownerId: context.activeOwnerId, from: storedDraft, as: CoffeeBeanEditorFormDraft.self)
     }
 }

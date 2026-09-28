@@ -720,15 +720,15 @@ struct LabView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Base e inventario").font(.headline)
                 Picker("Receta base", selection: Binding(get: { model.state.recipeId }, set: loadRecipe)) {
-                    Text("Sin receta").tag(Optional<UUID>.none)
+                    Text("Sin receta base").tag(Optional<UUID>.none)
                     ForEach(recipes) { Text($0.name).tag(Optional($0.id)) }
                 }
                 Picker("Técnica base", selection: Binding(get: { model.state.techniqueId }, set: loadTechnique)) {
-                    Text("Modo libre").tag(Optional<UUID>.none)
+                    Text("Sin técnica base · modo libre").tag(Optional<UUID>.none)
                     ForEach(techniques) { Text($0.name).tag(Optional($0.id)) }
                 }
                 Picker("Método / equipo", selection: Binding(get: { model.state.methodId }, set: loadMethod)) {
-                    Text("Método genérico (\(model.state.method))").tag(Optional<UUID>.none)
+                    Text("Sin equipo asignado · \(model.state.method)").tag(Optional<UUID>.none)
                     ForEach(methods) { Text($0.name).tag(Optional($0.id)) }
                 }
                 HStack {
@@ -825,6 +825,7 @@ struct LabView: View {
         .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityElement(children: .combine)
+        .accessibilityHint("El índice 1 punto 00 es la referencia; un valor menor indica subextracción y uno mayor indica más extracción")
     }
 
     private var calibrationWorkspaceCard: some View {
@@ -875,6 +876,8 @@ struct LabView: View {
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .leading, endPoint: .trailing))
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("El índice 1 punto 00 es la referencia; un valor menor indica subextracción y uno mayor indica más extracción")
     }
 
     private var sensoryContent: some View {

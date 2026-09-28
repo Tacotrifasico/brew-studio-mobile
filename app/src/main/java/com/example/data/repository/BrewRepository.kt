@@ -3,6 +3,7 @@ package com.example.data.repository
 import com.example.data.database.*
 import com.example.data.catalog.BrewTechniqueCatalog
 import com.example.data.engine.RecipeIngredientInput
+import com.example.data.engine.RecipeStepInput
 import kotlinx.coroutines.flow.Flow
 
 class BrewRepository(
@@ -144,6 +145,7 @@ class BrewRepository(
     suspend fun insertRecipe(
         recipe: Recipe,
         ingredients: List<RecipeIngredientInput> = emptyList(),
+        steps: List<RecipeStepInput> = emptyList(),
         replaceIngredients: Boolean = false
     ) {
         if (!replaceIngredients) {
@@ -154,12 +156,20 @@ class BrewRepository(
             RecipeIngredient(
                 recipeId = recipe.id,
                 name = ing.name.trim(),
-                amount = ing.amount.toFloatOrNull() ?: 0f,
+                amount = ing.amount.trim().replace(',', '.').toFloatOrNull() ?: 0f,
                 unit = ing.unit.trim(),
                 orderIndex = idx
             )
         }
-        recipeDao.saveRecipeWithIngredients(recipe, entities)
+        val stepEntities = steps.filter { it.instruction.isNotBlank() }.mapIndexed { idx, step ->
+            RecipeStep(
+                id = step.id,
+                recipeId = recipe.id,
+                instruction = step.instruction.trim(),
+                stepNumber = idx + 1
+            )
+        }
+        recipeDao.replaceRecipeAggregate(recipe, entities, stepEntities)
     }
     suspend fun deleteRecipe(recipe: Recipe) {
         recipeDao.deleteRecipeWithIngredients(recipe)

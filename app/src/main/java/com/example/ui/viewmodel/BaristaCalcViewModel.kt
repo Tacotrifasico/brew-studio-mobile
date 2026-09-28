@@ -1627,11 +1627,11 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         ) }
     }
 
-    fun playLabIdeaAsPrep() {
+    fun playLabIdeaAsPrep(): Boolean {
         val snapshot = _state.value
         BrewInputRules.experimentError(snapshot.labMethod, snapshot.labCoffee, snapshot.labWater, snapshot.labTemp)?.let {
             showToast(it)
-            return
+            return false
         }
         val canonicalRatio = snapshot.labWater / snapshot.labCoffee
         val steps = generateLabSteps(snapshot.labMethod, snapshot.labWater, snapshot.labEstTimeSeconds)
@@ -1653,6 +1653,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             activePrepSteps = steps
         ) }
         showToast("¡Hipótesis de Laboratorio enviada a Preparar!")
+        return true
     }
 
     fun saveLabExperiment(onCompleted: (Boolean) -> Unit = {}) {
@@ -1696,20 +1697,32 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun saveLabAsRecipe(recipeName: String) {
-        viewModelScope.launch {
-            val s = _state.value
-            val recipe = Recipe(
-                name = recipeName,
-                recipeKind = "BLACK_COFFEE",
-                intention = "Fórmula calibrada en laboratorio: ${s.labNotes}",
-                suggestedMethodId = s.labMethodId,
-                ownerUserId = activeOwnerId.value,
-                syncStatus = "PENDING_CREATE"
-            )
-            repository.insertRecipe(recipe)
-            showToast("Receta '$recipeName' guardada en favoritos.")
-        }
+    fun saveLabAsRecipe(recipeName: String, onCompleted: (Boolean) -> Unit = {}) {
+        val snapshot = _state.value
+        val steps = generateLabSteps(snapshot.labMethod, snapshot.labWater, snapshot.labEstTimeSeconds)
+        addRecipe(
+            name = recipeName.trim(),
+            recipeKind = "BLACK_COFFEE",
+            ingredientsSummary = "${snapshot.labCoffee} g de café · ${snapshot.labWater} ml de agua",
+            stepsSummary = steps.joinToString(" · ") { it.title },
+            intention = "Fórmula calibrada en laboratorio: ${snapshot.labNotes}",
+            suggestedMethod = snapshot.labMethodId ?: methodIdForName(snapshot.labMethod).orEmpty(),
+            isFavorite = true,
+            ingredientsList = listOf(
+                RecipeIngredientInput(name = "Café", amount = snapshot.labCoffee.toString(), unit = "G"),
+                RecipeIngredientInput(name = "Agua", amount = snapshot.labWater.toString(), unit = "ML")
+            ),
+            stepsList = steps.map { step ->
+                RecipeStepInput(
+                    instruction = buildString {
+                        append(step.title)
+                        if (step.waterAddedMl > 0) append(": agrega ${step.waterAddedMl} ml")
+                        if (step.stepNote.isNotBlank()) append(". ${step.stepNote}")
+                    }
+                )
+            },
+            onCompleted = onCompleted
+        )
     }
 
     fun saveLabAsTechnique(techniqueName: String, onCompleted: (Boolean) -> Unit = {}) {
@@ -2208,7 +2221,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 syncStatus = "PENDING_CREATE"
             )
             try {
-                repository.insertRecipe(recipe, ingredientsList, replaceIngredients = true)
+                repository.insertRecipe(recipe, ingredientsList, stepsList, replaceIngredients = true)
                 if (isEdit) {
                     showToast("Receta '$name' actualizada.")
                 } else {

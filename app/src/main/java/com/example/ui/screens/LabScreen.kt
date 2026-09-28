@@ -195,6 +195,8 @@ fun LabScreen(
     var showTechniqueDialog by remember { mutableStateOf(false) }
     var inputRecipeName by remember { mutableStateOf("") }
     var inputTechniqueName by remember { mutableStateOf("") }
+    var isSavingRecipe by remember { mutableStateOf(false) }
+    var isSavingTechnique by remember { mutableStateOf(false) }
 
     var isAltitudePanelExpanded by remember { mutableStateOf(false) }
     var showCustomCityDialog by remember { mutableStateOf(false) }
@@ -225,7 +227,7 @@ fun LabScreen(
 
     if (showRecipeDialog) {
         AlertDialog(
-            onDismissRequest = { showRecipeDialog = false },
+            onDismissRequest = { if (!isSavingRecipe) showRecipeDialog = false },
             title = { Text("Guardar Receta Base", fontWeight = FontWeight.Bold, color = TextPrincipal) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -243,19 +245,26 @@ fun LabScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        if (isSavingRecipe) return@Button
                         val nameStr = inputRecipeName.ifBlank { "Receta Lab ${state.labMethod}" }
-                        viewModel.saveLabAsRecipe(nameStr)
-                        showRecipeDialog = false
-                        inputRecipeName = ""
+                        isSavingRecipe = true
+                        viewModel.saveLabAsRecipe(nameStr) { success ->
+                            isSavingRecipe = false
+                            if (success) {
+                                showRecipeDialog = false
+                                inputRecipeName = ""
+                            }
+                        }
                     },
+                    enabled = !isSavingRecipe,
                     colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal),
                     modifier = Modifier.testTag("recipe_submit_btn")
                 ) {
-                    Text("Guardar")
+                    Text(if (isSavingRecipe) "Guardando…" else "Guardar")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showRecipeDialog = false }) {
+                TextButton(onClick = { showRecipeDialog = false }, enabled = !isSavingRecipe) {
                     Text("Cancelar", color = TextSecundario)
                 }
             }
@@ -264,7 +273,7 @@ fun LabScreen(
 
     if (showTechniqueDialog) {
         AlertDialog(
-            onDismissRequest = { showTechniqueDialog = false },
+            onDismissRequest = { if (!isSavingTechnique) showTechniqueDialog = false },
             title = { Text("Guardar Técnica", fontWeight = FontWeight.Bold, color = TextPrincipal) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -282,19 +291,26 @@ fun LabScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        if (isSavingTechnique) return@Button
                         val nameStr = inputTechniqueName.ifBlank { "Técnica Lab ${state.labMethod}" }
-                        viewModel.saveLabAsTechnique(nameStr)
-                        showTechniqueDialog = false
-                        inputTechniqueName = ""
+                        isSavingTechnique = true
+                        viewModel.saveLabAsTechnique(nameStr) { success ->
+                            isSavingTechnique = false
+                            if (success) {
+                                showTechniqueDialog = false
+                                inputTechniqueName = ""
+                            }
+                        }
                     },
+                    enabled = !isSavingTechnique,
                     colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal),
                     modifier = Modifier.testTag("technique_submit_btn")
                 ) {
-                    Text("Registrar")
+                    Text(if (isSavingTechnique) "Guardando…" else "Registrar")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showTechniqueDialog = false }) {
+                TextButton(onClick = { showTechniqueDialog = false }, enabled = !isSavingTechnique) {
                     Text("Cancelar", color = TextSecundario)
                 }
             }
@@ -561,8 +577,7 @@ fun LabScreen(
         LabActionBar(
             modifier = Modifier.align(Alignment.BottomCenter),
             onPrepareClick = {
-                viewModel.playLabIdeaAsPrep()
-                onNavigateToSection("brew")
+                if (viewModel.playLabIdeaAsPrep()) onNavigateToSection("brew")
             },
             onSaveExperimentClick = {
                 viewModel.saveLabExperiment()

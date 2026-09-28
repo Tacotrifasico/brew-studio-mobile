@@ -168,7 +168,7 @@ class ExampleRobolectricTest {
     repeat(2) {
       viewModel.addRecipe(
         name = recipeName,
-        ingredientsList = listOf(com.example.data.engine.RecipeIngredientInput(name = "Café", amount = "18", unit = "G")),
+        ingredientsList = listOf(com.example.data.engine.RecipeIngredientInput(name = "Café", amount = "18,5", unit = "G")),
         stepsList = listOf(com.example.data.engine.RecipeStepInput(instruction = "Preparar"))
       )
     }
@@ -190,6 +190,10 @@ class ExampleRobolectricTest {
     assertEquals(1, state.equipmentList.count { it.name == equipmentName })
     assertEquals(1, state.recipesList.count { it.name == recipeName })
     assertEquals(1, state.experimentsList.count { it.experimentHypothesis == experimentName })
+    val savedRecipe = state.recipesList.single { it.name == recipeName }
+    val database = com.example.data.database.AppDatabase.getDatabase(application)
+    assertEquals(18.5f, database.recipeIngredientDao().getIngredientsForRecipeSync(savedRecipe.id).single().amount, 0.001f)
+    assertEquals("Preparar", database.recipeStepDao().getStepsForRecipeSync(savedRecipe.id).single().instruction)
   }
 
   @Test
@@ -390,6 +394,41 @@ class ExampleRobolectricTest {
     assertEquals(13f, cup.executedRatio, 0.001f)
     assertEquals(155, cup.executedDurationSeconds)
     assertEquals(techniqueName, cup.techniqueNameSnapshot)
+  }
+
+  @Test
+  fun `laboratory recipe saves ingredients and ordered instructions only once`() = runBlocking {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val session = com.example.data.remote.SessionManager(application)
+    session.clearSession()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+    val database = com.example.data.database.AppDatabase.getDatabase(application)
+    val mainLooper = org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+    val recipeName = "Receta laboratorio ${java.util.UUID.randomUUID()}"
+
+    viewModel.selectMethodForLab("11111111-1111-4000-8000-000000000001", "V60")
+    viewModel.updateLabVariables(coffee = 18.5f, water = 296, temperature = 92, estTimeSeconds = 175)
+    val saved = kotlinx.coroutines.CompletableDeferred<Boolean>()
+    viewModel.saveLabAsRecipe(recipeName) { saved.complete(it) }
+    viewModel.saveLabAsRecipe(recipeName)
+
+    repeat(250) {
+      mainLooper.idle()
+      if (saved.isCompleted && viewModel.state.value.recipesList.any { it.name == recipeName }) return@repeat
+      Thread.sleep(20)
+    }
+    assertTrue(withTimeout(5_000) { saved.await() })
+    assertEquals(1, viewModel.state.value.recipesList.count { it.name == recipeName })
+
+    val recipe = viewModel.state.value.recipesList.single { it.name == recipeName }
+    val ingredients = database.recipeIngredientDao().getIngredientsForRecipeSync(recipe.id)
+    val steps = database.recipeStepDao().getStepsForRecipeSync(recipe.id)
+    assertEquals(listOf("Café", "Agua"), ingredients.map { it.name })
+    assertEquals(18.5f, ingredients.first().amount, 0.001f)
+    assertEquals(296f, ingredients.last().amount, 0.001f)
+    assertTrue(steps.size >= 2)
+    assertEquals((1..steps.size).toList(), steps.map { it.stepNumber })
+    assertTrue(steps.all { it.instruction.isNotBlank() })
   }
 
   @Test

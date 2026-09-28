@@ -7,15 +7,29 @@ Pendientes que bloquean declarar Android online:
 - Configurar `.env` local con el mismo `SUPABASE_URL` y `SUPABASE_ANON_KEY` usados por Cupa Staging en iOS.
 - Implementar refresh token, `expires_at`, renovación previa a llamadas y almacenamiento cifrado en `SessionManager.kt`/Auth.
 - Mantener el logging HTTP sin cuerpos; nunca imprimir tokens.
-- Implementar el contrato canónico completo de recetas (`recipes`, `recipe_ingredients` y `recipe_steps`). `SyncRepository.kt` ya no sube recetas mediante el contrato heredado porque hacerlo perdería ingredientes/pasos y fabricaría cantidades; permanecen locales y pendientes hasta que el servidor pueda aceptar el agregado completo.
+- Conectar el contrato remoto canónico completo de recetas (`recipes`, `recipe_ingredients` y `recipe_steps`). El agregado local ya guarda padre, ingredientes y pasos de forma transaccional, conserva su orden y está cubierto por pruebas; `SyncRepository.kt` no lo sube mediante el contrato heredado porque hacerlo perdería hijos y fabricaría cantidades. Las recetas permanecen locales y pendientes hasta recibir confirmación del agregado remoto completo.
 - Completar técnicas más allá del alta segura actual. Android puede crear la técnica, reintentar únicamente los pasos faltantes e importar agregados remotos completos; actualizaciones, borrados lógicos y conflictos remotos siguen esperando endpoints/contrato de Axcis. Nunca marcar la técnica `SYNCED` si falta un paso o si agua, proporción, acumulados y duración no coinciden.
 - Ampliar `SyncRepository.kt` más allá de recetas y técnicas: `beans`, `instruments`/equipo, `cups`, `catas` y `lab_experiments` ya se guardan localmente con `PENDING_CREATE`/`PENDING_UPDATE`, pero todavía no tienen push/pull remoto en Android. No cambiar esos estados a `SYNCED` hasta recibir confirmación del servidor.
 - Implementar borrado lógico y outbox para cafés, equipo, tazas, catas y experimentos. Hoy su eliminación local es inmediata porque el contrato Android aún no posee una cola de borrado para esas entidades.
-- Resolver envíos directos por alias y verificar muro, buzón, importación y variante contra las tablas canónicas de la rama iOS.
-  - Hasta que exista esa RPC, el cliente identifica el campo como temporal, exige un UUID real y bloquea la publicación de recetas/técnicas que aún no tienen identidad remota. Compartir nunca debe cambiar por sí solo el `syncStatus` de la fórmula.
+- Integrar en Android los envíos directos por alias y verificar muro, buzón, importación y variante contra las tablas canónicas de la rama iOS.
+  - La RPC `resolve_profile_id_by_alias` ya está definida en `202609050008_direct_recipient_alias.sql` y fue verificada sobre PostgreSQL efímero. Falta desplegar esa migración en Staging y consumir la RPC desde Android; mientras tanto el cliente identifica el campo como temporal, exige un UUID real y bloquea la publicación de recetas/técnicas que aún no tienen identidad remota. Compartir nunca debe cambiar por sí solo el `syncStatus` de la fórmula.
   - Los snapshots sociales Android ya incluyen ingredientes/pasos reales de recetas y pasos/acumulados reales de técnicas. La importación rechaza snapshots parciales y guarda padre e hijos localmente en una transacción. Implementar las cuatro RPC de copia/variante según la sección **Contrato obligatorio de `payload_snapshot_json`** de `AXCIS_BACKEND_HANDOFF.md`; una RPC no puede confirmar éxito si sólo creó el padre.
 - Ejecutar el protocolo físico con dos cuentas y guardar UUID/capturas como evidencia.
 - Las técnicas se guardan en Room y su biblioteca canónica es **Almacén → Técnicas**; Preparar, Laboratorio y Comunidad deben escribir/importar en esa misma tabla.
 - `Cup.techniqueId` y `Cup.methodId` ya conservan la técnica y el método usados cuando la preparación proviene del Almacén; mantener esos UUID al mapear `cups` y `catas` al backend.
 
 Buscar `AXCIS-ONLINE` en el proyecto para localizar los puntos P0 comentados en código.
+
+## Evidencia que no depende de Axcis
+
+- Recetas locales: padre, ingredientes y pasos ordenados se guardan juntos; editar reemplaza el agregado sin dejar hijos obsoletos; decimales con coma se normalizan.
+- Técnicas locales: agua total, proporción, duración y acumulados se validan antes de guardar; cada técnica obtiene UUID propios para sus pasos.
+- Laboratorio → Técnica → Almacén → Preparar → Cata: recorrido automático aprobado con identidad y snapshots conservados.
+- La pantalla Perfil ya no afirma que Supabase o RLS están operativos: muestra modo local, sincronización parcial y prueba A/B pendiente según la configuración real.
+
+## Evidencia que sí requiere a Axcis o infraestructura externa
+
+- URL y clave pública del mismo proyecto Supabase Staging en ambos clientes.
+- Migraciones canónicas desplegadas, Auth/SMTP/redirects y Edge Functions configuradas.
+- Push/pull remoto completo de todos los agregados Android y refresh seguro de sesión.
+- Ensayo físico con dos cuentas/JWT reales para RLS, intercambio Android↔iPhone, alias, muro y buzón.

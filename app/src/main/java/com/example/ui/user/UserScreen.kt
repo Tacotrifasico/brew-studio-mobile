@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.SocialViewModel
 import com.example.ui.viewmodel.SocialUiState
+import com.example.data.remote.SupabaseClientProvider
 import kotlinx.coroutines.launch
 
 const val INSTAGRAM_URL = "https://instagram.com/brewstudio.app"
@@ -45,7 +46,7 @@ fun UserScreen(viewModel: SocialViewModel, onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(0) }
-    val tabTitles = listOf("Perfil", "Bandeja Feed", "Mis Fórmulas", "Mi Historial")
+    val tabTitles = listOf("Perfil", "Muro y recibidos", "Mis fórmulas", "Mi historial")
 
     Scaffold(
         topBar = {
@@ -424,9 +425,14 @@ fun PersonalProfileTab(viewModel: SocialViewModel, state: SocialUiState) {
                         Text("Guardar Cambios")
                     }
                 } else {
+                    val backendStatus = accountBackendStatus(
+                        backendConfigured = SupabaseClientProvider.isConfigured,
+                        loggedIn = state.isLoggedIn
+                    )
                     ProfileStatRow("Registrado en", state.email)
-                    ProfileStatRow("Estatus de Cuenta", "Sincronizado con Supabase Postgres")
-                    ProfileStatRow("Publicación", "Reglas Row Level Security Activas")
+                    ProfileStatRow("Estado de la cuenta", backendStatus.account)
+                    ProfileStatRow("Datos Android", backendStatus.data)
+                    ProfileStatRow("Seguridad remota", backendStatus.security)
                 }
             }
         }
@@ -445,7 +451,7 @@ fun PersonalProfileTab(viewModel: SocialViewModel, state: SocialUiState) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     ProfileStatMetric("Recetas", state.recipesCount.toString())
                     ProfileStatMetric("Técnicas", state.techniquesCount.toString())
-                    ProfileStatMetric("Shared", state.activity.filter { it.action.contains("share") }.size.toString())
+                    ProfileStatMetric("Compartidas", state.activity.filter { it.action.contains("share") }.size.toString())
                 }
             }
         }
@@ -453,6 +459,30 @@ fun PersonalProfileTab(viewModel: SocialViewModel, state: SocialUiState) {
         Spacer(modifier = Modifier.height(16.dp))
         AboutTeamCard()
     }
+}
+
+internal data class AccountBackendStatus(
+    val account: String,
+    val data: String,
+    val security: String
+)
+
+internal fun accountBackendStatus(backendConfigured: Boolean, loggedIn: Boolean): AccountBackendStatus = when {
+    !backendConfigured -> AccountBackendStatus(
+        account = "Modo local · Supabase no configurado",
+        data = "Guardados en este dispositivo",
+        security = "RLS pendiente de validar en Staging"
+    )
+    !loggedIn -> AccountBackendStatus(
+        account = "Supabase configurado · falta ingresar",
+        data = "Sin sincronización remota",
+        security = "RLS pendiente de validar en Staging"
+    )
+    else -> AccountBackendStatus(
+        account = "Sesión de Supabase iniciada",
+        data = "Sincronización Android parcial",
+        security = "RLS pendiente de prueba física A/B"
+    )
 }
 
 @Composable
@@ -574,8 +604,22 @@ fun ProfileStatRow(label: String, value: String) {
             .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(label, fontSize = 12.sp, color = TextSecundario, fontWeight = FontWeight.Medium)
-        Text(value, fontSize = 12.sp, color = TextPrincipal, fontWeight = FontWeight.Bold)
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            fontSize = 12.sp,
+            color = TextSecundario,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            value,
+            modifier = Modifier.weight(1.45f),
+            fontSize = 12.sp,
+            color = TextPrincipal,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End
+        )
     }
 }
 

@@ -200,7 +200,8 @@ final class PreparationModel: ObservableObject {
         state = PreparationState(
             techniqueId: lab.techniqueId, techniqueName: lab.techniqueName ?? "Hipótesis de Laboratorio",
             methodId: lab.methodId, methodName: lab.method, recipeId: lab.recipeId, beanId: lab.beanId, grinderId: lab.grinderId,
-            doseGrams: Double(lab.coffeeGrams), waterMl: lab.waterMl, ratio: Double(lab.ratio), temperatureC: lab.temperatureC,
+            doseGrams: Double(lab.coffeeGrams), waterMl: lab.waterMl,
+            ratio: lab.coffeeGrams > 0 ? Double(lab.waterMl) / Double(lab.coffeeGrams) : Double(lab.ratio), temperatureC: lab.temperatureC,
             grindDescription: "\(lab.grindClicks) clics", executionMode: "MANUAL",
             steps: [.init(id: UUID(), number: 1, title: "Preparar hipótesis", durationSeconds: lab.timeSeconds, waterAddedMl: lab.waterMl, waterAccumulatedMl: lab.waterMl, gesture: "MANUAL", intensity: "MEDIUM", note: lab.notes)]
         )

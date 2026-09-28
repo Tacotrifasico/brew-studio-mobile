@@ -640,6 +640,8 @@ struct LabView: View {
     @State private var showGeminiConsent = false
     @State private var showLabDetails = false
     @State private var errorMessage: String?
+    @State private var isSavingExperiment = false
+    @State private var isSavingTechnique = false
     @AppStorage("privacy.geminiConsent.v1") private var geminiConsent = false
 
     var body: some View {
@@ -914,11 +916,11 @@ struct LabView: View {
                 switch category {
                 case .ratio:
                     HStack {
-                        Stepper("Café \(model.state.coffeeGrams.formatted()) g", value: bindingFloat(\.coffeeGrams), in: 1...100, step: 1)
+                        Stepper("Café \(model.state.coffeeGrams.formatted()) g", value: labCoffeeBinding, in: 1...100, step: 1)
                         Divider()
-                        Stepper("Agua \(model.state.waterMl) ml", value: binding(\.waterMl), in: 10...2000, step: 10)
+                        Stepper("Agua \(model.state.waterMl) ml", value: labWaterBinding, in: 10...2000, step: 10)
                     }
-                    labSlider("Proporción", value: bindingFloat(\.ratio), range: 8...22, step: 0.5, display: "1:\(String(format: "%.1f", model.state.ratio))")
+                    labSlider("Proporción", value: labRatioBinding, range: 8...22, step: 0.5, display: "1:\(String(format: "%.1f", model.state.ratio))")
                     labSlider("Tiempo", value: bindingInt(\.timeSeconds), range: 60...360, step: 5, display: formattedTime)
                 case .extraction:
                     Picker("Unidad", selection: Binding(get: { model.state.temperatureUnit }, set: model.setTemperatureUnit)) {
@@ -994,16 +996,20 @@ struct LabView: View {
     private var actionBar: some View {
         HStack {
             Menu {
-                Button { saveExperiment() } label: { Label("Guardar experimento", systemImage: "flask") }
-                Button { saveTechniqueFromLab() } label: { Label("Guardar como técnica", systemImage: "list.bullet.clipboard") }
+                Button { saveExperiment() } label: { Label(isSavingExperiment ? "Guardando experimento…" : "Guardar experimento", systemImage: "flask") }
+                    .disabled(isSavingExperiment)
+                Button { saveTechniqueFromLab() } label: { Label(isSavingTechnique ? "Guardando técnica…" : "Guardar como técnica", systemImage: "list.bullet.clipboard") }
+                    .disabled(isSavingTechnique)
             } label: { Label("Guardar", systemImage: "square.and.arrow.down") }
                 .buttonStyle(.bordered)
             Button {
-                saveExperiment()
-                preparation.load(lab: model.state)
-                selection = .brew
+                if saveExperiment() {
+                    preparation.load(lab: model.state)
+                    selection = .brew
+                }
             } label: { Label("Preparar esta idea", systemImage: "play.fill") }
                 .buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
+                .disabled(isSavingExperiment)
         }
         .padding().frame(maxWidth: .infinity).background(.ultraThinMaterial)
     }
@@ -1032,19 +1038,34 @@ struct LabView: View {
         !customCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && customAltitudeValue.map { (0...5_000).contains($0) } == true
     }
 
-    private func saveExperiment() {
+    @discardableResult private func saveExperiment() -> Bool {
+        guard !isSavingExperiment else { return false }
+        isSavingExperiment = true
         _ = LabExperimentRecord(context: modelContext, state: model.state, profile: model.profile)
-        do { try modelContext.save(); saveConfirmationMessage = "La hipótesis quedó disponible offline en este dispositivo." }
-        catch { modelContext.rollback(); errorMessage = error.localizedDescription }
+        do {
+            try modelContext.save()
+            isSavingExperiment = false
+            saveConfirmationMessage = "La hipótesis quedó disponible offline en este dispositivo."
+            return true
+        } catch {
+            modelContext.rollback()
+            isSavingExperiment = false
+            errorMessage = error.localizedDescription
+            return false
+        }
     }
 
     private func saveTechniqueFromLab() {
+        guard !isSavingTechnique else { return }
+        isSavingTechnique = true
         do {
             let technique = try RecipeTechniqueRepository(context: modelContext).saveTechnique(.fromLab(model.state))
             model.update { $0.techniqueId = technique.id; $0.techniqueName = technique.name }
+            isSavingTechnique = false
             saveConfirmationMessage = "La técnica quedó en Almacén → Técnicas y está lista para preparar."
         } catch {
             modelContext.rollback()
+            isSavingTechnique = false
             errorMessage = error.localizedDescription
         }
     }
@@ -1130,6 +1151,15 @@ struct LabView: View {
     }
     private func bindingInt(_ keyPath: WritableKeyPath<LabState, Int>) -> Binding<Double> {
         Binding(get: { Double(model.state[keyPath: keyPath]) }, set: { value in model.update { $0[keyPath: keyPath] = Int(value.rounded()) } })
+    }
+    private var labCoffeeBinding: Binding<Double> {
+        Binding(get: { Double(model.state.coffeeGrams) }, set: { model.setCoffeeGrams(Float($0)) })
+    }
+    private var labWaterBinding: Binding<Int> {
+        Binding(get: { model.state.waterMl }, set: model.setWaterMl)
+    }
+    private var labRatioBinding: Binding<Double> {
+        Binding(get: { Double(model.state.ratio) }, set: { model.setRatio(Float($0)) })
     }
 }
 

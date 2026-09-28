@@ -29,6 +29,7 @@ struct LabGoldenVerifier {
             scores: [78, 22, 32, 76, 84, 42]
         )
         verifyStateRestoration()
+        verifyLabQuantityConsistency()
         verifyAltitudeCatalogAndTemperaturePreference()
         verifyCoffeeFreshnessParity()
         verifyCoffeeInputValidation()
@@ -122,6 +123,38 @@ struct LabGoldenVerifier {
         let actual = [output.aroma, output.acidity, output.sweetness, output.body, output.bitterness, output.finish]
         precondition(abs(output.extractionIndex - extraction) <= 0.000_01, "\(name): índice \(output.extractionIndex)")
         precondition(actual == scores, "\(name): esperado \(scores), recibido \(actual)")
+    }
+
+    @MainActor private static func verifyLabQuantityConsistency() {
+        let suite = "CupaLabQuantityVerifier.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let lab = LabModel(defaults: defaults)
+
+        lab.setCoffeeGrams(20)
+        lab.setRatio(15)
+        precondition(lab.state.waterMl == 300 && abs(lab.state.ratio - 15) < 0.0001)
+        lab.setWaterMl(280)
+        precondition(abs(lab.state.ratio - 14) < 0.0001)
+        lab.setCoffeeGrams(18)
+        lab.setRatio(13)
+        precondition(lab.state.waterMl == 234 && abs(lab.state.ratio - 13) < 0.0001)
+
+        let restored = LabModel(defaults: defaults)
+        precondition(restored.state.waterMl == 234 && abs(restored.state.ratio - 13) < 0.0001)
+        let draft = TechniqueDraftModel.fromLab(restored.state)
+        precondition(draft.waterMl == 234 && abs(draft.ratio - 13) < 0.0001)
+
+        let preparation = PreparationModel(defaults: defaults)
+        preparation.load(lab: restored.state)
+        precondition(preparation.state.waterMl == 234 && abs(preparation.state.ratio - 13) < 0.0001)
+        precondition(preparation.state.steps.reduce(0) { $0 + $1.waterAddedMl } == 234)
+
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let experiment = LabExperimentRecord(context: context, state: restored.state, profile: restored.profile)
+        precondition(experiment.waterMl == 234 && abs(experiment.ratio - 13) < 0.0001)
+        context.rollback()
     }
 
     private static func verifyAppConfiguration() {

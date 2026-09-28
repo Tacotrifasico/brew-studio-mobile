@@ -186,7 +186,7 @@ extension TechniqueDraftModel {
             grinderId: state.grinderId,
             doseGrams: Double(state.coffeeGrams),
             waterMl: state.waterMl,
-            ratio: Double(state.ratio),
+            ratio: state.coffeeGrams > 0 ? Double(state.waterMl) / Double(state.coffeeGrams) : Double(state.ratio),
             temperatureC: state.temperatureC,
             executionMode: "MANUAL",
             grindValue: Double(state.grindClicks),

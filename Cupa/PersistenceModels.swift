@@ -339,7 +339,8 @@ final class LabExperimentRecord: NSManagedObject {
         self.init(context: context)
         id = UUID(); ownerId = context.activeOwnerId; methodId = state.methodId; recipeId = state.recipeId
         techniqueId = state.techniqueId; beanId = state.beanId; grinderId = state.grinderId; method = state.method
-        coffeeGrams = Double(state.coffeeGrams); waterMl = Int64(state.waterMl); ratio = Double(state.ratio)
+        coffeeGrams = Double(state.coffeeGrams); waterMl = Int64(state.waterMl)
+        ratio = state.coffeeGrams > 0 ? Double(state.waterMl) / Double(state.coffeeGrams) : Double(state.ratio)
         temperatureC = Int64(state.temperatureC); grindClicks = Int64(state.grindClicks)
         freshness = state.freshness; timeSeconds = Int64(state.timeSeconds)
         altitudeMeters = Int64(state.altitudeMeters); cityName = state.cityName; notes = state.notes

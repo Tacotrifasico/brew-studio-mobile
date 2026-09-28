@@ -224,6 +224,7 @@ final class LabModel: ObservableObject {
         let baseKey = "cupa.labState.v1"; let scopedKey = LocalDataScope.scopedKey(baseKey, ownerId: scopeOwnerId)
         let stored = defaults.object(forKey: scopedKey) ?? LocalDataScope.migrateLegacyObject(in: defaults, baseKey: baseKey, ownerId: scopeOwnerId)
         var restored = (stored as? Data).flatMap { try? JSONDecoder().decode(LabState.self, from: $0) } ?? LabState()
+        Self.normalizeQuantities(&restored)
         if let rawUnit = defaults.string(forKey: temperaturePreferenceKey), let unit = TemperatureUnit(rawValue: rawUnit) {
             restored.temperatureUnit = unit
         } else {
@@ -238,11 +239,31 @@ final class LabModel: ObservableObject {
         scopeOwnerId = ownerId
         let stored = defaults.object(forKey: storageKey) ?? LocalDataScope.migrateLegacyObject(in: defaults, baseKey: storageKeyBase, ownerId: ownerId)
         var restored = (stored as? Data).flatMap { try? JSONDecoder().decode(LabState.self, from: $0) } ?? LabState()
+        Self.normalizeQuantities(&restored)
         restored.temperatureUnit = TemperatureUnit(rawValue: defaults.string(forKey: temperaturePreferenceKey) ?? "") ?? .celsius
         state = restored
     }
 
     func update(_ change: (inout LabState) -> Void) { change(&state) }
+    func setCoffeeGrams(_ grams: Float) {
+        update {
+            $0.coffeeGrams = grams
+            $0.waterMl = Int((grams * $0.ratio).rounded())
+            Self.normalizeQuantities(&$0)
+        }
+    }
+    func setWaterMl(_ milliliters: Int) {
+        update {
+            $0.waterMl = milliliters
+            Self.normalizeQuantities(&$0)
+        }
+    }
+    func setRatio(_ ratio: Float) {
+        update {
+            $0.waterMl = Int(($0.coffeeGrams * ratio).rounded())
+            Self.normalizeQuantities(&$0)
+        }
+    }
     func setTemperatureUnit(_ unit: TemperatureUnit) {
         defaults.set(unit.rawValue, forKey: temperaturePreferenceKey)
         update { $0.temperatureUnit = unit }
@@ -262,7 +283,7 @@ final class LabModel: ObservableObject {
             $0.method = calculator.method
             $0.coffeeGrams = Float(calculator.coffee)
             $0.waterMl = calculator.water
-            $0.ratio = Float(calculator.ratio)
+            Self.normalizeQuantities(&$0)
         }
     }
 
@@ -305,7 +326,7 @@ final class LabModel: ObservableObject {
             $0.techniqueName = technique.name; $0.recipeName = recipeName
             $0.methodId = technique.methodId; $0.beanId = technique.beanId; $0.grinderId = technique.grinderId
             $0.method = technique.methodName; $0.coffeeGrams = Float(technique.doseGrams)
-            $0.waterMl = Int(technique.waterMl); $0.ratio = Float(technique.ratio)
+            $0.waterMl = Int(technique.waterMl); Self.normalizeQuantities(&$0)
             $0.temperatureC = Int(technique.temperatureC)
             if technique.grindUnit == "CLICKS" { $0.grindClicks = min(50, max(4, Int(technique.grindValue.rounded()))) }
             if technique.totalTimeSeconds > 0 { $0.timeSeconds = Int(technique.totalTimeSeconds) }
@@ -320,7 +341,7 @@ final class LabModel: ObservableObject {
             $0.methodId = experiment.methodId; $0.recipeId = experiment.recipeId; $0.techniqueId = experiment.techniqueId
             $0.beanId = experiment.beanId; $0.grinderId = experiment.grinderId; $0.recipeName = nil; $0.techniqueName = nil
             $0.method = experiment.method; $0.coffeeGrams = Float(experiment.coffeeGrams); $0.waterMl = Int(experiment.waterMl)
-            $0.ratio = Float(experiment.ratio); $0.temperatureC = Int(experiment.temperatureC); $0.grindClicks = Int(experiment.grindClicks)
+            Self.normalizeQuantities(&$0); $0.temperatureC = Int(experiment.temperatureC); $0.grindClicks = Int(experiment.grindClicks)
             $0.freshness = experiment.freshness; $0.timeSeconds = Int(experiment.timeSeconds); $0.notes = experiment.notes
             $0.altitudeMeters = Int(experiment.altitudeMeters); $0.cityName = experiment.cityName
         }
@@ -333,7 +354,7 @@ final class LabModel: ObservableObject {
                 $0.recipeName = brew.recipeNameSnapshot.isEmpty ? nil : brew.recipeNameSnapshot
                 $0.techniqueName = brew.techniqueNameSnapshot.isEmpty ? nil : brew.techniqueNameSnapshot
                 $0.method = brew.methodNameSnapshot; $0.coffeeGrams = Float(brew.doseGrams); $0.waterMl = Int(brew.waterMl)
-                $0.ratio = Float(brew.ratio); $0.temperatureC = Int(brew.temperatureC)
+                Self.normalizeQuantities(&$0); $0.temperatureC = Int(brew.temperatureC)
                 if let clicks = Self.firstInteger(in: brew.grindDescription) { $0.grindClicks = min(50, max(4, clicks)) }
                 if brew.elapsedSeconds > 0 { $0.timeSeconds = Int(brew.elapsedSeconds) }
             }
@@ -363,5 +384,9 @@ final class LabModel: ObservableObject {
     }
     private static func firstInteger(in value: String) -> Int? {
         value.split(whereSeparator: { !$0.isNumber }).first.flatMap { Int($0) }
+    }
+    private static func normalizeQuantities(_ state: inout LabState) {
+        guard state.coffeeGrams > 0 else { return }
+        state.ratio = Float(state.waterMl) / state.coffeeGrams
     }
 }

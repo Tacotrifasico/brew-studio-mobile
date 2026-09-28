@@ -28,6 +28,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 enum class RatioCategory {
     ESPRESSO, INTENSO, BALANCE, CLARIDAD
@@ -1027,7 +1028,14 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun completePreparation() {
         timerJob?.cancel()
-        _state.update { it.copy(timerRunning = false, timerPaused = false, preparationCompleted = true) }
+        _state.update {
+            it.copy(
+                timerRunning = false,
+                timerPaused = false,
+                preparationCompleted = true,
+                elapsedSeconds = maxOf(it.elapsedSeconds, it.activePrepSteps.sumOf { step -> step.durationSeconds })
+            )
+        }
     }
 
     fun advanceStep() {
@@ -1385,11 +1393,16 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         freshness: String,
         notes: String
     ) {
+        val canonicalRatio = if (BrewInputRules.validCoffee(coffee) && BrewInputRules.validWater(water)) {
+            water / coffee
+        } else {
+            ratio
+        }
         _state.update { it.copy(
             labMethod = methodName,
             labCoffee = coffee,
             labWater = water,
-            labRatio = ratio,
+            labRatio = canonicalRatio,
             labTemp = temp,
             labClicks = clicks,
             labBean = bean,
@@ -1414,12 +1427,25 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         cityName: String? = null
     ) {
         _state.update { current ->
+            val updatedCoffee = coffee ?: current.labCoffee
+            val (updatedWater, updatedRatio) = when {
+                water != null -> water to if (updatedCoffee > 0f) water / updatedCoffee else current.labRatio
+                ratio != null -> {
+                    val computedWater = (updatedCoffee * ratio).toDouble().roundToInt()
+                    computedWater to if (updatedCoffee > 0f) computedWater / updatedCoffee else ratio
+                }
+                coffee != null -> {
+                    val computedWater = (updatedCoffee * current.labRatio).toDouble().roundToInt()
+                    computedWater to if (updatedCoffee > 0f) computedWater / updatedCoffee else current.labRatio
+                }
+                else -> current.labWater to current.labRatio
+            }
             current.copy(
                 labMethod = method ?: current.labMethod,
                 labMethodId = method?.let(::methodIdForName) ?: current.labMethodId,
-                labCoffee = coffee ?: current.labCoffee,
-                labWater = water ?: current.labWater,
-                labRatio = ratio ?: current.labRatio,
+                labCoffee = updatedCoffee,
+                labWater = updatedWater,
+                labRatio = updatedRatio,
                 labTemp = temperature ?: current.labTemp,
                 labClicks = clicks ?: current.labClicks,
                 labBean = bean ?: current.labBean,
@@ -1501,7 +1527,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     ?: technique.grindDescription.orEmpty().ifBlank { current.labGrinder },
                 labCoffee = technique.doseG,
                 labWater = technique.waterMl,
-                labRatio = technique.ratio,
+                labRatio = if (technique.doseG > 0f) technique.waterMl / technique.doseG else technique.ratio,
                 labTemp = technique.temperatureC,
                 labClicks = (technique.grindValue ?: current.labClicks.toDouble()).toInt(),
                 labEstTimeSeconds = technique.totalTimeSeconds,
@@ -1602,49 +1628,71 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playLabIdeaAsPrep() {
-        // Mandar hipótesis directa a Preparar
+        val snapshot = _state.value
+        BrewInputRules.experimentError(snapshot.labMethod, snapshot.labCoffee, snapshot.labWater, snapshot.labTemp)?.let {
+            showToast(it)
+            return
+        }
+        val canonicalRatio = snapshot.labWater / snapshot.labCoffee
+        val steps = generateLabSteps(snapshot.labMethod, snapshot.labWater, snapshot.labEstTimeSeconds)
         _state.update { it.copy(
-            activePrepMethod = it.labMethod,
-            activePrepCoffee = it.labCoffee,
-            activePrepWater = it.labWater,
-            activePrepRatio = it.labRatio,
-            activePrepTemp = it.labTemp,
+            labRatio = canonicalRatio,
+            activePrepMethod = snapshot.labMethod,
+            activePrepCoffee = snapshot.labCoffee,
+            activePrepWater = snapshot.labWater,
+            activePrepRatio = canonicalRatio,
+            activePrepTemp = snapshot.labTemp,
             activePrepTechniqueName = "Idea de Laboratorio",
-            activePrepTechniqueId = it.labTechniqueId,
-            activePrepMethodId = it.labMethodId ?: methodIdForName(it.labMethod),
-            activePrepGrinder = it.labGrinder.ifBlank { "Manual" },
-            activePrepGrinderId = it.labGrinderId,
-            activePrepClicks = it.labClicks,
-            activePrepBean = it.labBean,
-            activePrepBeanId = it.labBeanId,
-            activePrepSteps = generateQuickSteps(it.labMethod, it.labWater)
+            activePrepTechniqueId = snapshot.labTechniqueId,
+            activePrepMethodId = snapshot.labMethodId ?: methodIdForName(snapshot.labMethod),
+            activePrepGrinder = snapshot.labGrinder.ifBlank { "Manual" },
+            activePrepGrinderId = snapshot.labGrinderId,
+            activePrepClicks = snapshot.labClicks,
+            activePrepBean = snapshot.labBean,
+            activePrepBeanId = snapshot.labBeanId,
+            activePrepSteps = steps
         ) }
         showToast("¡Hipótesis de Laboratorio enviada a Preparar!")
     }
 
-    fun saveLabExperiment() {
+    fun saveLabExperiment(onCompleted: (Boolean) -> Unit = {}) {
+        val snapshot = _state.value
+        BrewInputRules.experimentError(snapshot.labMethod, snapshot.labCoffee, snapshot.labWater, snapshot.labTemp)?.let {
+            showToast(it)
+            onCompleted(false)
+            return
+        }
+        val saveKey = "lab-experiment:${activeOwnerId.value ?: "guest"}:${snapshot.labMethod}:${snapshot.labCoffee}:${snapshot.labWater}:${snapshot.labTemp}:${snapshot.labClicks}"
+        if (!storageSaveInFlight.add(saveKey)) return
         viewModelScope.launch {
-            val s = _state.value
-            val exp = LabExperiment(
-                methodId = s.labMethodId,
-                beanId = s.labBeanId,
-                grinderId = s.labGrinderId,
-                techniqueId = s.labTechniqueId,
-                coffeeGrams = s.labCoffee,
-                waterMl = s.labWater,
-                ratio = s.labRatio,
-                temperatureC = s.labTemp,
-                grindSetting = s.labClicks.toString(),
-                beanFreshnessDays = 7,
-                estimatedTimeSeconds = s.labEstTimeSeconds,
-                experimentHypothesis = s.labPreviewExtraction,
-                experimentNotes = "Intensidad: ${s.labPreviewIntensity}. Notas: ${s.labNotes}",
-                conclusionNotes = "",
-                ownerUserId = activeOwnerId.value,
-                syncStatus = "PENDING_CREATE"
-            )
-            repository.insertExperiment(exp)
-            showToast("Experimento guardado en el archivo del Laboratorio.")
+            try {
+                val exp = LabExperiment(
+                    methodId = snapshot.labMethodId,
+                    beanId = snapshot.labBeanId,
+                    grinderId = snapshot.labGrinderId,
+                    techniqueId = snapshot.labTechniqueId,
+                    coffeeGrams = snapshot.labCoffee,
+                    waterMl = snapshot.labWater,
+                    ratio = snapshot.labWater / snapshot.labCoffee,
+                    temperatureC = snapshot.labTemp,
+                    grindSetting = snapshot.labClicks.toString(),
+                    beanFreshnessDays = 7,
+                    estimatedTimeSeconds = snapshot.labEstTimeSeconds,
+                    experimentHypothesis = snapshot.labPreviewExtraction,
+                    experimentNotes = "Intensidad: ${snapshot.labPreviewIntensity}. Notas: ${snapshot.labNotes}",
+                    conclusionNotes = "",
+                    ownerUserId = activeOwnerId.value,
+                    syncStatus = "PENDING_CREATE"
+                )
+                repository.insertExperiment(exp)
+                showToast("Experimento guardado en el archivo del Laboratorio.")
+                onCompleted(true)
+            } catch (_: Exception) {
+                showToast("No se pudo guardar el experimento. Tus datos siguen en pantalla para reintentar.")
+                onCompleted(false)
+            } finally {
+                storageSaveInFlight.remove(saveKey)
+            }
         }
     }
 
@@ -1664,30 +1712,56 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun saveLabAsTechnique(techniqueName: String) {
+    fun saveLabAsTechnique(techniqueName: String, onCompleted: (Boolean) -> Unit = {}) {
+        val snapshot = _state.value
+        val cleanName = techniqueName.trim()
+        val techniqueId = UUID.randomUUID().toString()
+        val steps = generateLabSteps(snapshot.labMethod, snapshot.labWater, snapshot.labEstTimeSeconds, techniqueId)
+        BrewInputRules.techniqueError(
+            name = cleanName,
+            coffee = snapshot.labCoffee,
+            temperature = snapshot.labTemp,
+            stepTitles = steps.map { it.title },
+            stepDurations = steps.map { it.durationSeconds },
+            stepWaters = steps.map { it.waterAddedMl }
+        )?.let {
+            showToast(it)
+            onCompleted(false)
+            return
+        }
+        val saveKey = "lab-technique:${activeOwnerId.value ?: "guest"}:${cleanName.lowercase(Locale.getDefault())}:${snapshot.labMethodId}:${snapshot.labCoffee}:${snapshot.labWater}"
+        if (!storageSaveInFlight.add(saveKey)) return
         viewModelScope.launch {
-            val s = _state.value
-            val selectedMethodId = s.labMethodId ?: methodIdForName(s.labMethod)
+            val selectedMethodId = snapshot.labMethodId ?: methodIdForName(snapshot.labMethod)
                 ?: "11111111-1111-4000-8000-000000000001"
             val technique = Technique(
-                name = techniqueName,
+                id = techniqueId,
+                name = cleanName,
                 methodId = selectedMethodId,
-                beanId = s.labBeanId,
-                grinderId = s.labGrinderId,
-                doseG = s.labCoffee,
-                waterMl = s.labWater,
-                ratio = s.labRatio,
-                temperatureC = s.labTemp,
-                grindValue = s.labClicks.toDouble(),
-                grindDescription = s.labGrinder.ifBlank { "Manual" },
-                notes = "Diseñada en Laboratorio. Hipótesis: ${s.labPreviewExtraction}.",
-                totalTimeSeconds = s.labEstTimeSeconds,
+                recipeId = snapshot.labRecipeId,
+                beanId = snapshot.labBeanId,
+                grinderId = snapshot.labGrinderId,
+                doseG = snapshot.labCoffee,
+                waterMl = snapshot.labWater,
+                ratio = snapshot.labWater / snapshot.labCoffee,
+                temperatureC = snapshot.labTemp,
+                grindValue = snapshot.labClicks.toDouble(),
+                grindDescription = snapshot.labGrinder.ifBlank { "Manual" },
+                notes = "Diseñada en Laboratorio. Hipótesis: ${snapshot.labPreviewExtraction}.",
+                totalTimeSeconds = steps.sumOf { it.durationSeconds },
                 ownerUserId = activeOwnerId.value,
                 syncStatus = "PENDING_CREATE"
             )
-            val steps = generateQuickSteps(s.labMethod, s.labWater).map { it.copy(syncStatus = "PENDING_CREATE") }
-            repository.insertTechnique(technique, steps)
-            showToast("Técnica '$techniqueName' registrada en el Almacén.")
+            try {
+                repository.insertTechnique(technique, steps.map { it.copy(syncStatus = "PENDING_CREATE") })
+                showToast("Técnica '$cleanName' registrada en el Almacén.")
+                onCompleted(true)
+            } catch (_: Exception) {
+                showToast("No se pudo guardar la técnica. Tus datos siguen en pantalla para reintentar.")
+                onCompleted(false)
+            } finally {
+                storageSaveInFlight.remove(saveKey)
+            }
         }
     }
 
@@ -2233,6 +2307,36 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     TechniqueStep(stepNumber = 3, techniqueId = "", title = "Vertido final", durationSeconds = 40, waterAddedMl = waterMl - bloom - firstPour, waterAccumulatedMl = waterMl, intensity = "baja", gesture = "tap", stepNote = "Completa la secuencia.")
                 )
             }
+        }
+    }
+
+    private fun generateLabSteps(
+        method: String,
+        waterMl: Int,
+        totalTimeSeconds: Int,
+        techniqueId: String = ""
+    ): List<TechniqueStep> {
+        val base = generateQuickSteps(method, waterMl)
+        if (base.isEmpty()) return emptyList()
+        val safeTotal = totalTimeSeconds.coerceAtLeast(base.size)
+        val baseTotal = base.sumOf { it.durationSeconds }.coerceAtLeast(base.size)
+        var assigned = 0
+        return base.mapIndexed { index, step ->
+            val remainingSteps = base.size - index - 1
+            val duration = if (index == base.lastIndex) {
+                safeTotal - assigned
+            } else {
+                ((safeTotal.toDouble() * step.durationSeconds) / baseTotal)
+                    .roundToInt()
+                    .coerceIn(1, safeTotal - assigned - remainingSteps)
+            }
+            assigned += duration
+            step.copy(
+                id = UUID.randomUUID().toString(),
+                techniqueId = techniqueId,
+                durationSeconds = duration,
+                targetWaterMl = step.waterAccumulatedMl
+            )
         }
     }
 

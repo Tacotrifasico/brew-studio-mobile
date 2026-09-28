@@ -317,6 +317,82 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `laboratory technique stays consistent through storage preparation and tasting`() = runBlocking {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val session = com.example.data.remote.SessionManager(application)
+    session.clearSession()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+    val mainLooper = org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+    val techniqueName = "Laboratorio integral ${java.util.UUID.randomUUID()}"
+
+    viewModel.selectMethodForLab("11111111-1111-4000-8000-000000000002", "AeroPress")
+    viewModel.updateLabVariables(coffee = 20f, ratio = 15f)
+    assertEquals(300, viewModel.state.value.labWater)
+    assertEquals(15f, viewModel.state.value.labRatio, 0.001f)
+    viewModel.updateLabVariables(water = 280)
+    assertEquals(14f, viewModel.state.value.labRatio, 0.001f)
+    viewModel.updateLabVariables(coffee = 18f, ratio = 13f, temperature = 91, clicks = 17, estTimeSeconds = 155)
+    assertEquals(234, viewModel.state.value.labWater)
+
+    val saved = kotlinx.coroutines.CompletableDeferred<Boolean>()
+    viewModel.saveLabAsTechnique(techniqueName) { saved.complete(it) }
+    viewModel.saveLabAsTechnique(techniqueName)
+    repeat(250) {
+      mainLooper.idle()
+      if (saved.isCompleted && viewModel.state.value.techniquesList.any { it.name == techniqueName }) return@repeat
+      Thread.sleep(20)
+    }
+    assertTrue(withTimeout(5_000) { saved.await() })
+    assertEquals(1, viewModel.state.value.techniquesList.count { it.name == techniqueName })
+
+    val technique = viewModel.state.value.techniquesList.single { it.name == techniqueName }
+    val storedSteps = viewModel.getTechniqueSteps(technique.id)
+    assertEquals(18f, technique.doseG, 0.001f)
+    assertEquals(234, technique.waterMl)
+    assertEquals(13f, technique.ratio, 0.001f)
+    assertEquals(155, technique.totalTimeSeconds)
+    assertEquals(234, storedSteps.sumOf { it.waterAddedMl })
+    assertEquals(234, storedSteps.last().waterAccumulatedMl)
+    assertEquals(155, storedSteps.sumOf { it.durationSeconds })
+    assertEquals(storedSteps.runningFold(0) { total, step -> total + step.waterAddedMl }.drop(1), storedSteps.map { it.waterAccumulatedMl })
+
+    viewModel.loadPrepTechnique(technique.id)
+    repeat(200) {
+      mainLooper.idle()
+      if (viewModel.state.value.activePrepTechniqueId == technique.id) return@repeat
+      Thread.sleep(20)
+    }
+    val prepared = viewModel.state.value
+    assertEquals(technique.id, prepared.activePrepTechniqueId)
+    assertEquals(234, prepared.activePrepWater)
+    assertEquals(13f, prepared.activePrepRatio, 0.001f)
+    assertEquals(storedSteps.map { it.waterAccumulatedMl }, prepared.activePrepSteps.map { it.waterAccumulatedMl })
+
+    viewModel.startTimer()
+    repeat(viewModel.state.value.activePrepSteps.size) { viewModel.advanceStep() }
+    assertTrue(viewModel.state.value.preparationCompleted)
+    assertEquals(155, viewModel.state.value.elapsedSeconds)
+
+    val cupId = viewModel.state.value.activePreparationSessionId
+    val cupSaved = kotlinx.coroutines.CompletableDeferred<Boolean>()
+    viewModel.saveCup("Cacao", "Dulzor", 4.5f, "Recorrido integral") { cupSaved.complete(it) }
+    repeat(250) {
+      mainLooper.idle()
+      if (cupSaved.isCompleted && viewModel.state.value.cupsList.any { it.id == cupId }) return@repeat
+      Thread.sleep(20)
+    }
+    assertTrue(withTimeout(5_000) { cupSaved.await() })
+    val cup = viewModel.state.value.cupsList.single { it.id == cupId }
+    assertEquals(technique.id, cup.techniqueId)
+    assertEquals(technique.methodId, cup.methodId)
+    assertEquals(18f, cup.executedDoseG, 0.001f)
+    assertEquals(234, cup.executedWaterMl)
+    assertEquals(13f, cup.executedRatio, 0.001f)
+    assertEquals(155, cup.executedDurationSeconds)
+    assertEquals(techniqueName, cup.techniqueNameSnapshot)
+  }
+
+  @Test
   fun `storage technique opens preparation with its own quantities and pours`() = runBlocking {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val session = com.example.data.remote.SessionManager(application)

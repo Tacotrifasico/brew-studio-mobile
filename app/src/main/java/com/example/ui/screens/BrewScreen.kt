@@ -107,13 +107,20 @@ fun BrewScreen(
             if (!state.timerRunning && !state.preparationCompleted) {
                 Button(
                     onClick = { isCreatingCustom = !isCreatingCustom },
+                    modifier = Modifier.semantics(mergeDescendants = true) {
+                        contentDescription = if (isCreatingCustom) {
+                            "Cancelar creación de técnica"
+                        } else {
+                            "Crear una técnica nueva"
+                        }
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = if (isCreatingCustom) Advertencia else AcentoPrincipal),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         imageVector = if (isCreatingCustom) Icons.Default.Close else Icons.Default.Add,
-                        contentDescription = "Crear",
+                        contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -807,7 +814,7 @@ fun ActiveBrewTimerView(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(Color(0xFFF2F7F3))
                         ) {
-                            Icon(imageVector = Icons.Default.SkipPrevious, contentDescription = "Atras", tint = TextPrincipal)
+                            Icon(imageVector = Icons.Default.SkipPrevious, contentDescription = "Paso anterior", tint = TextPrincipal)
                         }
 
                         if (state.preparationCompleted) {

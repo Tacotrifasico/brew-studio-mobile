@@ -32,7 +32,7 @@ Esta es la guía operativa para conectar Android e iOS al mismo backend y valida
 
 ## P1 — núcleo social antes de beta pública
 
-- Resolver destinatarios por alias; el usuario no debe copiar UUID.
+- Desplegar y conectar en Android la resolución de destinatarios por alias; el usuario no debe copiar UUID. La RPC `resolve_profile_id_by_alias` ya existe en la migración `202609050008_direct_recipient_alias.sql` y está verificada en PostgreSQL efímero; falta validarla en Staging con JWT reales.
 - Muro público: publicar receta y técnica, ver autor, atribución y snapshot completo.
 - Envío directo: crear `share` de visibilidad `direct`, generar `inbox_item` y permitir al receptor marcarlo leído.
 - Importar crea una copia profunda con UUID nuevos y `copy_mode=IMPORT`.

@@ -498,21 +498,7 @@ private fun TechniqueStepsOverview(
             modifier = Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(
-                    text = "TÉCNICA COMPLETA · ${steps.size} PASOS",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.sp,
-                    color = AcentoPrincipal
-                )
-                Text(
-                    "+ agregar · = total en báscula (ml) · tiempo del paso",
-                    fontSize = 11.sp,
-                    color = TextSecundario,
-                    lineHeight = 15.sp
-                )
-            }
+            NotebookStepHeader()
             steps.forEachIndexed { index, step ->
                 if (index > 0) HorizontalDivider(color = BordeSuave.copy(alpha = 0.65f))
                 Column(
@@ -534,14 +520,24 @@ private fun TechniqueStepsOverview(
 }
 
 @Composable
+private fun NotebookStepHeader() {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Paso", Modifier.weight(1f), fontSize = 10.sp, color = TextSecundario)
+        Text("+ ml", Modifier.width(42.dp), fontSize = 10.sp, color = AcentoPrincipal)
+        Text("Total ml", Modifier.width(54.dp), fontSize = 10.sp, color = AcentoSecundario)
+        Text("Tiempo", Modifier.width(48.dp), fontSize = 10.sp, color = TextSecundario)
+    }
+}
+
+@Composable
 private fun NotebookStepRow(step: TechniqueStep, number: Int) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("$number.", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecundario)
         Text(step.title, modifier = Modifier.weight(1f), fontSize = 12.sp, lineHeight = 14.sp, color = TextPrincipal)
-        Text(if (step.waterAddedMl > 0) "+${step.waterAddedMl}" else "—", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
-        Text("=${step.waterAccumulatedMl}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AcentoSecundario)
-        Text(formatStepDuration(step.durationSeconds), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentGold)
+        Text(if (step.waterAddedMl > 0) "+${step.waterAddedMl}" else "—", Modifier.width(42.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+        Text("${step.waterAccumulatedMl}", Modifier.width(54.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AcentoSecundario)
+        Text(formatStepDuration(step.durationSeconds), Modifier.width(48.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentGold)
     }
 }
 
@@ -884,7 +880,7 @@ fun ActiveBrewTimerView(
                 Text(if (showSequence) "Ocultar secuencia" else "Ver todos los pasos")
             }
             if (showSequence) {
-                Text("+ agregar · = total en báscula (ml) · tiempo del paso", fontSize = 11.sp, color = TextSecundario)
+                NotebookStepHeader()
             }
         }
 

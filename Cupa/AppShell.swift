@@ -46,6 +46,7 @@ struct AppShell: View {
     @StateObject private var connectivity = ConnectivityMonitor()
     @State private var syncInProgress = false
     @State private var syncNotice: String?
+    @State private var showingSyncDetails = false
 
     init(storageWarning: String? = nil, accountDeletionHandler: @escaping (UUID) throws -> Void = { _ in }) {
         self.storageWarning = storageWarning
@@ -102,23 +103,26 @@ struct AppShell: View {
                 if let notice = account.sessionNotice {
                     statusBanner(notice, icon: connectivity.isConnected ? "person.crop.circle.badge.exclamationmark" : "wifi.slash", color: CupaTheme.espresso)
                         .accessibilityIdentifier("sync.statusNotice")
-                } else if let syncNotice {
+                } else if syncNotice != nil {
                     Button {
-                        Task { await refreshAndSync(forceRetry: true) }
+                        showingSyncDetails = true
                     } label: {
                         statusBanner(
-                            syncNotice + (canRetrySync ? " Toca para reintentar." : ""),
+                            "Cambios locales · Detalles",
                             icon: connectivity.isConnected ? "arrow.triangle.2.circlepath" : "wifi.slash",
                             color: CupaTheme.espresso
                         )
                     }
                     .buttonStyle(.plain)
-                    .disabled(!canRetrySync)
                     .accessibilityIdentifier("sync.statusNotice")
-                    .accessibilityHint(canRetrySync ? "Reintenta ahora la sincronización de los cambios locales" : "Los cambios siguen guardados en este dispositivo")
+                    .accessibilityHint("Muestra el estado completo y las opciones de sincronización")
                 }
             }
         }
+        .alert("Estado de sincronización", isPresented: $showingSyncDetails) {
+            if canRetrySync { Button("Reintentar") { Task { await refreshAndSync(forceRetry: true) } } }
+            Button("Cerrar", role: .cancel) {}
+        } message: { Text(syncNotice ?? "Los cambios quedan guardados en este dispositivo.") }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
             if phase == .active { Task { await refreshAndSync() } }

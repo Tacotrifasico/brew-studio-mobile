@@ -159,6 +159,7 @@ final class PreparationModel: ObservableObject {
     }
 
     func load(template: PreparationTechniqueTemplate) {
+        originalPourSteps = nil; originalPourSession = nil
         timer?.invalidate(); timer = nil
         state.techniqueId = nil; state.techniqueName = template.name; state.methodName = template.method
         state.temperatureC = template.temperatureC; state.grindDescription = template.grindDescription
@@ -220,6 +221,32 @@ final class PreparationModel: ObservableObject {
     }
     func pause() { synchronizeClock(); timer?.invalidate(); timer = nil; state.status = .paused; state.lastTickAt = nil; state.updatedAt = .now }
     func resume() { guard state.status == .paused else { return }; state.status = .running; state.lastTickAt = .now; state.updatedAt = .now; scheduleTimer() }
+    private var originalPourSteps: [PreparationStepSnapshot]?
+    private var originalPourSession: UUID?
+
+    // Customize only post-bloom water additions, preserving the recipe's quantities and clock.
+    func setPreparationPour(_ selection: String) {
+        guard state.status == .ready else { return }
+        if originalPourSession != state.sessionId {
+            originalPourSession = state.sessionId
+            originalPourSteps = state.steps
+        }
+        guard let original = originalPourSteps else { return }
+        let options = [
+            "Circular": ("CIRCULAR_POUR", "Vierte en círculos suaves, sin tocar las paredes del filtro."),
+            "Al centro": ("CENTER_POUR", "Vierte al centro con un flujo suave y constante."),
+            "En pulsos": ("PULSE_POUR", "Divide el vertido en pulsos cortos, manteniendo la cantidad indicada.")
+        ]
+        state.steps = original.map { step in
+            guard step.number > 1, step.waterAddedMl > 0, let option = options[selection] else { return step }
+            var adjusted = step
+            adjusted.gesture = option.0
+            adjusted.note = option.1
+            return adjusted
+        }
+        state.updatedAt = .now
+    }
+
     func reset() {
         timer?.invalidate(); timer = nil
         if state.savedAt != nil { state.sessionId = UUID(); state.savedAt = nil }

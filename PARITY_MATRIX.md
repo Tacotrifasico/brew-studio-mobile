@@ -1,5 +1,15 @@
 # Matriz de paridad
 
+Regla permanente: toda modificación solicitada para Android se aplica también a iOS
+y viceversa, preservando pantallas, datos, comportamiento y paleta. Las adaptaciones
+nativas no autorizan omitir funciones. La comprobación visual debe hacerse en ambos.
+
+Actualización: Preparar usa una tarjeta activa, técnicas en selector separado,
+pasos desplegables y vertido personalizable. Cancelar conserva configuración y no
+abre Cata. BARC acorta el título de proporción; Laboratorio alinea etiquetas del
+ecualizador y acorta Preparar. Almacén iOS ya usa categorías sin el gran aviso Android.
+Validación visual de esta actualización en iPhone: pendiente.
+
 Estados permitidos: No iniciado, Parcial, Implementado sin validar, Validado, Bloqueado.
 
 | Módulo | Función | Referencia | Estado iOS | Datos | Visual | Pruebas | Bloqueo | Criterio de aceptación | Estado final |

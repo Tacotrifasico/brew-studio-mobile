@@ -11,6 +11,9 @@ struct PreparationExecutionView: View {
     let onFinished: ((UUID) -> Void)?
     @State private var selectedTechniqueKey: String?; @State private var errorMessage: String?; @State private var savedConfirmation = false
     @State private var confirmingReset = false; @State private var isSaving = false
+    @State private var showingTechniques = false
+    @State private var showingSteps = false
+    @State private var pour = "Original"
 
     init(model: PreparationModel, onFinished: ((UUID) -> Void)? = nil) {
         self.model = model
@@ -20,15 +23,22 @@ struct PreparationExecutionView: View {
     var body: some View {
         VStack(spacing: 16) {
             executionCard
-            if model.state.status == .ready { techniqueLibraryCard }
+        }
+        .sheet(isPresented: $showingTechniques) {
+            NavigationStack {
+                ScrollView { techniqueLibraryCard.padding() }
+                    .background(CupaTheme.background)
+                    .navigationTitle("Técnica")
+                    .toolbar { Button("Cerrar") { showingTechniques = false } }
+            }
         }
         .alert("Preparación guardada", isPresented: $savedConfirmation) { Button("Aceptar") {} } message: { Text("La sesión y sus snapshots quedaron disponibles offline.") }
         .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "") }
-        .confirmationDialog("¿Reiniciar la preparación?", isPresented: $confirmingReset, titleVisibility: .visible) {
-            Button("Reiniciar preparación", role: .destructive, action: model.reset)
+        .confirmationDialog("¿Cancelar esta preparación?", isPresented: $confirmingReset, titleVisibility: .visible) {
+            Button("Cancelar preparación", role: .destructive, action: model.reset)
             Button("Cancelar", role: .cancel) {}
         } message: {
-            Text(model.state.savedAt == nil ? "Se borrarán el tiempo y el avance que todavía no hayas guardado." : "Se iniciará una preparación nueva con otro identificador.")
+            Text("Se reiniciarán el tiempo y el avance. Conservaremos la técnica y las cantidades para empezar de nuevo, sin enviarte a Cata. Las sesiones ya guardadas no se borran.")
         }
     }
 
@@ -74,7 +84,13 @@ struct PreparationExecutionView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                 if model.state.status == .ready {
-                    completeTechniqueOverview
+                    Button("Técnica") { showingTechniques = true }
+                    Picker("Vertido", selection: $pour) {
+                        ForEach(["Original", "Circular", "Al centro", "En pulsos"], id: \.self) { Text($0) }
+                    }
+                    .onChange(of: pour) { _, value in model.setPreparationPour(value) }
+                    Button(showingSteps ? "Ocultar pasos" : "Ver todos los pasos") { showingSteps.toggle() }
+                    if showingSteps { completeTechniqueOverview }
                 } else if let step = model.activeStep {
                     Text(timeString(model.state.elapsedSeconds)).font(.system(.largeTitle, design: .rounded, weight: .black)).monospacedDigit()
                         .minimumScaleFactor(0.6).accessibilityLabel("Tiempo total transcurrido").accessibilityValue(timeString(model.state.elapsedSeconds))
@@ -84,7 +100,8 @@ struct PreparationExecutionView: View {
                         .background(CupaTheme.backgroundAlt.opacity(0.82))
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     activeStepCard(step)
-                    executionSequence
+                    Button(showingSteps ? "Ocultar pasos" : "Ver todos los pasos") { showingSteps.toggle() }
+                    if showingSteps { executionSequence }
                 } else {
                     Text("Selecciona una técnica para comenzar.").font(.caption).foregroundStyle(CupaTheme.secondaryText)
                 }
@@ -251,7 +268,7 @@ struct PreparationExecutionView: View {
     @ViewBuilder private var controls: some View {
         if model.state.status == .ready {
             Button(action: model.start) {
-                Label("Ya revisé todos los pasos · Iniciar", systemImage: "play.fill")
+                Label("Iniciar preparación", systemImage: "play.fill")
                     .font(.subheadline.bold())
                     .frame(maxWidth: .infinity, minHeight: 38)
             }
@@ -274,7 +291,7 @@ struct PreparationExecutionView: View {
             }
         }
         if model.state.status != .ready {
-            Button("Reiniciar preparación", action: requestReset)
+            Button(model.state.status == .completed ? "Reiniciar preparación" : "Cancelar preparación", action: requestReset)
                 .font(.caption.bold()).foregroundStyle(CupaTheme.secondaryText)
                 .disabled(model.state.steps.isEmpty)
                 .accessibilityIdentifier("preparation.reset")
@@ -292,9 +309,9 @@ struct PreparationExecutionView: View {
 
     private func loadTechnique() {
         guard let key = selectedTechniqueKey else { return }
-        if let template = builtInTechniques.first(where: { $0.id == key }) { model.load(template: template); return }
+        if let template = builtInTechniques.first(where: { $0.id == key }) { model.load(template: template); pour = "Original"; showingTechniques = false; return }
         guard key.hasPrefix("saved:"), let id = UUID(uuidString: String(key.dropFirst(6))), let technique = matchingSavedTechniques.first(where: { $0.id == id }) else { return }
-        do { model.load(technique: technique, steps: try RecipeTechniqueRepository(context: context).techniqueSteps(techniqueId: id)) }
+        do { model.load(technique: technique, steps: try RecipeTechniqueRepository(context: context).techniqueSteps(techniqueId: id)); pour = "Original"; showingTechniques = false }
         catch { errorMessage = error.localizedDescription }
     }
     private var builtInTechniques: [PreparationTechniqueTemplate] { PreparationTechniqueCatalog.techniques(for: model.state.methodName) }

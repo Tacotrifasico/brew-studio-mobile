@@ -340,7 +340,7 @@ private struct BaristaCalculatorCard: View {
         ), dragAxis: .vertical, dragStep: $coffeeDragStep,
         adjust: { adjustCoffee(Double($0)) })
 
-        calculatorInput("PROPORCIÓN (1:x)", identifier: "calculator.ratio", text: Binding(
+        calculatorInput("PROPORCIÓN", identifier: "calculator.ratio", text: Binding(
             get: { calculator.ratioInput },
             set: { calculator.changeRatio($0) }
         ), dragAxis: .horizontal, dragStep: $ratioDragStep,
@@ -890,14 +890,14 @@ struct LabView: View {
                 HStack(alignment: .bottom, spacing: 8) {
                     ForEach(values, id: \.0) { label, value, color in
                         VStack(spacing: 2) {
-                            Text("\(value)").font(.system(size: 9, weight: .bold)).foregroundStyle(color)
+                            Text("\(value)").font(.system(size: 9, weight: .bold)).foregroundStyle(color).frame(height: 16)
                             GeometryReader { proxy in
                                 ZStack(alignment: .bottom) {
                                     Capsule().fill(CupaTheme.backgroundAlt)
                                     Capsule().fill(color.gradient).frame(height: proxy.size.height * CGFloat(value) / 100)
                                 }
                             }.frame(height: 54)
-                            Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                            Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center).frame(height: 26)
                         }
                         .frame(maxWidth: .infinity)
                         .accessibilityElement(children: .ignore)
@@ -907,7 +907,7 @@ struct LabView: View {
                 }
                 HStack(spacing: 5) {
                     Circle().fill(CupaTheme.forest).frame(width: 6, height: 6)
-                    Text(model.diagnostic.extraction).font(.caption2.bold()).foregroundStyle(CupaTheme.forestText)
+                    Text(model.diagnostic.extraction).font(.caption2.bold()).foregroundStyle(CupaTheme.forestText).fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Text("SABOR ESTIMADO").font(.system(size: 8, weight: .bold)).foregroundStyle(CupaTheme.secondaryText)
                 }
@@ -1010,7 +1010,7 @@ struct LabView: View {
                     preparation.load(lab: model.state)
                     selection = .brew
                 }
-            } label: { Label("Preparar esta idea", systemImage: "play.fill") }
+            } label: { Label("Preparar", systemImage: "play.fill") }
                 .buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
                 .disabled(isSavingExperiment)
         }

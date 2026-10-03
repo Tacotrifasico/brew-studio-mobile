@@ -426,8 +426,19 @@ fun LabScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Show the flavor response first; interpretation belongs after the controls.
-            SensoryMixerCard(profile = currentProfile)
+            com.example.ui.screens.components.LabAltitudeHeaderCard(
+                state = state,
+                viewModel = viewModel,
+                isFahrenheit = isFahrenheit,
+                isExpanded = isAltitudePanelExpanded,
+                onToggleExpand = { isAltitudePanelExpanded = !isAltitudePanelExpanded },
+                onAltitudeSelected = { isAltitudePanelExpanded = false },
+                onOpenCustomCityDialog = {
+                    customCityNameInput = ""
+                    customCityAltitudeInput = if (state.labAltitudeMeters > 0) state.labAltitudeMeters.toString() else ""
+                    showCustomCityDialog = true
+                }
+            )
 
             // 2. SCREEN HEADER
             Column(
@@ -539,10 +550,13 @@ fun LabScreen(
             }
 
             // 4. CONTROL DOCK CAT TABS
-            LabVariableGroupTabs(
-                selectedCategory = selectedCategory,
-                onCategorySelected = { selectedCategory = it }
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SensoryMixerCard(profile = currentProfile)
+                LabVariableGroupTabs(
+                    selectedCategory = selectedCategory,
+                    onCategorySelected = { selectedCategory = it }
+                )
+            }
 
             // 5. VARIABLE DOCK CONTROLS
             LabVariableDock(
@@ -552,19 +566,6 @@ fun LabScreen(
                 isFahrenheit = isFahrenheit,
                 onToggleFahrenheit = { isFahrenheit = it },
                 onNavigateToSection = onNavigateToSection
-            )
-            com.example.ui.screens.components.LabAltitudeHeaderCard(
-                state = state,
-                viewModel = viewModel,
-                isFahrenheit = isFahrenheit,
-                isExpanded = isAltitudePanelExpanded,
-                onToggleExpand = { isAltitudePanelExpanded = !isAltitudePanelExpanded },
-                onAltitudeSelected = { isAltitudePanelExpanded = false },
-                onOpenCustomCityDialog = {
-                    customCityNameInput = ""
-                    customCityAltitudeInput = if (state.labAltitudeMeters > 0) state.labAltitudeMeters.toString() else ""
-                    showCustomCityDialog = true
-                }
             )
             LabHypothesisCard(profile = currentProfile, state = state)
         }
@@ -945,12 +946,14 @@ fun LabVariableGroupTabs(
                 LabCategory.Grano -> Icons.Default.Grass
             }
             Box(
-                modifier = Modifier
-                    .weight(1f)
+                modifier = (if (isSelected) Modifier.weight(1f) else Modifier.width(44.dp))
+                    .height(44.dp)
+                    .animateContentSize()
+                    .semantics { contentDescription = label; stateDescription = if (isSelected) "Seleccionado" else "No seleccionado" }
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (isSelected) AcentoPrincipal else Color.Transparent)
                     .clickable { onCategorySelected(category) }
-                    .padding(vertical = 10.dp),
+                    .padding(horizontal = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(
@@ -961,9 +964,10 @@ fun LabVariableGroupTabs(
                         imageVector = icon,
                         contentDescription = null,
                         tint = if (isSelected) Color.White else TextSecundario,
-                        modifier = Modifier.size(13.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    if (isSelected) {
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = label,
                         fontSize = 11.sp,
@@ -972,6 +976,7 @@ fun LabVariableGroupTabs(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    }
                 }
             }
         }

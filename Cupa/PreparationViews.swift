@@ -111,41 +111,39 @@ struct PreparationExecutionView: View {
     }
 
     private var completeTechniqueOverview: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("TÉCNICA COMPLETA · \(model.state.steps.count) PASOS")
                     .font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.forestText)
-                Text("Revísala antes de iniciar")
-                    .font(.headline).foregroundStyle(CupaTheme.text)
-                Text("\(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g de café · \(model.state.waterMl) ml de agua · 1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1)))) · \(durationString(model.state.steps.reduce(0) { $0 + $1.durationSeconds }))")
-                    .font(.caption.bold()).foregroundStyle(CupaTheme.text)
-                Text("Sigue siempre el mismo orden: 1) vierte la cantidad terracota, 2) detente en el total verde de la báscula y 3) respeta el tiempo dorado.")
+                Text("+ agregar · = total en báscula (ml) · tiempo del paso")
                     .font(.caption).foregroundStyle(CupaTheme.secondaryText)
             }
             ForEach(Array(model.state.steps.enumerated()), id: \.element.id) { index, step in
                 if index > 0 { Divider().overlay(CupaTheme.border) }
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 9) {
-                        Text("\(index + 1)")
-                            .font(.caption.bold()).foregroundStyle(CupaTheme.onAccent)
-                            .frame(width: 28, height: 28)
-                            .background(CupaTheme.forest)
-                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        Text(step.title).font(.subheadline.bold()).foregroundStyle(CupaTheme.text)
-                    }
-                    stepMetrics(step, timeLabel: "TIEMPO DEL PASO", timeValue: durationString(step.durationSeconds))
-                    if !step.note.isEmpty { Text(step.note).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
-                }
+                notebookStepRow(step, number: index + 1)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(stepAccessibilityLabel(step, position: index + 1, status: "Por revisar"))
             }
         }
-        .padding(14)
+        .padding(10)
         .background(CupaTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(CupaTheme.border, lineWidth: 1) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Técnica completa con \(model.state.steps.count) pasos")
+    }
+
+    private func notebookStepRow(_ step: PreparationStepSnapshot, number: Int) -> some View {
+        HStack(spacing: 6) {
+            Text("\(number).").foregroundStyle(CupaTheme.secondaryText)
+            Text(step.title).foregroundStyle(CupaTheme.text).frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(step.waterAddedMl > 0 ? "+\(step.waterAddedMl)" : "—").bold().foregroundStyle(CupaTheme.terracottaText).fixedSize()
+            Text("=\(step.waterAccumulatedMl)").bold().foregroundStyle(CupaTheme.forestText).fixedSize()
+            Text(durationString(step.durationSeconds)).bold().foregroundStyle(CupaTheme.goldText).fixedSize()
+        }
+        .font(.caption).monospacedDigit()
+        .padding(.vertical, 3)
     }
 
     private func activeStepCard(_ step: PreparationStepSnapshot) -> some View {
@@ -175,25 +173,15 @@ struct PreparationExecutionView: View {
     }
 
     private var executionSequence: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("SECUENCIA COMPLETA").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
+            Text("+ agregar · = total en báscula (ml) · tiempo del paso").font(.caption).foregroundStyle(CupaTheme.secondaryText)
             ForEach(Array(model.state.steps.enumerated()), id: \.element.id) { index, step in
                 let isCurrent = index == model.state.activeStepIndex
                 let isPast = index < model.state.activeStepIndex
                 let status = isPast ? "Completado" : (isCurrent ? "Activo" : "Pendiente")
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 9) {
-                        Image(systemName: isPast ? "checkmark" : "\(index + 1).circle.fill")
-                            .foregroundStyle(isCurrent ? CupaTheme.terracottaText : isPast ? CupaTheme.forestText : CupaTheme.secondaryText)
-                        Text(step.title).font(.subheadline.bold()).foregroundStyle(CupaTheme.text)
-                        Spacer()
-                        Text(status.uppercased())
-                            .font(.caption2.bold())
-                            .foregroundStyle(isCurrent ? CupaTheme.terracottaText : isPast ? CupaTheme.forestText : CupaTheme.secondaryText)
-                    }
-                    stepMetrics(step, timeLabel: "TIEMPO DEL PASO", timeValue: durationString(step.durationSeconds))
-                }
-                .padding(10)
+                notebookStepRow(step, number: index + 1)
+                .padding(.horizontal, 6)
                 .background(isCurrent ? CupaTheme.terracotta.opacity(0.10) : isPast ? CupaTheme.forest.opacity(0.07) : CupaTheme.backgroundAlt.opacity(0.72))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(isCurrent ? CupaTheme.terracotta : CupaTheme.border, lineWidth: isCurrent ? 1.5 : 1) }

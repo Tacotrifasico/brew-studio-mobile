@@ -10,6 +10,12 @@ abre Cata. BARC acorta el título de proporción; Laboratorio alinea etiquetas d
 ecualizador y acorta Preparar. Almacén iOS ya usa categorías sin el gran aviso Android.
 Validación visual de esta actualización en iPhone: pendiente.
 
+Resumen de técnicas en ambas plataformas: notas compactas por paso (acción, agua
+a agregar, total en báscula y duración), sin repetir dosis ni instrucciones largas.
+Las notas completas siguen disponibles en el paso activo. Priorizar vista sin scroll
+para técnicas habituales; permitir crecimiento con accesibilidad o pasos personalizados
+largos, sin recortar datos ni reducir la letra para forzar que quepan.
+
 Estados permitidos: No iniciado, Parcial, Implementado sin validar, Validado, Bloqueado.
 
 | Módulo | Función | Referencia | Estado iOS | Datos | Visual | Pruebas | Bloqueo | Criterio de aceptación | Estado final |

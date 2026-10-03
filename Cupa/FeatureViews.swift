@@ -606,7 +606,7 @@ private struct CalculatorMethodManager: View {
 
 private enum LabControlCategory: String, CaseIterable, Identifiable {
     case ratio = "Proporción"
-    case extraction = "Extracción"
+    case extraction = "Calor"
     case bean = "Grano"
     var id: Self { self }
 }
@@ -648,11 +648,10 @@ struct LabView: View {
         ZStack(alignment: .bottom) {
             CupaTheme.background.ignoresSafeArea()
             VStack(spacing: 8) {
+                altitudeSummaryRow
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("LABORATORIO · \(model.state.method.uppercased())")
-                            .font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.terracottaText)
-                        Text("Variables y sabor en vivo").font(.title3.bold()).foregroundStyle(CupaTheme.text)
+                        Text("Laboratorio").font(.title3.bold()).foregroundStyle(CupaTheme.text)
                     }
                     Spacer()
                     Button { showLabDetails = true } label: {
@@ -832,7 +831,7 @@ struct LabView: View {
         CupaCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Perfil en vivo", systemImage: "chart.bar.xaxis").font(.headline)
+                    Text("Método").font(.caption).foregroundStyle(CupaTheme.secondaryText)
                     Spacer()
                     Menu {
                         ForEach(["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"], id: \.self) { method in
@@ -843,36 +842,57 @@ struct LabView: View {
                             .font(.caption.bold()).foregroundStyle(CupaTheme.terracottaText)
                     }
                 }
-                sensoryContent
-                Divider()
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("VARIABLES DE PREPARACIÓN").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
-                    Picker("Variables", selection: $category) {
-                        ForEach(LabControlCategory.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
+                VStack(spacing: 4) {
+                    sensoryContent
+                    variableTabs
                 }
                 controlsContent
-                Button {
-                    altitudeExpanded = true
-                    showLabDetails = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "mountain.2.fill")
-                        Text("\(model.state.altitudeMeters) m · Hervor \(boilingText)")
-                            .foregroundStyle(isTemperatureCapped ? .orange : CupaTheme.text)
-                        Spacer()
-                        Text("Cambiar").bold()
-                    }.font(.caption).padding(.vertical, 8)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(CupaTheme.forestText)
-                .accessibilityLabel("Altura \(model.state.altitudeMeters) metros, hervor \(boilingText). Cambiar altura")
                 compactHypothesis
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Variables de preparación y perfil sensorial en vivo")
+    }
+
+    private var altitudeSummaryRow: some View {
+        Button {
+            altitudeExpanded = true
+            showLabDetails = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "mountain.2.fill")
+                Text("\(model.state.altitudeMeters) m · Hervor \(boilingText)")
+                    .foregroundStyle(isTemperatureCapped ? .orange : CupaTheme.text)
+                Spacer()
+                Text("Cambiar").bold()
+            }.font(.caption).padding(10)
+                .background(CupaTheme.card, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain).foregroundStyle(CupaTheme.forestText)
+        .accessibilityLabel("Altura \(model.state.altitudeMeters) metros, hervor \(boilingText). Cambiar altura")
+    }
+
+    private var variableTabs: some View {
+        HStack(spacing: 4) {
+            ForEach(LabControlCategory.allCases) { item in
+                let selected = category == item
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { category = item }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: item == .ratio ? "scalemass" : item == .extraction ? "thermometer.medium" : "leaf")
+                        if selected { Text(item.rawValue).font(.caption.bold()) }
+                    }
+                    .frame(width: selected ? nil : 44, height: 44)
+                    .frame(maxWidth: selected ? .infinity : nil)
+                    .foregroundStyle(selected ? CupaTheme.onAccent : CupaTheme.secondaryText)
+                    .background(selected ? CupaTheme.forest : CupaTheme.backgroundAlt, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.rawValue)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
     }
 
     private var compactHypothesis: some View {

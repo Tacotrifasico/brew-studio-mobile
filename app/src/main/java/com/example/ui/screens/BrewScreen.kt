@@ -358,8 +358,7 @@ fun BrewSetupView(
                     Text(if (showSteps) "Ocultar pasos" else "Ver todos los pasos", color = Color.White)
                 }
                 if (showSteps) {
-                    TechniqueStepsOverview(state.activePrepTechniqueName, state.activePrepCoffee,
-                        state.activePrepWater, state.activePrepRatio, state.activePrepSteps)
+                    TechniqueStepsOverview(state.activePrepSteps)
                 }
                 Button(
                     onClick = { viewModel.startTimer() },
@@ -486,10 +485,6 @@ fun BrewSetupView(
 
 @Composable
 private fun TechniqueStepsOverview(
-    techniqueName: String,
-    coffeeGrams: Float,
-    waterMl: Int,
-    ratio: Float,
     steps: List<TechniqueStep>
 ) {
     Card(
@@ -500,8 +495,8 @@ private fun TechniqueStepsOverview(
         shape = RoundedCornerShape(20.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
@@ -511,15 +506,8 @@ private fun TechniqueStepsOverview(
                     letterSpacing = 1.sp,
                     color = AcentoPrincipal
                 )
-                Text(techniqueName, fontSize = 17.sp, fontWeight = FontWeight.Black, color = TextPrincipal)
                 Text(
-                    "${formatPrepNumber(coffeeGrams)} g de café · $waterMl ml de agua · 1:${formatPrepNumber(ratio)} · ${formatStepDuration(steps.sumOf { it.durationSeconds })}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrincipal
-                )
-                Text(
-                    "Sigue siempre el mismo orden: 1) vierte la cantidad terracota, 2) detente en el total verde de la báscula y 3) respeta el tiempo dorado.",
+                    "+ agregar · = total en báscula (ml) · tiempo del paso",
                     fontSize = 11.sp,
                     color = TextSecundario,
                     lineHeight = 15.sp
@@ -536,28 +524,24 @@ private fun TechniqueStepsOverview(
                             status = "Por revisar"
                         )
                     },
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(AcentoPrincipal),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("${index + 1}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Text(step.title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                    }
-                    PreparationStepMetrics(step = step)
-                    if (step.stepNote.isNotBlank()) {
-                        Text(step.stepNote, fontSize = 11.sp, color = TextSecundario, lineHeight = 15.sp)
-                    }
+                    NotebookStepRow(step, index + 1)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NotebookStepRow(step: TechniqueStep, number: Int) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("$number.", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecundario)
+        Text(step.title, modifier = Modifier.weight(1f), fontSize = 12.sp, lineHeight = 14.sp, color = TextPrincipal)
+        Text(if (step.waterAddedMl > 0) "+${step.waterAddedMl}" else "—", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+        Text("=${step.waterAccumulatedMl}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AcentoSecundario)
+        Text(formatStepDuration(step.durationSeconds), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentGold)
     }
 }
 
@@ -899,6 +883,9 @@ fun ActiveBrewTimerView(
             TextButton(onClick = { showSequence = !showSequence }) {
                 Text(if (showSequence) "Ocultar secuencia" else "Ver todos los pasos")
             }
+            if (showSequence) {
+                Text("+ agregar · = total en báscula (ml) · tiempo del paso", fontSize = 11.sp, color = TextSecundario)
+            }
         }
 
         itemsIndexed(if (showSequence) steps else emptyList()) { idx, step ->
@@ -908,11 +895,6 @@ fun ActiveBrewTimerView(
                 isPast -> "COMPLETADO"
                 isCurrent -> "ACTIVO"
                 else -> "PENDIENTE"
-            }
-            val statusColor = when {
-                isPast -> AcentoSecundario
-                isCurrent -> AcentoPrincipal
-                else -> TextSecundario
             }
             
             Card(
@@ -937,49 +919,10 @@ fun ActiveBrewTimerView(
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(14.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isCurrent) AcentoPrincipal else if (isPast) AcentoSecundario else TextSecundario.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = step.stepNumber.toString(),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isCurrent || isPast) Color.White else TextSecundario
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = step.title,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isCurrent) TextPrincipal else if (isPast) TextSecundario else TextPrincipal.copy(alpha = 0.8f),
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                statusLabel,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = statusColor,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(statusColor.copy(alpha = 0.15f))
-                                    .padding(horizontal = 7.dp, vertical = 3.dp)
-                            )
-                        }
-                        PreparationStepMetrics(step = step)
-                        if (step.stepNote.isNotBlank()) {
-                            Text(step.stepNote, fontSize = 10.sp, color = TextSecundario, lineHeight = 14.sp)
-                        }
-                    }
+                    NotebookStepRow(step, idx + 1)
                 }
             }
         }

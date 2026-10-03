@@ -67,6 +67,7 @@ fun LabAltitudeHeaderCard(
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     onOpenCustomCityDialog: () -> Unit,
+    onAltitudeSelected: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val altitudeMeters = state.labAltitudeMeters
@@ -74,6 +75,22 @@ fun LabAltitudeHeaderCard(
     val tBoilF = Math.round(tBoilC * 9f / 5f + 32f)
     val displayBoil = if (isFahrenheit) "$tBoilF °F" else "${String.format(java.util.Locale.US, "%.1f", tBoilC)} °C"
     val isTempCapped = state.labTemp > tBoilC
+
+    if (!isExpanded) {
+        Row(
+            modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(SurfaceCard).clickable { onToggleExpand() }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(Icons.Default.Terrain, contentDescription = null, tint = AcentoPrincipal, modifier = Modifier.size(16.dp))
+            Text("$altitudeMeters m · Hervor $displayBoil", modifier = Modifier.weight(1f), fontSize = 12.sp,
+                color = if (isTempCapped) Advertencia else TextPrincipal)
+            Text("Cambiar", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+        }
+        return
+    }
 
     Card(
         modifier = modifier
@@ -237,6 +254,7 @@ fun LabAltitudeHeaderCard(
                                             altitudeMeters = altM,
                                             cityName = fullName
                                         )
+                                        onAltitudeSelected()
                                     }
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center

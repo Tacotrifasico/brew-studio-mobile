@@ -426,19 +426,8 @@ fun LabScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. AJUSTE DE ELEVACIÓN / ALTITUD & PUNTO DE EBULLICIÓN (PRIMER ELEMENTO DE LA PANTALLA)
-            com.example.ui.screens.components.LabAltitudeHeaderCard(
-                state = state,
-                viewModel = viewModel,
-                isFahrenheit = isFahrenheit,
-                isExpanded = isAltitudePanelExpanded,
-                onToggleExpand = { isAltitudePanelExpanded = !isAltitudePanelExpanded },
-                onOpenCustomCityDialog = {
-                    customCityNameInput = ""
-                    customCityAltitudeInput = if (state.labAltitudeMeters > 0) state.labAltitudeMeters.toString() else ""
-                    showCustomCityDialog = true
-                }
-            )
+            // Show the flavor response first; interpretation belongs after the controls.
+            SensoryMixerCard(profile = currentProfile)
 
             // 2. SCREEN HEADER
             Column(
@@ -549,12 +538,6 @@ fun LabScreen(
                 }
             }
 
-            // 2. TARJETA SUPERIOR DE HIPÓTESIS (LEVEL 3 HERO)
-            LabHypothesisCard(profile = currentProfile, state = state)
-
-            // 3. BLOQUE CENTRAL — SENSORY MIXER (LEVEL 2 CARD WITH GRAIN)
-            SensoryMixerCard(profile = currentProfile)
-
             // 4. CONTROL DOCK CAT TABS
             LabVariableGroupTabs(
                 selectedCategory = selectedCategory,
@@ -570,6 +553,20 @@ fun LabScreen(
                 onToggleFahrenheit = { isFahrenheit = it },
                 onNavigateToSection = onNavigateToSection
             )
+            com.example.ui.screens.components.LabAltitudeHeaderCard(
+                state = state,
+                viewModel = viewModel,
+                isFahrenheit = isFahrenheit,
+                isExpanded = isAltitudePanelExpanded,
+                onToggleExpand = { isAltitudePanelExpanded = !isAltitudePanelExpanded },
+                onAltitudeSelected = { isAltitudePanelExpanded = false },
+                onOpenCustomCityDialog = {
+                    customCityNameInput = ""
+                    customCityAltitudeInput = if (state.labAltitudeMeters > 0) state.labAltitudeMeters.toString() else ""
+                    showCustomCityDialog = true
+                }
+            )
+            LabHypothesisCard(profile = currentProfile, state = state)
         }
 
         // --- 6. FIXED BOTTOM ACTION BAR DOCK ---

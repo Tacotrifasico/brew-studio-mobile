@@ -112,12 +112,7 @@ struct PreparationExecutionView: View {
 
     private var completeTechniqueOverview: some View {
         VStack(alignment: .leading, spacing: 4) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("TÉCNICA COMPLETA · \(model.state.steps.count) PASOS")
-                    .font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.forestText)
-                Text("+ agregar · = total en báscula (ml) · tiempo del paso")
-                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
-            }
+            notebookStepHeader
             ForEach(Array(model.state.steps.enumerated()), id: \.element.id) { index, step in
                 if index > 0 { Divider().overlay(CupaTheme.border) }
                 notebookStepRow(step, number: index + 1)
@@ -138,12 +133,21 @@ struct PreparationExecutionView: View {
             Text("\(number).").foregroundStyle(CupaTheme.secondaryText)
             Text(step.title).foregroundStyle(CupaTheme.text).frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(step.waterAddedMl > 0 ? "+\(step.waterAddedMl)" : "—").bold().foregroundStyle(CupaTheme.terracottaText).fixedSize()
-            Text("=\(step.waterAccumulatedMl)").bold().foregroundStyle(CupaTheme.forestText).fixedSize()
-            Text(durationString(step.durationSeconds)).bold().foregroundStyle(CupaTheme.goldText).fixedSize()
+            Text(step.waterAddedMl > 0 ? "+\(step.waterAddedMl)" : "—").bold().foregroundStyle(CupaTheme.terracottaText).frame(width: 42, alignment: .leading)
+            Text("\(step.waterAccumulatedMl)").bold().foregroundStyle(CupaTheme.forestText).frame(width: 54, alignment: .leading)
+            Text(durationString(step.durationSeconds)).bold().foregroundStyle(CupaTheme.goldText).frame(width: 48, alignment: .leading)
         }
         .font(.caption).monospacedDigit()
         .padding(.vertical, 3)
+    }
+
+    private var notebookStepHeader: some View {
+        HStack(spacing: 6) {
+            Text("Paso").frame(maxWidth: .infinity, alignment: .leading)
+            Text("+ ml").frame(width: 42, alignment: .leading)
+            Text("Total ml").frame(width: 54, alignment: .leading)
+            Text("Tiempo").frame(width: 48, alignment: .leading)
+        }.font(.caption2).foregroundStyle(CupaTheme.secondaryText)
     }
 
     private func activeStepCard(_ step: PreparationStepSnapshot) -> some View {
@@ -174,8 +178,7 @@ struct PreparationExecutionView: View {
 
     private var executionSequence: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("SECUENCIA COMPLETA").font(.caption2.bold()).tracking(1).foregroundStyle(CupaTheme.secondaryText)
-            Text("+ agregar · = total en báscula (ml) · tiempo del paso").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+            notebookStepHeader
             ForEach(Array(model.state.steps.enumerated()), id: \.element.id) { index, step in
                 let isCurrent = index == model.state.activeStepIndex
                 let isPast = index < model.state.activeStepIndex

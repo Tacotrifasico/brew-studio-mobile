@@ -15,6 +15,25 @@ import kotlinx.coroutines.withTimeout
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class ExampleRobolectricTest {
+  @Test
+  fun `cancelling preparation returns to setup without creating a completed brew`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+    viewModel.onMethodSelected("V60")
+    viewModel.startTimer()
+    viewModel.advanceStep()
+    val steps = viewModel.state.value.activePrepSteps
+    viewModel.cancelPreparation()
+    val cancelled = viewModel.state.value
+    assertEquals(false, cancelled.timerRunning)
+    assertEquals(false, cancelled.preparationCompleted)
+    assertEquals(0, cancelled.elapsedSeconds)
+    assertEquals(0, cancelled.activeStepIndex)
+    assertEquals(steps, cancelled.activePrepSteps)
+    viewModel.startTimer()
+    assertTrue(viewModel.state.value.timerRunning)
+    viewModel.cancelPreparation()
+  }
 
   @Test
   fun `pour choice preserves quantities and tasting handoff preserves completed preparation`() {

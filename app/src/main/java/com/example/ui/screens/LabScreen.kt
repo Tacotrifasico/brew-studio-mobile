@@ -441,12 +441,11 @@ fun LabScreen(
             )
 
             // 2. SCREEN HEADER
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -454,7 +453,7 @@ fun LabScreen(
                         Text(
                             text = "Laboratorio",
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                            fontSize = 26.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrincipal
                         )
@@ -693,8 +692,7 @@ fun LabHypothesisCard(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        // Let the advice wrap instead of hiding its meaning.
                     )
 
                     LabHypothesisChips(labels = profile.labels.take(2))
@@ -710,20 +708,20 @@ fun LabHypothesisCard(
                     fontSize = 11.sp,
                     color = Color.White.copy(alpha = 0.9f),
                     lineHeight = 15.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    // The complete recommendation must stay readable.
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LabHypothesisChips(labels: List<String>) {
-    Row(
+    FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         if (labels.isEmpty()) {
             Box(
@@ -798,7 +796,7 @@ fun SensoryEqualizerBars(profile: LabFlavorProfile) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp)
+            .height(124.dp)
             .padding(vertical = 4.dp)
             .drawBehind {
                 val strokeWidth = 1.dp.toPx()
@@ -876,7 +874,8 @@ fun SensoryEqualizerBarItem(
             text = "$value%",
             fontSize = 10.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = color
+            color = color,
+            modifier = Modifier.height(18.dp)
         )
 
         Box(
@@ -911,11 +910,13 @@ fun SensoryEqualizerBarItem(
         }
 
         Text(
-            text = label.uppercase(),
+            text = label,
             fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
             color = TextSecundario,
-            letterSpacing = 0.5.sp
+            modifier = Modifier.fillMaxWidth().height(28.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            maxLines = 2
         )
     }
 }
@@ -1247,25 +1248,12 @@ fun LabVariableDock(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "PROPORCIÓN Y TIEMPO DE EXTRACCIÓN",
+                            "PROPORCIÓN Y TIEMPO",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextSecundario,
                             letterSpacing = 1.sp
                         )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(AcentoSuave)
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                "EQUILIBRIO SENSORIAL",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = AcentoPrincipal
-                            )
-                        }
                     }
                     
                     // Slider 1: Ratio de Extracción (Proporción)
@@ -1295,9 +1283,9 @@ fun LabVariableDock(
                             accessibilityValue = "Uno a ${String.format(java.util.Locale.US, "%.1f", state.labRatio)}"
                         )
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("1:8 (Intenso / Denso)", fontSize = 10.sp, color = TextSecundario)
-                            Text("1:16 (Áureo)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
-                            Text("1:22 (Ligero / Claridad)", fontSize = 10.sp, color = TextSecundario)
+                            Text("1:8 Intenso", modifier = Modifier.weight(1f), fontSize = 9.sp, color = TextSecundario)
+                            Text("1:16 Balance", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                            Text("1:22 Ligero", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End, fontSize = 9.sp, color = TextSecundario)
                         }
                     }
 
@@ -1313,7 +1301,7 @@ fun LabVariableDock(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Tiempo de Extracción", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                            Text("Tiempo", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
                             Text(
                                 text = formattedTime,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
@@ -1629,7 +1617,8 @@ fun LabActionBar(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "Preparar Idea",
+                    text = "Preparar",
+                    maxLines = 1,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White

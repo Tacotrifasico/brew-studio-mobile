@@ -723,6 +723,17 @@ fun ActiveBrewTimerView(
 ) {
     val steps = state.activePrepSteps
     var showSequence by rememberSaveable { mutableStateOf(false) }
+    var confirmCancellation by rememberSaveable { mutableStateOf(false) }
+    if (confirmCancellation) {
+        AlertDialog(
+            onDismissRequest = { confirmCancellation = false },
+            title = { Text("¿Cancelar preparación?") },
+            text = { Text("Se detendrá el cronómetro. Conservarás la técnica y sus cantidades para volver a empezar.") },
+            confirmButton = { TextButton(onClick = { viewModel.cancelPreparation(); confirmCancellation = false }) { Text("Cancelar preparación") } },
+            dismissButton = { TextButton(onClick = { confirmCancellation = false }) { Text("Seguir preparando") } },
+            containerColor = SurfaceCard
+        )
+    }
     val currentIndex = state.activeStepIndex
     val activeStep = steps.getOrNull(currentIndex)
     
@@ -816,6 +827,11 @@ fun ActiveBrewTimerView(
                     Spacer(modifier = Modifier.height(18.dp))
 
                     // Player controls
+                    if (!state.preparationCompleted) {
+                        TextButton(onClick = { confirmCancellation = true }) {
+                            Text("Cancelar preparación", color = Advertencia)
+                        }
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly,

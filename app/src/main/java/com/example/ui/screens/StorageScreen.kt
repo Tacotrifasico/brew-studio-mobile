@@ -151,6 +151,25 @@ private fun OwnerScopedStorageScreen(
     )
     val pendingSyncableCount = pendingBreakdown.retryableNow
     val pendingBackendCount = pendingBreakdown.awaitingBackend
+    var showSyncDetails by rememberSaveable { mutableStateOf(false) }
+    if (showSyncDetails) {
+        AlertDialog(
+            onDismissRequest = { showSyncDetails = false },
+            title = { Text("Tus datos") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Tus datos están guardados en este dispositivo y disponibles sin conexión.")
+                if (pendingSyncableCount > 0) Text("$pendingSyncableCount elementos pendientes de sincronizar.")
+                if (pendingBackendCount > 0) Text("$pendingBackendCount registros todavía se guardan sólo en este dispositivo.")
+                syncState.syncMessage?.let { Text(it) }
+            } },
+            confirmButton = { TextButton(onClick = { showSyncDetails = false }) { Text("Cerrar") } },
+            dismissButton = { if (pendingSyncableCount > 0) TextButton(enabled = !syncState.isSyncing,
+                onClick = { showSyncDetails = false; if (syncState.isLoggedIn) onRetrySync() else onNavigateToCommunity() }) {
+                Text(if (syncState.isLoggedIn) "Reintentar" else "Ingresar")
+            } },
+            containerColor = SurfaceCard
+        )
+    }
 
     LaunchedEffect(selectedTechnique?.id, editingTechnique?.id) {
         val id = editingTechnique?.id ?: selectedTechnique?.id
@@ -219,7 +238,7 @@ private fun OwnerScopedStorageScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "INVENTARIO COMPLETO Y FRESCO",
                     fontSize = 10.sp,
@@ -228,7 +247,7 @@ private fun OwnerScopedStorageScreen(
                     color = TextSecundario
                 )
                 Text(
-                    text = "Almacén Brew Studio",
+                    text = "Almacén",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Black,
                     color = TextPrincipal
@@ -285,40 +304,14 @@ private fun OwnerScopedStorageScreen(
                         Text(
                             when {
                                 syncState.isSyncing -> "Sincronizando cambios…"
-                                pendingSyncableCount > 0 -> "$pendingSyncableCount ${if (pendingSyncableCount == 1) "elemento local pendiente" else "elementos locales pendientes"}"
-                                else -> "Estado de sincronización"
+                                else -> "Guardado en este dispositivo"
                             },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrincipal
                         )
-                        syncState.syncMessage?.let { message ->
-                            Text(message, fontSize = 9.sp, color = TextSecundario)
-                        }
-                        if (pendingSyncableCount > 0) {
-                            Text(
-                                "Las técnicas pueden reintentarse ahora; nunca se ocultan por un fallo de red.",
-                                fontSize = 9.sp,
-                                color = TextSecundario
-                            )
-                        }
-                        if (pendingBackendCount > 0) {
-                            Text(
-                                "$pendingBackendCount ${if (pendingBackendCount == 1) "registro está guardado" else "registros están guardados"} sólo en este dispositivo y esperan la integración de Axcis.",
-                                fontSize = 9.sp,
-                                color = TextSecundario
-                            )
-                        }
-                        if (syncState.syncMessage == null && pendingSyncableCount == 0 && pendingBackendCount == 0) {
-                            Text("Tus datos siguen disponibles aunque no haya conexión.", fontSize = 9.sp, color = TextSecundario)
-                        }
                     }
-                    if (pendingSyncableCount > 0) {
-                        TextButton(
-                            enabled = !syncState.isSyncing,
-                            onClick = if (syncState.isLoggedIn) onRetrySync else onNavigateToCommunity
-                        ) { Text(if (syncState.isLoggedIn) "Reintentar" else "Ingresar", fontSize = 10.sp) }
-                    }
+                    TextButton(onClick = { showSyncDetails = true }) { Text("Detalles", fontSize = 10.sp) }
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))

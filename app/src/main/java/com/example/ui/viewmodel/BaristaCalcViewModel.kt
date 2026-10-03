@@ -1041,6 +1041,12 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         _state.update { it.copy(timerRunning = false, timerPaused = false, preparationCompleted = false) }
     }
 
+    fun cancelPreparation() {
+        timerJob?.cancel()
+        _state.update { it.copy(timerRunning = false, timerPaused = false,
+            preparationCompleted = false, elapsedSeconds = 0, activeStepIndex = 0) }
+    }
+
     private fun completePreparation() {
         timerJob?.cancel()
         _state.update {

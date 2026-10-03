@@ -17,6 +17,25 @@ import kotlinx.coroutines.withTimeout
 class ExampleRobolectricTest {
 
   @Test
+  fun `pour choice preserves quantities and tasting handoff preserves completed preparation`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.ui.viewmodel.BaristaCalcViewModel(application)
+    viewModel.onMethodSelected("V60")
+    val before = viewModel.state.value.activePrepSteps
+    viewModel.setPreparationPour("CENTER_POUR")
+    val chosen = viewModel.state.value.activePrepSteps
+    assertEquals(before.map { it.waterAddedMl }, chosen.map { it.waterAddedMl })
+    assertEquals(before.map { it.durationSeconds }, chosen.map { it.durationSeconds })
+    assertTrue(chosen.filter { it.waterAddedMl > 0 && it.stepNumber > 1 }.all { it.gesture == "CENTER_POUR" })
+    viewModel.startTimer()
+    val sessionId = viewModel.state.value.activePreparationSessionId
+    viewModel.finishPreparationForTasting()
+    assertTrue(viewModel.state.value.preparationCompleted)
+    assertEquals(sessionId, viewModel.state.value.activePreparationSessionId)
+    assertEquals(chosen, viewModel.state.value.activePrepSteps)
+  }
+
+  @Test
   fun `read string from context`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)

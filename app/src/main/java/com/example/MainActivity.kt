@@ -135,7 +135,9 @@ fun BrewStudioAppShell(viewModel: BaristaCalcViewModel, socialViewModel: SocialV
                                     // reselecting the same item
                                     launchSingleTop = true
                                     // Restore state when reselecting a previously selected item
-                                    restoreState = true
+                                    // Restoring Brew's nested stack also restores Cata on top.
+                                    // Session data lives in the shared ViewModel.
+                                    restoreState = screen.route != Screen.Brew.route
                                 }
                             }
                         },
@@ -172,7 +174,7 @@ fun BrewStudioAppShell(viewModel: BaristaCalcViewModel, socialViewModel: SocialV
                                 saveState = true
                             }
                             launchSingleTop = true
-                            restoreState = true
+                            restoreState = route != Screen.Brew.route
                         }
                     }
                 )
@@ -182,6 +184,7 @@ fun BrewStudioAppShell(viewModel: BaristaCalcViewModel, socialViewModel: SocialV
                     viewModel = viewModel,
                     onNavigateToCata = {
                         navController.navigate(Screen.CataScreenConfig().route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
                         }
                     }
@@ -196,7 +199,7 @@ fun BrewStudioAppShell(viewModel: BaristaCalcViewModel, socialViewModel: SocialV
                                 saveState = true
                             }
                             launchSingleTop = true
-                            restoreState = true
+                            restoreState = route != Screen.Brew.route
                         }
                     }
                 )
@@ -210,7 +213,7 @@ fun BrewStudioAppShell(viewModel: BaristaCalcViewModel, socialViewModel: SocialV
                                 saveState = true
                             }
                             launchSingleTop = true
-                            restoreState = true
+                            restoreState = route != Screen.Brew.route
                         }
                     }
                 )

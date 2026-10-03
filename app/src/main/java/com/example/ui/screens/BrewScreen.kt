@@ -162,6 +162,7 @@ fun BrewScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrewSetupView(
     viewModel: BaristaCalcViewModel,
@@ -171,6 +172,11 @@ fun BrewSetupView(
     var showAddMethodDialog by rememberSaveable { mutableStateOf(false) }
     var newMethodName by rememberSaveable { mutableStateOf("") }
     var newMethodRatio by rememberSaveable { mutableStateOf("16") }
+    var showTechniques by rememberSaveable { mutableStateOf(false) }
+    var showSteps by rememberSaveable { mutableStateOf(false) }
+    var pourMenuExpanded by remember { mutableStateOf(false) }
+    val pourOptions = listOf("CIRCULAR_POUR" to "Circular", "CENTER_POUR" to "Al centro", "PULSE_POUR" to "En pulsos")
+    val activePour = state.activePrepSteps.firstOrNull { it.waterAddedMl > 0 && it.stepNumber > 1 }?.gesture
     val activeMethodId = viewModel.methodIdForName(state.activePrepMethod)
     val matchingTechniques = state.techniquesList.filter { it.methodId == activeMethodId }
 
@@ -217,31 +223,6 @@ fun BrewSetupView(
             .padding(bottom = 60.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // The complete technique is intentionally the first content block. A brewer can
-        // understand the entire sequence before seeing secondary configuration details.
-        if (state.activePrepSteps.isNotEmpty()) {
-            TechniqueStepsOverview(
-                techniqueName = state.activePrepTechniqueName,
-                coffeeGrams = state.activePrepCoffee,
-                waterMl = state.activePrepWater,
-                ratio = state.activePrepRatio,
-                steps = state.activePrepSteps
-            )
-
-            Button(
-                onClick = { viewModel.startTimer() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = c1),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Ya revisé todos los pasos · Iniciar", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
-            }
-        }
-
         // Active profile configuration card (Hero level 3)
         Box(
             modifier = Modifier
@@ -357,11 +338,42 @@ fun BrewSetupView(
                     }
                 }
 
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { showTechniques = true }) { Text("Técnica", color = Color.White) }
+                    Box {
+                        TextButton(onClick = { pourMenuExpanded = true }) {
+                            Text("Vertido: ${pourOptions.firstOrNull { it.first == activePour }?.second ?: "Original"}", color = Color.White)
+                        }
+                        DropdownMenu(expanded = pourMenuExpanded, onDismissRequest = { pourMenuExpanded = false }) {
+                            pourOptions.forEach { (gesture, title) ->
+                                DropdownMenuItem(text = { Text(title) }, onClick = {
+                                    viewModel.setPreparationPour(gesture)
+                                    pourMenuExpanded = false
+                                })
+                            }
+                        }
+                    }
+                }
+                TextButton(onClick = { showSteps = !showSteps }) {
+                    Text(if (showSteps) "Ocultar pasos" else "Ver todos los pasos", color = Color.White)
+                }
+                if (showSteps) {
+                    TechniqueStepsOverview(state.activePrepTechniqueName, state.activePrepCoffee,
+                        state.activePrepWater, state.activePrepRatio, state.activePrepSteps)
+                }
+                Button(
+                    onClick = { viewModel.startTimer() },
+                    enabled = state.activePrepSteps.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = c1)
+                ) { Text("Iniciar preparación", fontWeight = FontWeight.Bold) }
             }
         }
 
         // Techniques library section
-        Column(modifier = Modifier.fillMaxWidth()) {
+        if (showTechniques) {
+        ModalBottomSheet(onDismissRequest = { showTechniques = false }, containerColor = MainBackground) {
+        Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "TÉCNICAS PARA ${state.activePrepMethod.uppercase(Locale.getDefault())}",
@@ -429,7 +441,7 @@ fun BrewSetupView(
                             .padding(vertical = 4.dp)
                             .shadow(3.dp, RoundedCornerShape(20.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
                             .border(1.dp, BordeSuave, RoundedCornerShape(20.dp))
-                            .clickable { viewModel.loadPrepTechnique(tech.id) },
+                            .clickable { viewModel.loadPrepTechnique(tech.id); showTechniques = false },
                         colors = CardDefaults.cardColors(containerColor = SurfaceCard),
                         shape = RoundedCornerShape(20.dp)
                     ) {
@@ -466,6 +478,8 @@ fun BrewSetupView(
                     }
                 }
             }
+        }
+        }
         }
     }
 }
@@ -708,6 +722,7 @@ fun ActiveBrewTimerView(
     onNavigateToCata: () -> Unit
 ) {
     val steps = state.activePrepSteps
+    var showSequence by rememberSaveable { mutableStateOf(false) }
     val currentIndex = state.activeStepIndex
     val activeStep = steps.getOrNull(currentIndex)
     
@@ -865,16 +880,12 @@ fun ActiveBrewTimerView(
 
         // Active/Pending Sequence List
         item {
-            Text(
-                text = "SECUENCIA DE PASOS EXTRACCIÓN",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextSecundario,
-                letterSpacing = 1.sp
-            )
+            TextButton(onClick = { showSequence = !showSequence }) {
+                Text(if (showSequence) "Ocultar secuencia" else "Ver todos los pasos")
+            }
         }
 
-        itemsIndexed(steps) { idx, step ->
+        itemsIndexed(if (showSequence) steps else emptyList()) { idx, step ->
             val isCurrent = idx == currentIndex
             val isPast = idx < currentIndex
             val statusLabel = when {
@@ -961,7 +972,7 @@ fun ActiveBrewTimerView(
         item {
             Button(
                 onClick = {
-                    viewModel.stopTimer()
+                    viewModel.finishPreparationForTasting()
                     onNavigateToCata()
                 },
                 modifier = Modifier

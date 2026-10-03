@@ -470,7 +470,8 @@ fun BaristaCalcCard(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "PROPORCIÓN (1:x)",
+                            text = "PROPORCIÓN",
+                            maxLines = 1,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextSecundario,

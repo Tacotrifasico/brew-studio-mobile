@@ -968,6 +968,21 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun setPreparationPour(gesture: String) {
+        if (_state.value.timerRunning || _state.value.preparationCompleted) return
+        val instruction = when (gesture) {
+            "CIRCULAR_POUR" -> "Vierte en círculos suaves, sin tocar el filtro."
+            "CENTER_POUR" -> "Vierte un chorro suave y continuo en el centro."
+            "PULSE_POUR" -> "Vierte en pulsos cortos hasta alcanzar el total indicado."
+            else -> return
+        }
+        _state.update { state -> state.copy(activePrepSteps = state.activePrepSteps.map { step ->
+            if (step.waterAddedMl > 0 && step.stepNumber > 1) step.copy(gesture = gesture, stepNote = instruction) else step
+        }) }
+    }
+
+    fun finishPreparationForTasting() { completePreparation() }
+
     fun startTimer() {
         if (_state.value.activePrepSteps.isEmpty()) {
             _state.update { it.copy(activePrepSteps = generateQuickSteps(it.activePrepMethod, it.activePrepWater)) }
@@ -1033,6 +1048,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 timerRunning = false,
                 timerPaused = false,
                 preparationCompleted = true,
+                activeStepIndex = it.activePrepSteps.lastIndex.coerceAtLeast(0),
                 elapsedSeconds = maxOf(it.elapsedSeconds, it.activePrepSteps.sumOf { step -> step.durationSeconds })
             )
         }

@@ -758,19 +758,19 @@ struct LabView: View {
                     HStack {
                         Image(systemName: "mountain.2.fill").foregroundStyle(CupaTheme.forestText)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(model.state.cityName).font(.subheadline.bold()).foregroundStyle(CupaTheme.text)
-                            Text("Hervor: \(boilingText) · \(model.state.altitudeMeters) msnm")
+                            if altitudeExpanded { Text(model.state.cityName).font(.subheadline.bold()).foregroundStyle(CupaTheme.text) }
+                            Text("\(model.state.altitudeMeters) m · Hervor \(boilingText)")
                                 .font(.caption).foregroundStyle(isTemperatureCapped ? .orange : CupaTheme.secondaryText)
                                 .accessibilityIdentifier("lab.altitude.summary")
                         }
                         Spacer()
-                        Image(systemName: altitudeExpanded ? "chevron.up" : "chevron.down")
+                        Text(altitudeExpanded ? "Cerrar" : "Cambiar").font(.caption.bold())
                     }
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("lab.altitude.toggle")
 
-                if isTemperatureCapped {
+                if isTemperatureCapped && altitudeExpanded {
                     Label("La temperatura real queda limitada al punto de ebullición local.", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption).foregroundStyle(.orange)
                 }
@@ -779,7 +779,7 @@ struct LabView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
                             ForEach(LabModel.cities) { city in
-                                Button(city.label) { model.selectCity(city) }
+                                Button(city.label) { model.selectCity(city); altitudeExpanded = false }
                                     .buttonStyle(.bordered)
                                     .tint(city.isSelected(altitudeMeters: model.state.altitudeMeters, cityName: model.state.cityName) ? CupaTheme.forest : CupaTheme.secondaryText)
                                     .accessibilityIdentifier("lab.altitude.city.\(city.altitudeMeters)")
@@ -843,7 +843,6 @@ struct LabView: View {
                             .font(.caption.bold()).foregroundStyle(CupaTheme.terracottaText)
                     }
                 }
-                compactHypothesis
                 sensoryContent
                 Divider()
                 VStack(alignment: .leading, spacing: 10) {
@@ -854,6 +853,22 @@ struct LabView: View {
                     .pickerStyle(.segmented)
                 }
                 controlsContent
+                Button {
+                    altitudeExpanded = true
+                    showLabDetails = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "mountain.2.fill")
+                        Text("\(model.state.altitudeMeters) m · Hervor \(boilingText)")
+                            .foregroundStyle(isTemperatureCapped ? .orange : CupaTheme.text)
+                        Spacer()
+                        Text("Cambiar").bold()
+                    }.font(.caption).padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(CupaTheme.forestText)
+                .accessibilityLabel("Altura \(model.state.altitudeMeters) metros, hervor \(boilingText). Cambiar altura")
+                compactHypothesis
             }
         }
         .accessibilityElement(children: .contain)
@@ -1029,7 +1044,7 @@ struct LabView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { showCustomCity = false } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { model.setManualAltitude(customAltitudeValue ?? 0, city: customCity.trimmingCharacters(in: .whitespacesAndNewlines)); showCustomCity = false }
+                    Button("Guardar") { model.setManualAltitude(customAltitudeValue ?? 0, city: customCity.trimmingCharacters(in: .whitespacesAndNewlines)); altitudeExpanded = false; showCustomCity = false }
                         .disabled(!customLocationIsValid)
                 }
             }

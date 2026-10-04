@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import com.example.data.database.isSample
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -1461,6 +1462,7 @@ fun BeanItemCard(
                     if (bean.syncStatus != "SYNCED") {
                         LocalSyncStatusLabel(bean.syncStatus)
                     }
+                    if (bean.isSample) Text("Muestra · Datos ficticios", fontSize = 10.sp, color = TextSecundario)
                 }
                 
                 // Chip badge with exact Hex color mapping
@@ -1561,8 +1563,8 @@ fun BeanItemCard(
                         Text("Preparar", fontSize = 11.sp, fontWeight = FontWeight.Black)
                     }
 
-                    // Quick delete
-                    IconButton(
+                    // Keep the built-in sample available.
+                    if (!bean.isSample) IconButton(
                         onClick = onDelete,
                         modifier = Modifier.size(32.dp)
                     ) {
@@ -1825,7 +1827,7 @@ fun BeanDetailSheet(
                     }
                 }
 
-                if (bean.status != "terminado") {
+                if (!bean.isSample && bean.status != "terminado") {
                     OutlinedButton(
                         onClick = {
                             viewModel.markBeanAsFinished(bean)
@@ -1936,6 +1938,7 @@ fun AddEditBeanSheet(
                         value = name,
                         onValueChange = { name = it },
                         label = "Nombre del Grano *",
+                        enabled = beanToEdit?.isSample != true,
                         placeholder = "ej. Geisha Esmeralda Special Reserve"
                     )
 

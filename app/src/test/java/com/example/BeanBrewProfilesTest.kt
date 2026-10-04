@@ -95,6 +95,31 @@ class BeanBrewProfilesTest {
         model.cancelPreparation()
     }
 
+    @Test fun ronpotreroIsDefaultPermanentSampleAndPreservesUserProfiles() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val model = BaristaCalcViewModel(app)
+        await { model.state.value.beansList.any { it.isSample } }
+        assertEquals(SampleCoffee.ID, model.state.value.calculatorBeanId)
+        val sample = model.state.value.beansList.first { it.isSample }
+        assertEquals("Ronpotrero", sample.name)
+        assertNull(sample.ownerUserId)
+        assertEquals(92, BeanBrewProfiles.read(sample.brewProfilesJSON, "V60")!!.temperatureC)
+        var saved = false
+        model.saveBeanBrewProfile(sample.id, "V60", 25, 91) { saved = it }
+        await { saved && BeanBrewProfiles.read(model.state.value.beansList.first { it.isSample }.brewProfilesJSON, "V60")?.clicks == 25 }
+        model.deleteBean(sample); model.markBeanAsFinished(sample)
+        val reopened = BaristaCalcViewModel(app)
+        await { reopened.state.value.beansList.any { it.isSample } }
+        val after = reopened.state.value.beansList.filter { it.isSample }
+        assertEquals(1, after.size)
+        assertEquals(25, BeanBrewProfiles.read(after[0].brewProfilesJSON, "V60")!!.clicks)
+        assertEquals("SYNCED", after[0].syncStatus)
+        model.selectCalculatorBean(null)
+        val explicitlyEmpty = BaristaCalcViewModel(app)
+        await { explicitlyEmpty.state.value.beansList.any { it.isSample } }
+        assertNull(explicitlyEmpty.state.value.calculatorBeanId)
+    }
+
     private fun await(condition: () -> Boolean) {
         repeat(300) { shadowOf(Looper.getMainLooper()).idle(); if (condition()) return; Thread.sleep(10) }
         assertTrue("Timed out waiting for Room/ViewModel", condition())

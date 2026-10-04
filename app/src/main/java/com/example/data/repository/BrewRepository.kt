@@ -75,6 +75,7 @@ class BrewRepository(
     }
 
     suspend fun ensureCoreCatalog() {
+        if (beanDao.getBeanById(SampleCoffee.ID) == null) beanDao.insertBean(SampleCoffee.bean())
         BrewTechniqueCatalog.methods.forEach { method ->
             if (brewMethodDao?.getMethodById(method.id) == null) brewMethodDao?.insertMethod(method)
         }
@@ -115,8 +116,9 @@ class BrewRepository(
     suspend fun deletePreset(preset: RatioPreset) = ratioPresetDao.deletePreset(preset)
 
     // Beans
-    suspend fun insertBean(bean: Bean) = beanDao.insertBean(bean)
-    suspend fun deleteBean(bean: Bean) = beanDao.deleteBean(bean)
+    suspend fun insertBean(bean: Bean) = beanDao.insertBean(if (bean.isSample) bean.copy(
+        name = "Ronpotrero", ownerUserId = null, status = "abierto", stockGrams = bean.stockGrams.coerceAtLeast(1f), syncStatus = "SYNCED") else bean)
+    suspend fun deleteBean(bean: Bean) { if (!bean.isSample) beanDao.deleteBean(bean) }
 
     // Instruments
     suspend fun insertInstrument(instrument: Instrument) = instrumentDao.insertInstrument(instrument)

@@ -1223,6 +1223,11 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(restored.theme, .dark); XCTAssertEqual(restored.temperatureUnit, .fahrenheit)
         XCTAssertEqual(restored.preferredColorScheme, .dark)
         XCTAssertEqual(restored.altitudeMeters, 2240)
+        restored.altitudeMeters = 9000
+        XCTAssertEqual(restored.altitudeMeters, 5000)
+        restored.altitudeMeters = -50
+        XCTAssertEqual(restored.altitudeMeters, 0)
+        restored.altitudeMeters = 2240
         let lab = LabModel(defaults: defaults); lab.setManualAltitude(restored.altitudeMeters); lab.setTemperatureUnit(restored.temperatureUnit)
         let originalTemperature = lab.state.temperatureC
         lab.reset()

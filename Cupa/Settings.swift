@@ -8,7 +8,8 @@ final class SettingsModel: ObservableObject {
     @Published var temperatureUnit: TemperatureUnit { didSet { defaults.set(temperatureUnit.rawValue, forKey: "settings.temperature") } }
     @Published var altitudeMeters: Int {
         didSet {
-            altitudeMeters = min(5000, max(0, altitudeMeters))
+            let normalized = min(5000, max(0, altitudeMeters))
+            if altitudeMeters != normalized { altitudeMeters = normalized; return }
             defaults.set(altitudeMeters, forKey: "settings.altitude")
         }
     }

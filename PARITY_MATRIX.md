@@ -1,5 +1,11 @@
 # Matriz de paridad
 
+Regresión de arranque iOS: normalizar altura en `@Published.didSet` solo si el
+valor cambia; nunca reasignar incondicionalmente la misma propiedad. Se reprodujo
+el desbordamiento de pila antes del arreglo y se ejecutó el modelo corregido:
+inicialización, altura válida, límites y reapertura aprobados. Build-for-testing
+completo aprobado. Confirmación del arranque en iPhone tras reinstalar: pendiente.
+
 Configuración compartida: menú hamburguesa de Taller → Configuración / Notificaciones.
 Altura (0–5,000 m) y Celsius/Fahrenheit se guardan como preferencias, se aplican al
 Laboratorio y sobreviven al reinicio. El laboratorio no contiene selectores duplicados.

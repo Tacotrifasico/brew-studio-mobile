@@ -115,8 +115,12 @@ final class CalculatorModel: ObservableObject {
         selectedBean = bean
         selectedBeanId = bean?.id
         selectedBeanProfile = nextProfile
-        userDefaults.set(selectedBeanId?.uuidString, forKey: LocalDataScope.scopedKey("cupa.calculatorBean.v1", ownerId: scopeOwnerId))
+        userDefaults.set(selectedBeanId?.uuidString ?? "", forKey: LocalDataScope.scopedKey("cupa.calculatorBean.v1", ownerId: scopeOwnerId))
         if changed { transferVersion += 1 }
+    }
+
+    var needsInitialBeanSelection: Bool {
+        userDefaults.object(forKey: LocalDataScope.scopedKey("cupa.calculatorBean.v1", ownerId: scopeOwnerId)) == nil
     }
 
     func switchScope(to ownerId: UUID?) {

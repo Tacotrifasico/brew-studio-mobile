@@ -64,3 +64,26 @@ LabGoldenVerifier (iOS): store SQLite real del modelo anterior → modelo nuevo,
 reapertura, selección persistente y transferencia a Lab/Preparar.
 La compilación y las pruebas de lógica no sustituyen la prueba visual en teléfonos.
 
+## Ronpotrero (muestra permanente)
+
+ID común: `524f4e50-4f54-4520-8000-000000000001`. Café ficticio de Chiapas,
+Bourbon lavado a 1700 m, tueste medio, 250 g, chocolate/panela/naranja.
+V60: 22 clics / 92 °C; AeroPress: 18 / 88 °C; prensa francesa: 28 / 94 °C.
+Son datos de ejemplo, no calibraciones universales de molino.
+
+Se crea una sola vez en ambos OS y se ofrece como selección inicial de BARC.
+No sustituye una selección ya guardada, ni una elección explícita de ningún grano.
+No se puede eliminar ni marcar terminado; sus perfiles editados no se resetean al
+reiniciar. Es local, con ownerId/ownerUserId nulo, y no se sube como café personal.
+Axcis debe tratar su ID como referencia local de muestra, no como FK remota:
+antes de publicar contenido basado en él, guardar una copia de café perteneciente
+al usuario o resolver la referencia mediante snapshot, sin subir datos de muestra
+como si fueran inventario real.
+
+Corrección iOS: la migración debe pasar la misma opción de historial persistente
+al origen, destino y reemplazo que la app usa al abrir su store. Omitirla en un
+store con historial lo vuelve de sólo lectura. El verificador ahora migra stores
+reales con historial activado y desactivado, guarda un café nuevo y reabre SQLite.
+No borrar/reinstalar desde cero para resolver el aviso: actualizar la app conserva
+el inventario anterior y ejecuta la migración.
+

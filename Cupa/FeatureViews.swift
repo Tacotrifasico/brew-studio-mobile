@@ -304,7 +304,11 @@ private struct BaristaCalculatorCard: View {
     }
 
     private func recallBean() {
-        calculator.selectBean(beans.first { $0.id == calculator.selectedBeanId })
+        if calculator.selectedBeanId != nil {
+            calculator.selectBean(beans.first { $0.id == calculator.selectedBeanId })
+        } else if calculator.needsInitialBeanSelection, let sample = beans.first(where: \.isSample) {
+            calculator.selectBean(sample)
+        }
     }
 
     private var backCard: some View {
@@ -1444,6 +1448,7 @@ private struct CoffeeInventoryView: View {
                     CoffeeFreshnessBadge(state: freshness.state)
                 }
                 if bean.syncStatus != .synced { inventorySyncBadge(bean.syncStatus) }
+                if bean.isSample { Text("Muestra · Datos ficticios").font(.caption2).foregroundStyle(CupaTheme.secondaryText) }
                 Text("\(bean.brand.isEmpty ? "Sin tostador" : bean.brand) · Tueste \(bean.roastLevel.lowercased())")
                     .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
                 Text("\(bean.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles")
@@ -1460,6 +1465,7 @@ private struct CoffeeInventoryView: View {
     }
 
     private func delete(_ bean: CoffeeBeanRecord) -> String? {
+        guard !bean.isSample else { return "Ronpotrero es el café de muestra y siempre estará disponible." }
         bean.markDeleted()
         return save()
     }
@@ -1542,7 +1548,7 @@ private struct CoffeeBeanDetail: View {
                     if record.inventoryStatus == .closed {
                         Button("Abrir bolsa hoy", systemImage: "shippingbox.and.arrow.backward") { markOpened() }
                     }
-                    if record.inventoryStatus != .finished {
+                    if !record.isSample && record.inventoryStatus != .finished {
                         Button("Marcar como terminado", systemImage: "checkmark.circle") { confirmingFinished = true }
                             .foregroundStyle(CupaTheme.terracottaText)
                     }
@@ -1595,7 +1601,9 @@ private struct CoffeeBeanDetail: View {
                 }
 
                 Section {
-                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar café", systemImage: "trash") }
+                    if !record.isSample {
+                        Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar café", systemImage: "trash") }
+                    }
                 }
             }
             .brewScrollableCanvas()
@@ -1718,7 +1726,7 @@ private struct CoffeeBeanDraft {
     }
 
     func apply(to record: CoffeeBeanRecord) {
-        record.name = name
+        record.name = record.isSample ? "Ronpotrero" : name
         record.brand = brand
         record.origin = origin
         record.producer = producer
@@ -1793,7 +1801,7 @@ private struct CoffeeBeanEditor: View {
         NavigationStack {
             Form {
                 Section("Identidad") {
-                    TextField("Nombre del café", text: $draft.name)
+                    TextField("Nombre del café", text: $draft.name).disabled(record?.isSample == true)
                     TextField("Marca o tostador", text: $draft.brand)
                     TextField("Origen", text: $draft.origin)
                     TextField("Productor", text: $draft.producer)

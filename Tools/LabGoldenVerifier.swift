@@ -41,7 +41,9 @@ struct LabGoldenVerifier {
         verifyCalculatorQuickPreparation()
         verifyTransfersAndHistoricalSnapshots()
         verifyLocalPersistence()
-        verifyBeanBrewProfilesAndMigration()
+        verifyBeanBrewProfilesAndMigration(enableHistory: false)
+        verifyBeanBrewProfilesAndMigration(enableHistory: true)
+        verifySampleCoffeePersistence()
         verifyRecipeTechniqueAggregates()
         verifyRecipeTextImport()
         verifyPreparationRecovery()
@@ -465,7 +467,7 @@ struct LabGoldenVerifier {
         experiment.markDeleted(); try! context.save(); precondition(experiment.syncStatus == .pendingDelete && experiment.deletedAt != nil)
     }
 
-    @MainActor private static func verifyBeanBrewProfilesAndMigration() {
+    @MainActor private static func verifyBeanBrewProfilesAndMigration(enableHistory: Bool) {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CupaBeanProfileTest-\(UUID().uuidString)")
         try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -473,7 +475,9 @@ struct LabGoldenVerifier {
         let beanId: UUID
         do {
             let legacy = NSPersistentContainer(name: "Cupa", managedObjectModel: PersistenceController.makeModel(includeBeanProfiles: false))
-            let description = NSPersistentStoreDescription(url: url); legacy.persistentStoreDescriptions = [description]
+            let description = NSPersistentStoreDescription(url: url)
+            if enableHistory { description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey) }
+            legacy.persistentStoreDescriptions = [description]
             legacy.loadPersistentStores { _, error in precondition(error == nil) }
             let bean = CoffeeBeanRecord(context: legacy.viewContext, name: "Mi café anterior", brand: "Tostador", remainingQuantityGrams: 100)
             beanId = bean.id
@@ -481,7 +485,7 @@ struct LabGoldenVerifier {
             for store in legacy.persistentStoreCoordinator.persistentStores { try! legacy.persistentStoreCoordinator.remove(store) }
         }
         do {
-            let migrated = PersistenceController(storeURL: url, enablePersistentHistory: false)
+            let migrated = PersistenceController(storeURL: url, enablePersistentHistory: enableHistory)
             precondition(migrated.storageRecoveryMessage == nil, "Debe migrar sin perder el almacén")
             let context = migrated.container.viewContext
             let bean = try! context.fetch(NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")).first!
@@ -513,11 +517,49 @@ struct LabGoldenVerifier {
             precondition(reopened.selectedBeanId == beanId)
             for store in migrated.container.persistentStoreCoordinator.persistentStores { try! migrated.container.persistentStoreCoordinator.remove(store) }
         }
-        let reopened = PersistenceController(storeURL: url, enablePersistentHistory: false)
+        let reopened = PersistenceController(storeURL: url, enablePersistentHistory: enableHistory)
         precondition(reopened.storageRecoveryMessage == nil)
         let bean = try! reopened.container.viewContext.fetch(NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")).first!
         precondition(bean.brewProfile(for: " v60 ")?.clicks == 22 && bean.brewProfile(for: "AeroPress")?.temperatureC == 87)
         print("BARC: migración SQLite, memoria por grano/método, reapertura y envío a Lab/Preparar aprobados")
+    }
+
+    @MainActor private static func verifySampleCoffeePersistence() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CupaSampleTest-\(UUID().uuidString)")
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("Cupa.sqlite")
+        do {
+            let store = PersistenceController(storeURL: url)
+            precondition(store.storageRecoveryMessage == nil)
+            let context = store.container.viewContext; context.activeOwnerId = UUID()
+            try! SampleCoffee.ensure(in: context)
+            try! SampleCoffee.ensure(in: context)
+            let request = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
+            let beans = try! context.fetch(request)
+            precondition(beans.count == 1 && beans[0].isSample && beans[0].name == "Ronpotrero" && beans[0].ownerId == nil)
+            let sample = beans[0]
+            precondition(sample.brewProfile(for: "V60")?.temperatureC == 92)
+            try! sample.setBrewProfile(.init(methodName: "V60", clicks: 25, temperatureC: 91))
+            sample.markDeleted(); precondition(sample.deletedAt == nil)
+            try! context.save()
+            try! SampleCoffee.ensure(in: context)
+            precondition(sample.brewProfile(for: "V60")?.clicks == 25)
+            let owner = UUID()
+            try! EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public"))
+                .enqueuePending(ownerId: owner)
+            precondition(sample.ownerId == nil && sample.syncStatus == .synced)
+            // A real new bean must save too, not merely the seed.
+            let real = CoffeeBeanRecord(context: context, name: "Mi café nuevo", brand: "Real", initialQuantityGrams: 250, remainingQuantityGrams: 250)
+            try! context.save()
+            precondition(!real.isSample)
+            for persistentStore in store.container.persistentStoreCoordinator.persistentStores { try! store.container.persistentStoreCoordinator.remove(persistentStore) }
+        }
+        let reopened = PersistenceController(storeURL: url)
+        precondition(reopened.storageRecoveryMessage == nil)
+        let beans = try! reopened.container.viewContext.fetch(NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord"))
+        precondition(beans.count == 2 && beans.first(where: \.isSample)?.brewProfile(for: "V60")?.clicks == 25)
+        print("Ronpotrero: seed idempotente, ajustes conservados, café nuevo y reapertura permanente aprobados")
     }
 
     private static func verifyLocalPersistence() {

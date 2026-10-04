@@ -124,6 +124,7 @@ final class EntitySyncCoordinator: ObservableObject {
             let request = NSFetchRequest<NSManagedObject>(entityName: descriptor.entityName)
             request.predicate = NSPredicate(format: "(ownerId == nil OR ownerId == %@) AND syncStatusRaw != %@", ownerId as CVarArg, SyncStatus.synced.rawValue)
             for record in try context.fetch(request) {
+                if descriptor.entityName == "CoffeeBeanRecord", record.value(forKey: "id") as? UUID == CoffeeBeanRecord.sampleId { continue }
                 if descriptor.profileIdentity { record.setValue(ownerId, forKey: "id") }
                 if record.value(forKey: "ownerId") == nil { record.setValue(ownerId, forKey: "ownerId") }
                 guard record.value(forKey: "ownerId") as? UUID == ownerId, let id = record.value(forKey: "id") as? UUID else { continue }

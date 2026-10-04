@@ -258,6 +258,8 @@ struct BeanBrewProfile: Codable, Equatable {
 
 @objc(CoffeeBeanRecord)
 final class CoffeeBeanRecord: NSManagedObject {
+    static let sampleId = UUID(uuidString: "524f4e50-4f54-4520-8000-000000000001")!
+    var isSample: Bool { id == Self.sampleId }
     @NSManaged var id: UUID
     @NSManaged var ownerId: UUID?
     @NSManaged var name: String
@@ -306,6 +308,7 @@ final class CoffeeBeanRecord: NSManagedObject {
     }
 
     var inventoryStatus: CoffeeInventoryStatus {
+        if isSample { return .open }
         if remainingQuantityGrams <= 0 { return .finished }
         return openedDate == nil ? .closed : .open
     }
@@ -331,15 +334,49 @@ final class CoffeeBeanRecord: NSManagedObject {
     }
 
     func markUpdated() {
-        updatedAt = .now; version += 1; syncStatus = .pendingUpdate
+        if isSample { name = "Ronpotrero"; ownerId = nil; deletedAt = nil }
+        updatedAt = .now; version += 1; syncStatus = isSample ? .synced : .pendingUpdate
     }
 
     func markDeleted() {
+        guard !isSample else { return }
         deletedAt = .now; updatedAt = .now; version += 1; syncStatus = .pendingDelete
     }
 }
 
 extension CoffeeBeanRecord: Identifiable {}
+
+/// Built-in, clearly fictitious bean. A stable ID prevents duplicate seeds and
+/// ownerId=nil keeps the sample available across local account changes, not synced.
+enum SampleCoffee {
+    @MainActor static func ensure(in context: NSManagedObjectContext, now: Date = .now) throws {
+        let request = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
+        request.predicate = NSPredicate(format: "id == %@", CoffeeBeanRecord.sampleId as CVarArg)
+        if let bean = try context.fetch(request).first {
+            // Never reset the user's saved method profiles or editable tasting notes.
+            if bean.deletedAt != nil || bean.name != "Ronpotrero" || bean.ownerId != nil {
+                bean.deletedAt = nil; bean.name = "Ronpotrero"; bean.ownerId = nil
+                try context.save()
+            }
+            return
+        }
+        let bean = CoffeeBeanRecord(context: context, id: CoffeeBeanRecord.sampleId,
+            name: "Ronpotrero", brand: "Tostadores del Potrero (muestra)", origin: "Chiapas, México",
+            producer: "Finca El Potrero (ficticia)", variety: "Bourbon", process: "Lavado", altitudeMeters: 1700,
+            roastLevel: "Medio", roastDate: Calendar.current.date(byAdding: .day, value: -7, to: now), openedDate: now,
+            initialQuantityGrams: 250, remainingQuantityGrams: 250,
+            notes: "Café de muestra · Datos ficticios. Chocolate, panela y naranja.")
+        bean.ownerId = nil
+        for profile in [BeanBrewProfile(methodName: "V60", clicks: 22, temperatureC: 92),
+                        BeanBrewProfile(methodName: "AeroPress", clicks: 18, temperatureC: 88),
+                        BeanBrewProfile(methodName: "Prensa francesa", clicks: 28, temperatureC: 94)] {
+            try bean.setBrewProfile(profile)
+        }
+        bean.syncStatus = .synced
+        do { try context.save() }
+        catch { context.delete(bean); throw error }
+    }
+}
 
 @objc(LabExperimentRecord)
 final class LabExperimentRecord: NSManagedObject {
@@ -502,7 +539,7 @@ struct PersistenceController {
         requestedContainer.persistentStoreDescriptions = [description]
         var requestedError: Error?
         if !inMemory, let url = description.url {
-            do { try Self.migrateBeanProfilesIfNeeded(at: url) }
+            do { try Self.migrateBeanProfilesIfNeeded(at: url, enablePersistentHistory: enablePersistentHistory) }
             catch { requestedError = error }
         }
         if requestedError == nil { requestedContainer.loadPersistentStores { _, error in requestedError = error } }
@@ -529,7 +566,7 @@ struct PersistenceController {
     /// Programmatic models are not discoverable in a .momd bundle. Retain the exact
     /// previous model and explicitly infer this additive migration before opening.
     /// Never delete the original store or silently reset the user's inventory.
-    private static func migrateBeanProfilesIfNeeded(at url: URL) throws {
+    private static func migrateBeanProfilesIfNeeded(at url: URL, enablePersistentHistory: Bool) throws {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
         guard !sharedModel.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
@@ -541,10 +578,13 @@ struct PersistenceController {
         defer { try? FileManager.default.removeItem(at: directory) }
         let migrated = directory.appendingPathComponent("Cupa.sqlite")
         let manager = NSMigrationManager(sourceModel: previous, destinationModel: sharedModel)
-        try manager.migrateStore(from: url, sourceType: NSSQLiteStoreType, options: nil, with: mapping,
-                                 toDestinationURL: migrated, destinationType: NSSQLiteStoreType, destinationOptions: nil)
+        // Production stores track persistent history. Omitting this option while opening
+        // the source can cause Core Data to try to rewrite history on a read-only store.
+        let historyOptions: [AnyHashable: Any]? = enablePersistentHistory ? [NSPersistentHistoryTrackingKey: true] : nil
+        try manager.migrateStore(from: url, sourceType: NSSQLiteStoreType, options: historyOptions, with: mapping,
+                                 toDestinationURL: migrated, destinationType: NSSQLiteStoreType, destinationOptions: historyOptions)
         let coordinator = NSPersistentStoreCoordinator(managedObjectModel: sharedModel)
-        try coordinator.replacePersistentStore(at: url, destinationOptions: nil, withPersistentStoreFrom: migrated, sourceOptions: nil, ofType: NSSQLiteStoreType)
+        try coordinator.replacePersistentStore(at: url, destinationOptions: historyOptions, withPersistentStoreFrom: migrated, sourceOptions: historyOptions, ofType: NSSQLiteStoreType)
     }
 
     static func makeModel(includeBeanProfiles: Bool = true) -> NSManagedObjectModel {

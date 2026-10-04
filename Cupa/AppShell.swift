@@ -130,6 +130,8 @@ struct AppShell: View {
         }
         .task {
             context.activeOwnerId = account.tokens?.userId
+            do { try SampleCoffee.ensure(in: context) }
+            catch { NSLog("Cupa: no se pudo guardar Ronpotrero. %@", error.localizedDescription) }
             lab.setTemperatureUnit(settings.temperatureUnit)
             lab.setManualAltitude(settings.altitudeMeters)
             preparation.loadCalculatorIfPristine(calculator)

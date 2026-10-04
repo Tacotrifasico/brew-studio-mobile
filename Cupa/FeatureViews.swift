@@ -214,7 +214,7 @@ private struct BaristaCalculatorCard: View {
 
     var body: some View {
         CupaCard {
-            VStack(spacing: 16) {
+            VStack(spacing: 10) {
                 HStack {
                     Label("Calculadora barista", systemImage: "dial.medium").font(.headline)
                     Spacer()
@@ -232,7 +232,7 @@ private struct BaristaCalculatorCard: View {
                 }
                 .foregroundStyle(CupaTheme.onAccent)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 22)
+                .padding(.vertical, 14)
                 .background(LinearGradient(colors: [CupaTheme.forest, categorySurfaceColor], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .clipShape(RoundedRectangle(cornerRadius: 22))
                 .accessibilityElement(children: .combine)
@@ -243,10 +243,7 @@ private struct BaristaCalculatorCard: View {
                     .foregroundStyle(categoryTextColor)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
-                ViewThatFits(in: .horizontal) {
-                    calculatorInputs(axis: .horizontal)
-                    calculatorInputs(axis: .vertical)
-                }
+                calculatorInputs(axis: .horizontal)
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -357,7 +354,7 @@ private struct BaristaCalculatorCard: View {
         HStack {
             Button(action: onLab) { Label("Laboratorio", systemImage: "flask") }
                 .buttonStyle(.bordered)
-            Button(action: onPrepare) { Label("Preparar con estos datos", systemImage: "play.fill") }
+            Button(action: onPrepare) { Label("Preparar", systemImage: "play.fill") }
                 .buttonStyle(.borderedProminent)
                 .tint(CupaTheme.forest)
                 .foregroundStyle(CupaTheme.onAccent)
@@ -425,6 +422,7 @@ private struct BaristaCalculatorCard: View {
     ) -> some View {
         VStack(spacing: 7) {
             Text(title).font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
+                .lineLimit(1).minimumScaleFactor(0.8)
             TextField("", text: text)
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
@@ -432,23 +430,19 @@ private struct BaristaCalculatorCard: View {
                 .onSubmit { calculator.validateInputs() }
                 .accessibilityLabel(title)
                 .accessibilityIdentifier(identifier)
-            HStack {
+            HStack(spacing: 0) {
                 Button { adjust(-1) } label: { Image(systemName: "minus.circle.fill") }
                     .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel("Disminuir \(title)")
-                Spacer()
-                Text(dragAxis == .vertical ? "⇅ Desl." : "⇆ Desl.")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(CupaTheme.terracottaText)
-                    .accessibilityHidden(true)
-                Spacer()
+                Spacer(minLength: 0)
                 Button { adjust(1) } label: { Image(systemName: "plus.circle.fill") }
                     .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel("Aumentar \(title)")
             }
             .foregroundStyle(categoryTextColor)
         }
-        .padding(9)
+        .padding(.horizontal, 4).padding(.vertical, 8)
+        .frame(minWidth: 0, maxWidth: .infinity)
         .background(CupaTheme.backgroundAlt.opacity(0.7))
         .clipShape(RoundedRectangle(cornerRadius: 15))
         .contentShape(RoundedRectangle(cornerRadius: 15))
@@ -643,10 +637,12 @@ struct LabView: View {
     @State private var isSavingExperiment = false
     @State private var isSavingTechnique = false
     @AppStorage("privacy.geminiConsent.v1") private var geminiConsent = false
+    @State private var profileExpanded = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
             CupaTheme.background.ignoresSafeArea()
+            ScrollView {
             VStack(spacing: 8) {
                 altitudeSummaryRow
                 HStack {
@@ -661,11 +657,12 @@ struct LabView: View {
                     .buttonStyle(.bordered)
                 }
                 calibrationWorkspaceCard
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 76)
-            actionBar
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            }
+            .scrollBounceBehavior(.basedOnSize)
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { actionBar }
         .navigationBarHidden(true)
         .sheet(isPresented: $showLabDetails) {
             NavigationStack {
@@ -846,6 +843,8 @@ struct LabView: View {
                     sensoryContent
                     variableTabs
                 }
+                Text("AJUSTES · \(category.rawValue.uppercased())")
+                    .font(.caption2.bold()).tracking(0.8).foregroundStyle(CupaTheme.secondaryText)
                 controlsContent
                 compactHypothesis
             }
@@ -896,17 +895,23 @@ struct LabView: View {
     }
 
     private var compactHypothesis: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        DisclosureGroup(isExpanded: $profileExpanded) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(model.profile.summary).font(.caption)
+                Text("1.00× es la referencia: menos = menor extracción; más = mayor extracción.")
+                    .font(.caption2)
+            }.padding(.top, 4)
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+            Text("PERFIL ESTIMADO").font(.caption2.bold()).tracking(0.8)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(primaryOutcome).font(.subheadline.bold()).fixedSize(horizontal: false, vertical: true)
+                Text(primaryOutcome).font(.caption.bold()).fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Text(String(format: "%.2f×", model.profile.extractionIndex)).font(.headline.monospacedDigit())
             }
-            Text(model.profile.summary).font(.caption2).fixedSize(horizontal: false, vertical: true)
-            Text("Índice relativo de extracción · 1.00× es la referencia; menos indica subextracción y más, mayor extracción.")
-                .font(.system(size: 9, weight: .semibold)).foregroundStyle(CupaTheme.onAccent.opacity(0.84))
-                .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .tint(CupaTheme.onAccent)
         .foregroundStyle(CupaTheme.onAccent)
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .leading, endPoint: .trailing))
@@ -917,21 +922,22 @@ struct LabView: View {
 
     private var sensoryContent: some View {
         let values = [
-            ("Aroma", model.profile.aroma, CupaTheme.gold), ("Acidez", model.profile.acidity, .yellow),
-            ("Dulzor", model.profile.sweetness, .pink), ("Cuerpo", model.profile.body, CupaTheme.terracotta),
-            ("Amargor", model.profile.bitterness, .brown), ("Final", model.profile.finish, .cyan)
+            ("Aroma", model.profile.aroma, Color(hex: 0xC59A5A)), ("Acidez", model.profile.acidity, Color(hex: 0xF2C14E)),
+            ("Dulzor", model.profile.sweetness, Color(hex: 0xD98BB3)), ("Cuerpo", model.profile.body, Color(hex: 0x8B6B5C)),
+            ("Amargor", model.profile.bitterness, Color(hex: 0x5C5641)), ("Final", model.profile.finish, Color(hex: 0x74BFE0))
         ]
         return VStack(alignment: .leading, spacing: 5) {
+                Text("SABOR ESTIMADO").font(.caption2.bold()).tracking(0.8).foregroundStyle(CupaTheme.secondaryText)
                 HStack(alignment: .bottom, spacing: 8) {
                     ForEach(values, id: \.0) { label, value, color in
                         VStack(spacing: 2) {
                             Text("\(value)").font(.system(size: 9, weight: .bold)).foregroundStyle(color).frame(height: 16)
                             GeometryReader { proxy in
                                 ZStack(alignment: .bottom) {
-                                    Capsule().fill(CupaTheme.backgroundAlt)
-                                    Capsule().fill(color.gradient).frame(height: proxy.size.height * CGFloat(value) / 100)
+                                    Rectangle().fill(CupaTheme.backgroundAlt)
+                                    Rectangle().fill(color.gradient).frame(height: proxy.size.height * CGFloat(value) / 100)
                                 }
-                            }.frame(height: 54)
+                            }.frame(height: 70)
                             Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center).frame(height: 26)
                         }
                         .frame(maxWidth: .infinity)
@@ -944,7 +950,6 @@ struct LabView: View {
                     Circle().fill(CupaTheme.forest).frame(width: 6, height: 6)
                     Text(model.diagnostic.extraction).font(.caption2.bold()).foregroundStyle(CupaTheme.forestText).fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Text("SABOR ESTIMADO").font(.system(size: 8, weight: .bold)).foregroundStyle(CupaTheme.secondaryText)
                 }
         }
     }
@@ -971,7 +976,7 @@ struct LabView: View {
                     Picker("Frescura", selection: binding(\.freshness)) {
                         ForEach(["muy fresco", "en ventana", "punto ideal", "bajando", "viejo"], id: \.self) { Text($0.capitalized) }
                     }
-                    TextField("Notas del experimento", text: binding(\.notes), axis: .vertical).lineLimit(3...7)
+                    TextField("Notas del experimento", text: binding(\.notes), axis: .vertical).lineLimit(1...3)
                 }
         }
     }
@@ -1049,7 +1054,8 @@ struct LabView: View {
                 .buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
                 .disabled(isSavingExperiment)
         }
-        .padding().frame(maxWidth: .infinity).background(.ultraThinMaterial)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .frame(maxWidth: .infinity).background(CupaTheme.card)
     }
 
     private var customCitySheet: some View {

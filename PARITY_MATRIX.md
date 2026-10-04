@@ -1,5 +1,12 @@
 # Matriz de paridad
 
+Composición compacta (Taller/Laboratorio): tres entradas de BARC en una fila;
+altura → título → barras del sabor → categorías → controles → perfil desplegable.
+Guardar/Preparar reservan área segura encima de la navegación inferior, sin overlay.
+Ecualizador iOS usa barras rectas y los seis hexadecimales del ecualizador Android.
+Almacén iOS se conserva sin cambios. Compilación iOS completa comprobada;
+revisión visual en teléfono sigue pendiente y no se sustituye por compilación.
+
 Regla permanente: toda modificación solicitada para Android se aplica también a iOS
 y viceversa, preservando pantallas, datos, comportamiento y paleta. Las adaptaciones
 nativas no autorizan omitir funciones. La comprobación visual debe hacerse en ambos.

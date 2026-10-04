@@ -224,24 +224,21 @@ fun HomeScreen(
                             }
                         }
 
-                        // Notifications Bell button
                         var showNotificationsDialog by remember { mutableStateOf(false) }
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(SurfaceCard)
-                                .border(1.dp, BordeSuave, RoundedCornerShape(18.dp))
-                                .clickable { showNotificationsDialog = true },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = "Notificaciones",
-                                tint = TextSecundario,
-                                modifier = Modifier.size(18.dp)
-                            )
+                        var menuExpanded by remember { mutableStateOf(false) }
+                        var showSettings by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menú", tint = TextSecundario)
+                            }
+                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                                DropdownMenuItem(text = { Text("Configuración") }, leadingIcon = { Icon(Icons.Default.Settings, null) },
+                                    onClick = { menuExpanded = false; showSettings = true })
+                                DropdownMenuItem(text = { Text("Notificaciones") }, leadingIcon = { Icon(Icons.Default.Notifications, null) },
+                                    onClick = { menuExpanded = false; showNotificationsDialog = true })
+                            }
                         }
+                        if (showSettings) PreparationSettingsDialog(viewModel) { showSettings = false }
 
                         if (showNotificationsDialog) {
                             androidx.compose.material3.AlertDialog(

@@ -298,6 +298,7 @@ data class BaristaCalcState(
     val labNotes: String = "",
     val labAltitudeMeters: Int = 0, // Metros sobre el nivel del mar (0 a 4000 msnm)
     val labCityName: String = "Nivel del mar (0m)",
+    val useFahrenheit: Boolean = false,
 
     // Diagnostic/hypotheses results (100% offline)
     val labPreviewIntensity: String = "Balanceado",
@@ -361,7 +362,12 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         userMethodPreferenceDao = database.userMethodPreferenceDao()
     )
 
-    private val _state = MutableStateFlow(BaristaCalcState())
+    private val settingsPreferences = application.getSharedPreferences("brew_studio_settings", android.content.Context.MODE_PRIVATE)
+    private val _state = MutableStateFlow(BaristaCalcState(
+        labAltitudeMeters = settingsPreferences.getInt("altitude", 0).coerceIn(0, 5000),
+        labCityName = settingsPreferences.getString("city", "Nivel del mar (0m)").orEmpty(),
+        useFahrenheit = settingsPreferences.getBoolean("fahrenheit", false)
+    ))
     val state: StateFlow<BaristaCalcState> = _state.asStateFlow()
 
     private val baseRatios = mapOf(
@@ -1798,6 +1804,14 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 storageSaveInFlight.remove(saveKey)
             }
         }
+    }
+
+    fun setPreparationSettings(altitudeMeters: Int, fahrenheit: Boolean) {
+        val altitude = altitudeMeters.coerceIn(0, 5000)
+        settingsPreferences.edit().putInt("altitude", altitude).putBoolean("fahrenheit", fahrenheit)
+            .putString("city", "Manual (${altitude}m)").apply()
+        _state.update { it.copy(labAltitudeMeters = altitude, labCityName = "Manual (${altitude}m)", useFahrenheit = fahrenheit) }
+        calculateOfflineLabHypothesis()
     }
 
     fun resetLabVariables() {

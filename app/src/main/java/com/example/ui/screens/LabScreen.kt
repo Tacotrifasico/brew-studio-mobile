@@ -186,7 +186,7 @@ fun LabScreen(
     val scrollState = rememberScrollState()
 
     var selectedCategory by remember { mutableStateOf(LabCategory.Extraccion) }
-    var isFahrenheit by remember { mutableStateOf(false) }
+    val isFahrenheit = state.useFahrenheit
     var showInfoSheet by remember { mutableStateOf(false) }
     var showContextSheet by remember { mutableStateOf(false) }
     var methodMenuExpanded by remember { mutableStateOf(false) }
@@ -198,10 +198,6 @@ fun LabScreen(
     var isSavingRecipe by remember { mutableStateOf(false) }
     var isSavingTechnique by remember { mutableStateOf(false) }
 
-    var isAltitudePanelExpanded by remember { mutableStateOf(false) }
-    var showCustomCityDialog by remember { mutableStateOf(false) }
-    var customCityNameInput by remember { mutableStateOf("") }
-    var customCityAltitudeInput by remember { mutableStateOf("") }
 
     val currentProfile = remember(
         state.labCoffee,
@@ -317,76 +313,6 @@ fun LabScreen(
         )
     }
 
-    if (showCustomCityDialog) {
-        AlertDialog(
-            onDismissRequest = { showCustomCityDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.LocationCity,
-                        contentDescription = null,
-                        tint = AcentoPrincipal,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text("Tu Ciudad y Altura", fontWeight = FontWeight.Bold, color = TextPrincipal, fontSize = 16.sp)
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Ingresa el nombre de tu ciudad y su elevación sobre el nivel del mar para calibrar el punto de ebullición exacto.",
-                        fontSize = 12.5.sp,
-                        color = TextSecundario
-                    )
-                    OutlinedTextField(
-                        value = customCityNameInput,
-                        onValueChange = { customCityNameInput = it },
-                        label = { Text("Nombre de la ciudad") },
-                        placeholder = { Text("Ej: Cusco, Denver, Manizales...") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = customCityAltitudeInput,
-                        onValueChange = { input ->
-                            if (input.all { it.isDigit() } && input.length <= 5) {
-                                customCityAltitudeInput = input
-                            }
-                        },
-                        label = { Text("Altitud (msnm / metros)") },
-                        placeholder = { Text("Ej: 2150") },
-                        trailingIcon = { Text("msnm", fontSize = 12.sp, color = TextSecundario) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val altVal = customCityAltitudeInput.toIntOrNull()?.coerceIn(0, 5000) ?: 0
-                        val nameVal = customCityNameInput.ifBlank { "Mi Ciudad" }
-                        val displayStr = "$nameVal (${altVal}m)"
-                        viewModel.updateLabVariables(altitudeMeters = altVal, cityName = displayStr)
-                        showCustomCityDialog = false
-                        isAltitudePanelExpanded = false
-                        customCityNameInput = ""
-                        customCityAltitudeInput = ""
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal)
-                ) {
-                    Text("Guardar y Calibrar")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCustomCityDialog = false }) {
-                    Text("Cancelar", color = TextSecundario)
-                }
-            }
-        )
-    }
 
     if (showInfoSheet) {
         LabInfoSheet(onDismissRequest = { showInfoSheet = false })
@@ -426,19 +352,6 @@ fun LabScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            com.example.ui.screens.components.LabAltitudeHeaderCard(
-                state = state,
-                viewModel = viewModel,
-                isFahrenheit = isFahrenheit,
-                isExpanded = isAltitudePanelExpanded,
-                onToggleExpand = { isAltitudePanelExpanded = !isAltitudePanelExpanded },
-                onAltitudeSelected = { isAltitudePanelExpanded = false },
-                onOpenCustomCityDialog = {
-                    customCityNameInput = ""
-                    customCityAltitudeInput = if (state.labAltitudeMeters > 0) state.labAltitudeMeters.toString() else ""
-                    showCustomCityDialog = true
-                }
-            )
 
             // 2. SCREEN HEADER
             Column(
@@ -564,7 +477,6 @@ fun LabScreen(
                 state = state,
                 viewModel = viewModel,
                 isFahrenheit = isFahrenheit,
-                onToggleFahrenheit = { isFahrenheit = it },
                 onNavigateToSection = onNavigateToSection
             )
             LabHypothesisCard(profile = currentProfile, state = state)
@@ -883,18 +795,18 @@ fun SensoryEqualizerBarItem(
 
         Box(
             modifier = Modifier
-                .width(14.dp)
+                .width(12.dp)
                 .weight(1f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(2.dp))
                 .background(MainBackgroundAlt.copy(alpha = 0.6f))
-                .border(1.dp, BordeSuave, RoundedCornerShape(8.dp)),
+                .border(1.dp, BordeSuave, RoundedCornerShape(2.dp)),
             contentAlignment = Alignment.BottomCenter
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(animatedPercent)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(2.dp))
                     .background(
                         brush = Brush.verticalGradient(
                             colors = listOf(color.copy(alpha = 0.7f), color)
@@ -1232,7 +1144,6 @@ fun LabVariableDock(
     state: com.example.ui.viewmodel.BaristaCalcState,
     viewModel: BaristaCalcViewModel,
     isFahrenheit: Boolean,
-    onToggleFahrenheit: (Boolean) -> Unit,
     onNavigateToSection: (String) -> Unit
 ) {
     Card(
@@ -1349,52 +1260,6 @@ fun LabVariableDock(
                             letterSpacing = 1.sp
                         )
 
-                        // °C / °F Segmented Toggle Control
-                        Row(
-                            modifier = Modifier
-                                .height(28.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(MainBackgroundAlt)
-                                .border(1.dp, BordeSuave, RoundedCornerShape(14.dp))
-                                .padding(2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // °C button
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(if (!isFahrenheit) CafeCalidoClaro else Color.Transparent)
-                                    .clickable { onToggleFahrenheit(false) }
-                                    .padding(horizontal = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "°C",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (!isFahrenheit) Color.White else TextSecundario
-                                )
-                            }
-
-                            // °F button
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(if (isFahrenheit) CafeCalidoClaro else Color.Transparent)
-                                    .clickable { onToggleFahrenheit(true) }
-                                    .padding(horizontal = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "°F",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isFahrenheit) Color.White else TextSecundario
-                                )
-                            }
-                        }
                     }
 
                     // Slider 1: Temperatura del Agua

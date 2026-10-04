@@ -62,18 +62,8 @@ struct GeminiSuggestionService {
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
 
     func suggest(_ input: SuggestionContext, accessToken: String?) async -> BrewSuggestion {
-        let fallback = LocalSuggestionEngine.suggest(input)
-        guard input.isValid, let token = accessToken, let base = configuration.supabaseURL,
-              let key = configuration.supabaseAnonKey, !key.isEmpty else { return fallback }
-        do {
-            let url = base.appendingPathComponent("functions/v1/gemini-suggestions")
-            var request = URLRequest(url: url); request.httpMethod = "POST"; request.timeoutInterval = 20
-            request.setValue(key, forHTTPHeaderField: "apikey"); request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type"); request.httpBody = try JSONEncoder().encode(input)
-            let (data, response) = try await transport.data(for: request)
-            guard (200..<300).contains(response.statusCode), let decoded = try? JSONDecoder().decode(BrewSuggestion.self, from: data),
-                  let validated = BrewSuggestionValidator.validateRemote(decoded) else { return fallback }
-            return validated
-        } catch { return fallback }
+        // Legacy API compatibility only: AI is disabled, including previously granted consent.
+        // Never contact a remote service or transmit preparation data.
+        return LocalSuggestionEngine.suggest(input)
     }
 }

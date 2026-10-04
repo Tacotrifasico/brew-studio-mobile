@@ -1188,16 +1188,15 @@ final class AccountAndSyncTests: XCTestCase {
         XCTAssertEqual(try repository.pendingCount(ownerId: owner), 0)
     }
 
-    func testGeminiUsesAuthenticatedEdgeFunctionAndFallsBackLocally() async throws {
+    func testAIDisabledEvenWithAuthenticatedRemoteConfiguration() async throws {
         let state = LabState(waterMl: 270, ratio: 18, temperatureC: 84, grindClicks: 32, freshness: "viejo", timeSeconds: 80)
         let input = SuggestionContext(state: state, profile: LabEngine.calculate(state))
         let remote = BrewSuggestion(text: "Ajusta una sola variable.", source: .gemini, promptVersion: "brew-adjustment-v2")
         let transport = MockTransport(responseData: try JSONEncoder().encode(remote))
         let service = GeminiSuggestionService(configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
         let result = await service.suggest(input, accessToken: "user-jwt")
-        XCTAssertEqual(result, remote)
-        XCTAssertEqual(transport.requests.first?.url?.path, "/functions/v1/gemini-suggestions")
-        XCTAssertEqual(transport.requests.first?.value(forHTTPHeaderField: "Authorization"), "Bearer user-jwt")
+        XCTAssertEqual(result.source, .local)
+        XCTAssertTrue(transport.requests.isEmpty, "No AI requests or preparation-data transmissions are allowed")
 
         transport.responseData = try JSONEncoder().encode(BrewSuggestion(text: Array(repeating: "café", count: 91).joined(separator: " "), source: .gemini, promptVersion: "brew-adjustment-v2"))
         let rejectedOutput = await service.suggest(input, accessToken: "user-jwt")
@@ -1219,10 +1218,18 @@ final class SettingsTests: XCTestCase {
     @MainActor func testThemeAndUnitPreferencesRestore() throws {
         let suite = "SettingsTests.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let first = SettingsModel(defaults: defaults); first.theme = .dark; first.temperatureUnit = .fahrenheit
+        let first = SettingsModel(defaults: defaults); first.theme = .dark; first.temperatureUnit = .fahrenheit; first.altitudeMeters = 2240
         let restored = SettingsModel(defaults: defaults)
         XCTAssertEqual(restored.theme, .dark); XCTAssertEqual(restored.temperatureUnit, .fahrenheit)
         XCTAssertEqual(restored.preferredColorScheme, .dark)
+        XCTAssertEqual(restored.altitudeMeters, 2240)
+        let lab = LabModel(defaults: defaults); lab.setManualAltitude(restored.altitudeMeters); lab.setTemperatureUnit(restored.temperatureUnit)
+        let originalTemperature = lab.state.temperatureC
+        lab.reset()
+        XCTAssertEqual(lab.state.altitudeMeters, 2240)
+        XCTAssertEqual(lab.state.temperatureUnit, .fahrenheit)
+        XCTAssertEqual(lab.state.temperatureC, originalTemperature)
+        XCTAssertEqual(lab.boilingPointC, 92.384, accuracy: 0.001)
     }
 
     @MainActor func testProfileUpdateOwnerIsolationAndRemoteMapping() throws {

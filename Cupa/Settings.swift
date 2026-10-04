@@ -6,12 +6,20 @@ enum ThemePreference: String, CaseIterable, Identifiable { case system, light, d
 final class SettingsModel: ObservableObject {
     @Published var theme: ThemePreference { didSet { defaults.set(theme.rawValue, forKey: "settings.theme") } }
     @Published var temperatureUnit: TemperatureUnit { didSet { defaults.set(temperatureUnit.rawValue, forKey: "settings.temperature") } }
+    @Published var altitudeMeters: Int {
+        didSet {
+            altitudeMeters = min(5000, max(0, altitudeMeters))
+            defaults.set(altitudeMeters, forKey: "settings.altitude")
+        }
+    }
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         theme = ThemePreference(rawValue: defaults.string(forKey: "settings.theme") ?? "") ?? .system
         temperatureUnit = TemperatureUnit(rawValue: defaults.string(forKey: "settings.temperature") ?? "") ?? .celsius
+        altitudeMeters = defaults.object(forKey: "settings.altitude") == nil ? LabModel(defaults: defaults).state.altitudeMeters : defaults.integer(forKey: "settings.altitude")
+        altitudeMeters = min(5000, max(0, altitudeMeters))
     }
     var preferredColorScheme: ColorScheme? { theme == .light ? .light : theme == .dark ? .dark : nil }
 }
@@ -20,7 +28,6 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel; @ObservedObject var account: AccountModel
     @Environment(\.dismiss) private var dismiss
     @State private var showAccount = false
-    @AppStorage("privacy.geminiConsent.v1") private var geminiConsent = false
     var body: some View {
         NavigationStack {
             Form {
@@ -28,10 +35,16 @@ struct SettingsView: View {
                     Picker("Tema", selection: $model.theme) { ForEach(ThemePreference.allCases) { Text($0.label).tag($0) } }
                     Picker("Temperatura", selection: $model.temperatureUnit) { Text("Celsius").tag(TemperatureUnit.celsius); Text("Fahrenheit").tag(TemperatureUnit.fahrenheit) }
                 }
-                Section("Privacidad") {
-                    Toggle("Permitir sugerencias con Google Gemini", isOn: $geminiConsent)
-                    Text("Al activarlo, sólo se envían los parámetros de preparación y el perfil sensorial que solicites analizar. No se envían tu correo, nombre ni identificador.")
+                Section("Altura de preparación") {
+                    Stepper("\(model.altitudeMeters) metros", value: $model.altitudeMeters, in: 0...5000, step: 25)
+                    TextField("Metros sobre el nivel del mar", value: $model.altitudeMeters, format: .number)
+                        .keyboardType(.numberPad)
+                        .onChange(of: model.altitudeMeters) { _, value in if !(0...5000).contains(value) { model.altitudeMeters = min(5000, max(0, value)) } }
+                    Text("Hervor estimado: \(boilingText)")
+                    Text("Se aplica al laboratorio y a sus recomendaciones. Los cálculos se conservan en Celsius.")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Privacidad") {
                     Text("Cupa no envía telemetría sensible ni solicita permisos de notificaciones.")
                         .font(.caption).foregroundStyle(.secondary)
                     if let privacyPolicyURL {
@@ -56,6 +69,11 @@ struct SettingsView: View {
 
     private var privacyPolicyURL: URL? {
         configuredURL(for: "PRIVACY_POLICY_URL")
+    }
+    private var boilingText: String {
+        let c = LabEngine.boilingPointC(altitudeMeters: model.altitudeMeters)
+        let value = model.temperatureUnit == .celsius ? c : LabEngine.fahrenheit(fromCelsius: c)
+        return String(format: "%.1f %@", value, model.temperatureUnit == .celsius ? "°C" : "°F")
     }
 
     private var supportURL: URL? { configuredURL(for: "SUPPORT_URL") }

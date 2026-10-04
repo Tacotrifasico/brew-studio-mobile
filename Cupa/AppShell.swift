@@ -131,16 +131,20 @@ struct AppShell: View {
         .task {
             context.activeOwnerId = account.tokens?.userId
             lab.setTemperatureUnit(settings.temperatureUnit)
+            lab.setManualAltitude(settings.altitudeMeters)
             preparation.loadCalculatorIfPristine(calculator)
             await refreshAndSync()
         }
         .onChange(of: account.localScopeKey) { _, _ in
             let ownerId = account.tokens?.userId; context.activeOwnerId = ownerId
             calculator.switchScope(to: ownerId); lab.switchScope(to: ownerId); preparation.switchScope(to: ownerId); tasting.switchScope(to: ownerId)
+            lab.setManualAltitude(settings.altitudeMeters)
+            lab.setTemperatureUnit(settings.temperatureUnit)
             preparation.loadCalculatorIfPristine(calculator)
         }
         .onChange(of: calculator.transferVersion) { _, _ in preparation.loadCalculatorDraftIfPossible(calculator) }
         .onChange(of: settings.temperatureUnit) { _, unit in lab.setTemperatureUnit(unit) }
+        .onChange(of: settings.altitudeMeters) { _, meters in lab.setManualAltitude(meters) }
         .onChange(of: lab.state.temperatureUnit) { _, unit in
             if settings.temperatureUnit != unit { settings.temperatureUnit = unit }
         }

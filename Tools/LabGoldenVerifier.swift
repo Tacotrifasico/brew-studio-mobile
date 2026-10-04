@@ -48,6 +48,8 @@ struct LabGoldenVerifier {
         verifyAppConfiguration()
         verifySyncConflictAndOutbox()
         verifyLocalSuggestionFallback()
+        await verifyNoAITransport()
+        verifyAltitudeSurvivesReset()
         verifyProfilePersistence()
         verifySocialContentPolicy()
         verifySocialImportAttribution()
@@ -675,6 +677,28 @@ struct LabGoldenVerifier {
         let now = Date(); try! repository.markFailed(same, message: "offline", now: now)
         precondition((try! repository.ready(now: now)).isEmpty && same.nextAttemptAt > now)
         try! repository.markSucceeded(same); precondition((try! repository.ready(now: .distantFuture)).isEmpty)
+    }
+
+    @MainActor private static func verifyAltitudeSurvivesReset() {
+        let suite = "CupaAltitudeSettingsVerifier.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let lab = LabModel(defaults: defaults)
+        lab.setManualAltitude(2240); lab.setTemperatureUnit(.fahrenheit)
+        lab.reset()
+        precondition(lab.state.altitudeMeters == 2240 && lab.state.temperatureUnit == .fahrenheit)
+        precondition(abs(lab.boilingPointC - 92.384) < 0.001)
+        let restored = LabModel(defaults: defaults)
+        precondition(restored.state.altitudeMeters == 2240 && restored.state.temperatureUnit == .fahrenheit)
+        precondition(LabEngine.calculate(LabState(temperatureC: 98, altitudeMeters: 2240)).extractionIndex != LabEngine.calculate(LabState(temperatureC: 98)).extractionIndex)
+    }
+
+    private static func verifyNoAITransport() async {
+        let transport = VerifierTransport()
+        let service = GeminiSuggestionService(configuration: .init(supabaseURL: URL(string: "https://example.com")!, supabaseAnonKey: "public-test"), transport: transport)
+        let state = LabState()
+        let result = await service.suggest(SuggestionContext(state: state, profile: LabEngine.calculate(state)), accessToken: "test-token")
+        precondition(result.source == .local && transport.requests.isEmpty)
     }
 
     private static func verifyLocalSuggestionFallback() {

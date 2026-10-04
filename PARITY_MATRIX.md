@@ -1,7 +1,17 @@
 # Matriz de paridad
 
+Configuración compartida: menú hamburguesa de Taller → Configuración / Notificaciones.
+Altura (0–5,000 m) y Celsius/Fahrenheit se guardan como preferencias, se aplican al
+Laboratorio y sobreviven al reinicio. El laboratorio no contiene selectores duplicados.
+La altura limita la temperatura efectiva al hervor en el motor sensorial; cambiar °C/°F
+solo cambia presentación. Cargar un experimento conserva su altura histórica en el
+registro, pero calcula la preparación actual con la altura de Configuración.
+Sin IA: se retiró consentimiento/UI Gemini y el cliente heredado no hace solicitudes.
+Notificaciones muestra el estado vacío; no se simula un backend ni se solicita push.
+Ecualizador: barras finas de 12 pt/dp, misma paleta.
+
 Composición compacta (Taller/Laboratorio): tres entradas de BARC en una fila;
-altura → título → barras del sabor → categorías → controles → perfil desplegable.
+título → barras del sabor → categorías → controles → perfil desplegable.
 Guardar/Preparar reservan área segura encima de la navegación inferior, sin overlay.
 Ecualizador iOS usa barras rectas y los seis hexadecimales del ecualizador Android.
 Almacén iOS se conserva sin cambios. Compilación iOS completa comprobada;

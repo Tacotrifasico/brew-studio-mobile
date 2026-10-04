@@ -17,6 +17,7 @@ struct HomeView: View {
     @ObservedObject var preparation: PreparationModel
     @State private var showAccount = false
     @State private var showSettings = false
+    @State private var showNotifications = false
     @State private var showHub = false
 
     private let shortcuts: [(String, String, CupaTab, Color)] = [
@@ -42,10 +43,11 @@ struct HomeView: View {
                         }
                         .accessibilityIdentifier("home.profile")
                         Spacer()
-                        Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                            .frame(minWidth: 44, minHeight: 44)
-                            .accessibilityLabel("Abrir configuración")
-                            .accessibilityIdentifier("home.settings")
+                        Menu {
+                            Button { showSettings = true } label: { Label("Configuración", systemImage: "gearshape") }
+                            Button { showNotifications = true } label: { Label("Notificaciones", systemImage: "bell") }
+                        } label: { Image(systemName: "line.3.horizontal").frame(width: 44, height: 44) }
+                        .accessibilityLabel("Menú")
                     }
                     .foregroundStyle(CupaTheme.forestText)
 
@@ -99,6 +101,7 @@ struct HomeView: View {
         .navigationBarHidden(true)
         .sheet(isPresented: $showAccount) { AccountView(model: account) }
         .sheet(isPresented: $showSettings) { SettingsView(model: settings, account: account) }
+        .alert("Notificaciones", isPresented: $showNotifications) { Button("Cerrar", role: .cancel) {} } message: { Text("Sin notificaciones nuevas") }
         .sheet(isPresented: $showHub) { HubView(account: account) }
     }
 
@@ -622,21 +625,13 @@ struct LabView: View {
     @ObservedObject var account: AccountModel
     @Binding var selection: CupaTab
     @State private var category = LabControlCategory.extraction
-    @State private var altitudeExpanded = false
-    @State private var showCustomCity = false
-    @State private var customCity = ""
-    @State private var customAltitude = ""
     @State private var confirmingLabReset = false
     @State private var deletingExperiment: LabExperimentRecord?
     @State private var saveConfirmationMessage: String?
-    @State private var suggestion: BrewSuggestion?
-    @State private var suggestionLoading = false
-    @State private var showGeminiConsent = false
     @State private var showLabDetails = false
     @State private var errorMessage: String?
     @State private var isSavingExperiment = false
     @State private var isSavingTechnique = false
-    @AppStorage("privacy.geminiConsent.v1") private var geminiConsent = false
     @State private var profileExpanded = false
 
     var body: some View {
@@ -644,7 +639,6 @@ struct LabView: View {
             CupaTheme.background.ignoresSafeArea()
             ScrollView {
             VStack(spacing: 8) {
-                altitudeSummaryRow
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Laboratorio").font(.title3.bold()).foregroundStyle(CupaTheme.text)
@@ -668,10 +662,8 @@ struct LabView: View {
             NavigationStack {
                 ScrollView {
                     VStack(spacing: 14) {
-                        SectionHeader(eyebrow: "Contexto", title: "Base del experimento", subtitle: "Inventario, altitud, sugerencias e historial.")
+                        SectionHeader(eyebrow: "Contexto", title: "Base del experimento", subtitle: "Inventario e historial.")
                         baseDataCard
-                        altitudeCard
-                        suggestionCard
                         if !experiments.isEmpty { savedExperimentsCard }
                     }.padding()
                 }
@@ -686,17 +678,10 @@ struct LabView: View {
                 }
             }
         }
-        .sheet(isPresented: $showCustomCity) { customCitySheet }
         .alert("Guardado", isPresented: Binding(get: { saveConfirmationMessage != nil }, set: { if !$0 { saveConfirmationMessage = nil } })) {
             Button("Aceptar", role: .cancel) {}
         } message: {
             Text(saveConfirmationMessage ?? "")
-        }
-        .alert("Compartir datos con Gemini", isPresented: $showGeminiConsent) {
-            Button("Usar sólo sugerencia local", role: .cancel) { requestSuggestion(allowRemote: false) }
-            Button("Permitir y continuar") { geminiConsent = true; requestSuggestion(allowRemote: true) }
-        } message: {
-            Text("Cupa enviará a Google Gemini los parámetros de esta preparación y su perfil sensorial para generar una sugerencia. No se envían tu correo, nombre ni identificador. Puedes retirar este permiso en Configuración.")
         }
         .alert("No se pudo actualizar el experimento", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("Aceptar") {}
@@ -747,59 +732,6 @@ struct LabView: View {
     }
     private func loadMethod(_ id: UUID?) { model.selectMethod(methods.first(where: { $0.id == id })) }
 
-    private var altitudeCard: some View {
-        CupaCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Button { withAnimation { altitudeExpanded.toggle() } } label: {
-                    HStack {
-                        Image(systemName: "mountain.2.fill").foregroundStyle(CupaTheme.forestText)
-                        VStack(alignment: .leading, spacing: 2) {
-                            if altitudeExpanded { Text(model.state.cityName).font(.subheadline.bold()).foregroundStyle(CupaTheme.text) }
-                            Text("\(model.state.altitudeMeters) m · Hervor \(boilingText)")
-                                .font(.caption).foregroundStyle(isTemperatureCapped ? .orange : CupaTheme.secondaryText)
-                                .accessibilityIdentifier("lab.altitude.summary")
-                        }
-                        Spacer()
-                        Text(altitudeExpanded ? "Cerrar" : "Cambiar").font(.caption.bold())
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("lab.altitude.toggle")
-
-                if isTemperatureCapped && altitudeExpanded {
-                    Label("La temperatura real queda limitada al punto de ebullición local.", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(.orange)
-                }
-
-                if altitudeExpanded {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(LabModel.cities) { city in
-                                Button(city.label) { model.selectCity(city); altitudeExpanded = false }
-                                    .buttonStyle(.bordered)
-                                    .tint(city.isSelected(altitudeMeters: model.state.altitudeMeters, cityName: model.state.cityName) ? CupaTheme.forest : CupaTheme.secondaryText)
-                                    .accessibilityIdentifier("lab.altitude.city.\(city.altitudeMeters)")
-                            }
-                        }
-                    }
-                    VStack(spacing: 4) {
-                        HStack { Text("Ajuste manual").font(.caption.bold()); Spacer(); Text("\(model.state.altitudeMeters) m").font(.caption) }
-                        Slider(value: Binding(
-                            get: { Double(model.state.altitudeMeters) },
-                            set: { model.setManualAltitude(Int($0.rounded() / 25) * 25) }
-                        ), in: 0...4000, step: 25).tint(CupaTheme.gold)
-                            .accessibilityLabel("Altitud de preparación")
-                            .accessibilityValue("\(model.state.altitudeMeters) metros sobre el nivel del mar")
-                    }
-                    Button { customCity = ""; customAltitude = String(model.state.altitudeMeters); showCustomCity = true } label: {
-                        Label("Agregar mi ciudad y altura", systemImage: "location.badge.plus")
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("lab.altitude.custom")
-                }
-            }
-        }
-    }
 
     private var hypothesisCard: some View {
         let profile = model.profile
@@ -853,23 +785,6 @@ struct LabView: View {
         .accessibilityLabel("Variables de preparación y perfil sensorial en vivo")
     }
 
-    private var altitudeSummaryRow: some View {
-        Button {
-            altitudeExpanded = true
-            showLabDetails = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "mountain.2.fill")
-                Text("\(model.state.altitudeMeters) m · Hervor \(boilingText)")
-                    .foregroundStyle(isTemperatureCapped ? .orange : CupaTheme.text)
-                Spacer()
-                Text("Cambiar").bold()
-            }.font(.caption).padding(10)
-                .background(CupaTheme.card, in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain).foregroundStyle(CupaTheme.forestText)
-        .accessibilityLabel("Altura \(model.state.altitudeMeters) metros, hervor \(boilingText). Cambiar altura")
-    }
 
     private var variableTabs: some View {
         HStack(spacing: 4) {
@@ -937,7 +852,7 @@ struct LabView: View {
                                     Rectangle().fill(CupaTheme.backgroundAlt)
                                     Rectangle().fill(color.gradient).frame(height: proxy.size.height * CGFloat(value) / 100)
                                 }
-                            }.frame(height: 70)
+                            }.frame(width: 12, height: 70)
                             Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center).frame(height: 26)
                         }
                         .frame(maxWidth: .infinity)
@@ -966,9 +881,6 @@ struct LabView: View {
                     labSlider("Proporción", value: labRatioBinding, range: 8...22, step: 0.5, display: "1:\(String(format: "%.1f", model.state.ratio))")
                     labSlider("Tiempo", value: bindingInt(\.timeSeconds), range: 60...360, step: 5, display: formattedTime)
                 case .extraction:
-                    Picker("Unidad", selection: Binding(get: { model.state.temperatureUnit }, set: model.setTemperatureUnit)) {
-                        Text("°C").tag(TemperatureUnit.celsius); Text("°F").tag(TemperatureUnit.fahrenheit)
-                    }.pickerStyle(.segmented).accessibilityIdentifier("lab.temperature.unit")
                     labSlider("Temperatura", value: bindingInt(\.temperatureC), range: 80...98, step: 1, display: temperatureText)
                     temperatureCalibrationBand
                     labSlider("Clics de molienda", value: bindingInt(\.grindClicks), range: 6...36, step: 1, display: "\(model.state.grindClicks) clics")
@@ -1004,37 +916,6 @@ struct LabView: View {
         }
     }
 
-    private var suggestionCard: some View {
-        CupaCard {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack { Label("Sugerencia de ajuste", systemImage: "sparkles").font(.headline); Spacer(); if suggestionLoading { ProgressView() } }
-                if let suggestion {
-                    Text(suggestion.text).font(.subheadline)
-                    Text(suggestion.source == .gemini ? "Sugerencia generada por IA · confirma antes de cambiar tu receta" : "Sugerencia local · disponible sin conexión")
-                        .font(.caption2).foregroundStyle(CupaTheme.secondaryText)
-                } else {
-                    Text("Obtén una interpretación sin alterar los cálculos ni tus datos guardados.").font(.caption).foregroundStyle(CupaTheme.secondaryText)
-                }
-                Button("Analizar este perfil") {
-                    if account.configuration.isSupabaseConfigured, account.tokens != nil, !geminiConsent {
-                        showGeminiConsent = true
-                    } else {
-                        requestSuggestion(allowRemote: geminiConsent)
-                    }
-                }.buttonStyle(.bordered).disabled(suggestionLoading)
-            }
-        }
-    }
-
-    private func requestSuggestion(allowRemote: Bool) {
-        suggestionLoading = true
-        let input = SuggestionContext(state: model.state, profile: model.profile)
-        Task {
-            let token = allowRemote ? await account.validTokens()?.accessToken : nil
-            suggestion = await GeminiSuggestionService(configuration: account.configuration).suggest(input, accessToken: token)
-            suggestionLoading = false
-        }
-    }
 
     private var actionBar: some View {
         HStack {
@@ -1058,29 +939,6 @@ struct LabView: View {
         .frame(maxWidth: .infinity).background(CupaTheme.card)
     }
 
-    private var customCitySheet: some View {
-        NavigationStack {
-            Form {
-                TextField("Ciudad", text: $customCity)
-                TextField("Altitud (msnm)", text: $customAltitude).keyboardType(.numberPad)
-                if !customLocationIsValid { Text("Escribe una ciudad y una altitud entre 0 y 5,000 msnm.").font(.caption).foregroundStyle(.red) }
-            }
-            .brewScrollableCanvas()
-            .navigationTitle("Tu ciudad y altura")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { showCustomCity = false } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { model.setManualAltitude(customAltitudeValue ?? 0, city: customCity.trimmingCharacters(in: .whitespacesAndNewlines)); altitudeExpanded = false; showCustomCity = false }
-                        .disabled(!customLocationIsValid)
-                }
-            }
-        }
-    }
-
-    private var customAltitudeValue: Int? { Int(customAltitude.trimmingCharacters(in: .whitespacesAndNewlines)) }
-    private var customLocationIsValid: Bool {
-        !customCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && customAltitudeValue.map { (0...5_000).contains($0) } == true
-    }
 
     @discardableResult private func saveExperiment() -> Bool {
         guard !isSavingExperiment else { return false }

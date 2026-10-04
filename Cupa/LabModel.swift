@@ -343,7 +343,7 @@ final class LabModel: ObservableObject {
             $0.method = experiment.method; $0.coffeeGrams = Float(experiment.coffeeGrams); $0.waterMl = Int(experiment.waterMl)
             Self.normalizeQuantities(&$0); $0.temperatureC = Int(experiment.temperatureC); $0.grindClicks = Int(experiment.grindClicks)
             $0.freshness = experiment.freshness; $0.timeSeconds = Int(experiment.timeSeconds); $0.notes = experiment.notes
-            $0.altitudeMeters = Int(experiment.altitudeMeters); $0.cityName = experiment.cityName
+            // Historical altitude stays in the experiment; live preparation uses Settings.
         }
     }
     func load(tasting: TastingState, brew: BrewSessionRecord?) {
@@ -361,7 +361,7 @@ final class LabModel: ObservableObject {
             $0.notes = "Cargado de cata sensorial. Textura: \(tasting.texture), Limpieza: \(tasting.cleanliness)."
         }
     }
-    func reset() { state = LabState(temperatureUnit: state.temperatureUnit) }
+    func reset() { state = LabState(altitudeMeters: state.altitudeMeters, cityName: state.cityName, temperatureUnit: state.temperatureUnit) }
 
     private func persist() {
         if let data = try? JSONEncoder().encode(state) { defaults.set(data, forKey: storageKey) }

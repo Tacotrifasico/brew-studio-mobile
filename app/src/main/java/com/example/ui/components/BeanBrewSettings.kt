@@ -3,24 +3,42 @@ package com.example.ui.components
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.example.data.database.*
 import com.example.ui.viewmodel.BaristaCalcViewModel
-import com.example.ui.theme.MainBackgroundAlt
+import com.example.ui.theme.*
 
 @Composable
 fun CalculatorBeanBack(viewModel: BaristaCalcViewModel) {
     val state by viewModel.state.collectAsState()
     var expanded by remember { mutableStateOf(false) }
     val bean = state.beansList.firstOrNull { it.id == state.calculatorBeanId }
-    Text("Método · ${state.method}", style = MaterialTheme.typography.labelLarge)
-    Text("Grano", style = MaterialTheme.typography.labelMedium)
-    Box {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(bean?.name ?: "Elegir grano del Almacén")
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Text("Método · ${state.method}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+        color = AcentoPrincipal, maxLines = 2)
+    Box(Modifier.fillMaxWidth()) {
+        Surface(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp), color = SurfaceCard, border = BorderStroke(1.dp, BordeSuave)) {
+            Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Grano", fontSize = 12.sp, color = TextSecundario)
+                    Text(bean?.name ?: "Elegir grano del Almacén", fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold, color = TextPrincipal, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                Icon(Icons.Default.ExpandMore, contentDescription = "Elegir grano", tint = AcentoPrincipal)
+            }
         }
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(text = { Text("Sin grano seleccionado") }, onClick = { viewModel.selectCalculatorBean(null); expanded = false })
@@ -30,7 +48,8 @@ fun CalculatorBeanBack(viewModel: BaristaCalcViewModel) {
         }
     }
     if (bean != null) BeanMethodSettings(bean, state.method, state.useFahrenheit, viewModel)
-    else Text(if (state.beansList.isEmpty()) "Agrega un grano en Almacén para guardar sus ajustes." else "Cada grano recuerda sus ajustes por método.", style = MaterialTheme.typography.bodySmall)
+    else Text(if (state.beansList.isEmpty()) "Agrega un grano en Almacén para guardar sus ajustes." else "Cada grano recuerda sus ajustes por método.", fontSize = 12.sp, color = TextSecundario)
+    }
 }
 
 @Composable
@@ -42,27 +61,50 @@ fun BeanMethodSettings(bean: Bean, method: String, fahrenheit: Boolean, viewMode
         saving = true
         viewModel.saveBeanBrewProfile(bean.id, method, clicks, temperature) { success -> saving = false; error = !success }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    BeanSettingsControls(profile, fahrenheit, saving, onClicks = { save(it, profile.temperatureC) },
+        onTemperature = { save(profile.clicks, it) })
+    Text(when { error -> "No se guardó. Vuelve a ajustar para reintentar."; saving -> "Guardando…"; BeanBrewProfiles.read(bean.brewProfilesJSON, method) != null -> "Guardado para este grano · $method"; else -> "Ajusta para guardar tu punto favorito." }, fontSize = 12.sp, color = TextSecundario)
+    }
+}
+
+/** Equal-width columns and bounded, joined steppers. No default TextButton min-width
+ * or text wrapping can squeeze the adjacent metric on a small phone. */
+@Composable
+internal fun BeanSettingsControls(profile: BeanBrewProfile, fahrenheit: Boolean, saving: Boolean,
+    onClicks: (Int) -> Unit, onTemperature: (Int) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()
         .background(MainBackgroundAlt, RoundedCornerShape(14.dp)).padding(12.dp)) {
-        Column(Modifier.weight(1f)) {
-            Text("Clics de molino", style = MaterialTheme.typography.labelMedium)
-            Text("${profile.clicks}", style = MaterialTheme.typography.titleMedium)
-            Row {
-                TextButton(modifier = Modifier.weight(1f), onClick = { save(profile.clicks - 1, profile.temperatureC) }, enabled = !saving && profile.clicks > 1) { Text("−") }
-                TextButton(modifier = Modifier.weight(1f), onClick = { save(profile.clicks + 1, profile.temperatureC) }, enabled = !saving && profile.clicks < 200) { Text("+") }
-            }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Clics de molino", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecundario)
+            Text("${profile.clicks}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+            BeanSettingsStepper("clics de molino", !saving && profile.clicks > 1, !saving && profile.clicks < 200,
+                { onClicks(profile.clicks - 1) }, { onClicks(profile.clicks + 1) })
         }
-        Column(Modifier.weight(1f)) {
-            Text("Temperatura", style = MaterialTheme.typography.labelMedium)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Temperatura", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecundario)
             val display = if (fahrenheit) "${kotlin.math.round(profile.temperatureC * 1.8 + 32).toInt()} °F" else "${profile.temperatureC} °C"
-            Text(display, style = MaterialTheme.typography.titleMedium)
-            Row {
-                TextButton(modifier = Modifier.weight(1f), onClick = { save(profile.clicks, profile.temperatureC - 1) }, enabled = !saving && profile.temperatureC > 1) { Text("−") }
-                TextButton(modifier = Modifier.weight(1f), onClick = { save(profile.clicks, profile.temperatureC + 1) }, enabled = !saving && profile.temperatureC < 100) { Text("+") }
+            Text(display, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+            BeanSettingsStepper("temperatura", !saving && profile.temperatureC > 1, !saving && profile.temperatureC < 100,
+                { onTemperature(profile.temperatureC - 1) }, { onTemperature(profile.temperatureC + 1) })
+        }
+    }
+}
+
+@Composable
+private fun BeanSettingsStepper(label: String, canDecrease: Boolean, canIncrease: Boolean,
+    decrease: () -> Unit, increase: () -> Unit) {
+    Surface(shape = RoundedCornerShape(10.dp), color = SurfaceCard, border = BorderStroke(1.dp, BordeSuave)) {
+        Row(Modifier.widthIn(max = 112.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = decrease, enabled = canDecrease, modifier = Modifier.weight(1f).height(48.dp)) {
+                Icon(Icons.Default.Remove, "Reducir $label", Modifier.size(18.dp), tint = if (canDecrease) TextPrincipal else TextSecundario.copy(alpha = 0.35f))
+            }
+            Box(Modifier.width(1.dp).height(24.dp).background(BordeSuave))
+            IconButton(onClick = increase, enabled = canIncrease, modifier = Modifier.weight(1f).height(48.dp)) {
+                Icon(Icons.Default.Add, "Aumentar $label", Modifier.size(18.dp), tint = if (canIncrease) TextPrincipal else TextSecundario.copy(alpha = 0.35f))
             }
         }
     }
-    Text(when { error -> "No se guardó. Vuelve a ajustar para reintentar."; saving -> "Guardando…"; BeanBrewProfiles.read(bean.brewProfilesJSON, method) != null -> "Guardado para este grano · $method"; else -> "Ajusta para guardar tu punto favorito." }, style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable

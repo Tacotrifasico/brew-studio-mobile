@@ -152,10 +152,12 @@ fun BaristaCalcCard(
                 .fillMaxWidth()
         ) {
             if (showBack && backContent != null) {
-                TextButton(onClick = { focusManager.clearFocus(); flipped = false }) {
+                TextButton(onClick = { focusManager.clearFocus(); flipped = false },
+                    contentPadding = PaddingValues(0.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = TextPrincipal)) {
                     Icon(Icons.Default.Flip, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Calculadora barista")
+                    Text("Calculadora barista", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(8.dp))
                 backContent()

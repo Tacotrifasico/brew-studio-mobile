@@ -594,6 +594,7 @@ fun LabHypothesisCard(
     profile: LabFlavorProfile,
     state: com.example.ui.viewmodel.BaristaCalcState
 ) {
+    var expanded by remember { mutableStateOf(false) }
     val ratio = state.labRatio.coerceIn(2f, 25f)
     val (rawC1, rawC2) = when {
         ratio <= 6f -> Pair(Color(0xFF3D2817), Color(0xFF7A3B2E))
@@ -609,6 +610,8 @@ fun LabHypothesisCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { expanded = !expanded }
+            .semantics { stateDescription = if (expanded) "Perfil expandido" else "Perfil resumido" }
             .shadow(
                 elevation = 6.dp,
                 shape = RoundedCornerShape(26.dp),
@@ -641,7 +644,7 @@ fun LabHypothesisCard(
         }
 
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(if (expanded) 18.dp else 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
@@ -651,7 +654,7 @@ fun LabHypothesisCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(68.dp)
+                        .size(if (expanded) 68.dp else 40.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color.White.copy(alpha = 0.2f))
                         .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
@@ -687,17 +690,19 @@ fun LabHypothesisCard(
                     Text(
                         text = primaryOutcomeLabel,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                        fontSize = 18.sp,
+                        fontSize = if (expanded) 18.sp else 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         // Let the advice wrap instead of hiding its meaning.
                     )
 
-                    LabHypothesisChips(labels = profile.labels.take(2))
+                    if (expanded) LabHypothesisChips(labels = profile.labels.take(2))
                 }
+                Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Ocultar consejos" else "Ver consejos", tint = Color.White)
             }
 
-            Box(
+            if (expanded) Box(
                 modifier = Modifier
                     .fillMaxWidth()
             ) {

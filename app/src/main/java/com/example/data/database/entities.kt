@@ -1,6 +1,7 @@
 package com.example.data.database
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -69,6 +70,7 @@ data class Bean(
     val notes: String,
     val status: String = "OPEN", // CLOSED, OPEN, FINISHED
     val stockGrams: Float,
+    @ColumnInfo(defaultValue = "'{}'") val brewProfilesJSON: String = "{}",
     val ownerUserId: String? = null,
     val schemaVersion: Int = 1,
     val remoteId: String? = null,

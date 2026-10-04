@@ -1921,6 +1921,12 @@ fun AddEditBeanSheet(
                     onClose = onDismiss
                 )
 
+                if (beanToEdit != null) {
+                    FormSubCard(title = "Ajustes por método", titleIcon = Icons.Default.Tune) {
+                        com.example.ui.components.InventoryBeanBrewSettings(beanToEdit, viewModel)
+                    }
+                }
+
                 // Sub-Card 1: General Info
                 FormSubCard(
                     title = "Datos del Tostador y Lote",

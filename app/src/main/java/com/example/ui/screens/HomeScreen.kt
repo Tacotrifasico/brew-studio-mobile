@@ -310,7 +310,8 @@ fun HomeScreen(
                 onPrepare = { viewModel.onActionPrepare(); onNavigateToSection("brew") },
                 onLab = { viewModel.onActionLab(); onNavigateToSection("lab") },
                 onFavorite = { viewModel.onActionFavorite() },
-                onToggleMethodPinned = { methodId -> viewModel.toggleMethodPinned(methodId) }
+                onToggleMethodPinned = { methodId -> viewModel.toggleMethodPinned(methodId) },
+                backContent = { com.example.ui.components.CalculatorBeanBack(viewModel) }
             )
         }
 

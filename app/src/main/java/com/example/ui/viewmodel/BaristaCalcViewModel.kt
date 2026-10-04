@@ -3,6 +3,7 @@ package com.example.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.example.data.catalog.BrewTechniqueCatalog
 import com.example.data.database.*
 import com.example.data.engine.RecipeIngredientInput
@@ -222,6 +223,7 @@ data class BaristaCalcState(
     // Storage lists loaded from DB flows
     val savedRatioPresets: List<RatioPreset> = emptyList(),
     val beansList: List<Bean> = emptyList(),
+    val calculatorBeanId: String? = null,
     val equipmentList: List<Instrument> = emptyList(),
     val grindersList: List<Instrument> = emptyList(),
     val techniquesList: List<Technique> = emptyList(),
@@ -366,7 +368,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     private val _state = MutableStateFlow(BaristaCalcState(
         labAltitudeMeters = settingsPreferences.getInt("altitude", 0).coerceIn(0, 5000),
         labCityName = settingsPreferences.getString("city", "Nivel del mar (0m)").orEmpty(),
-        useFahrenheit = settingsPreferences.getBoolean("fahrenheit", false)
+        useFahrenheit = settingsPreferences.getBoolean("fahrenheit", false),
+        calculatorBeanId = settingsPreferences.getString("calculator.bean.${activeOwnerId.value ?: "guest"}", null)
     ))
     val state: StateFlow<BaristaCalcState> = _state.asStateFlow()
 
@@ -424,6 +427,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     _state.update { current ->
                         current.copy(
                             ownerScopeKey = nextScopeKey,
+                            calculatorBeanId = settingsPreferences.getString("calculator.bean.$nextScopeKey", null),
                             activePrepBean = "Sin grano asignado",
                             activePrepBeanId = null,
                             activePrepGrinder = "Sin molino asignado",
@@ -474,7 +478,12 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         }
         viewModelScope.launch {
             combine(repository.allBeans, activeOwnerId) { list, ownerId -> list.filter { OwnerScopeRules.isVisible(it.ownerUserId, ownerId) } }.collect { list ->
-                _state.update { it.copy(beansList = list, beansCount = list.size) }
+                val current = _state.value
+                val oldBean = current.beansList.firstOrNull { it.id == current.calculatorBeanId }
+                val nextBean = list.firstOrNull { it.id == current.calculatorBeanId }
+                if (current.calculatorBeanId != null && oldBean != nextBean) {
+                    updateCalculatorAndPreparation { it.copy(beansList = list, beansCount = list.size) }
+                } else _state.update { it.copy(beansList = list, beansCount = list.size) }
             }
         }
         viewModelScope.launch {
@@ -805,6 +814,9 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     // --- ACCIONES DE COMPARTIR VARIABLES ---
     fun onActionPrepare() {
         val currentVal = _state.value
+        if (currentVal.timerRunning) { showToast("Tu preparación sigue activa. Cancélala antes de cambiar sus datos."); return }
+        val bean = currentVal.beansList.firstOrNull { it.id == currentVal.calculatorBeanId }
+        val profile = bean?.let { BeanBrewProfiles.read(it.brewProfilesJSON, currentVal.method) }
         val keepSelectedTechnique = currentVal.activePrepMethod.equals(currentVal.method, ignoreCase = true) &&
             currentVal.activePrepSteps.isNotEmpty()
         // Envia variables a Preparar
@@ -813,7 +825,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             activePrepCoffee = currentVal.coffee,
             activePrepWater = currentVal.water,
             activePrepRatio = currentVal.ratio,
-            activePrepTemp = if (keepSelectedTechnique) currentVal.activePrepTemp else 93,
+            activePrepBeanId = bean?.id,
+            activePrepBean = bean?.name ?: "Sin grano seleccionado",
+            activePrepClicks = profile?.clicks ?: if (keepSelectedTechnique) currentVal.activePrepClicks else 18,
+            activePrepTemp = profile?.temperatureC ?: if (keepSelectedTechnique) currentVal.activePrepTemp else 93,
             activePrepTechniqueName = if (keepSelectedTechnique) currentVal.activePrepTechniqueName
                 else BrewTechniqueCatalog.firstTechniqueFor(currentVal.method)?.name ?: "${currentVal.method} Estándar",
             activePrepTechniqueId = if (keepSelectedTechnique) currentVal.activePrepTechniqueId else null,
@@ -825,6 +840,8 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun onActionLab() {
+        val bean = _state.value.beansList.firstOrNull { it.id == _state.value.calculatorBeanId }
+        val profile = bean?.let { BeanBrewProfiles.read(it.brewProfilesJSON, _state.value.method) }
         // Envia variables a Laboratorio
         _state.update { it.copy(
             labMethod = it.method,
@@ -834,8 +851,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             labCoffee = it.coffee,
             labWater = it.water,
             labRatio = it.ratio,
-            labTemp = 93,
-            labClicks = 18
+            labBeanId = bean?.id,
+            labBean = bean?.name ?: "Sin grano seleccionado",
+            labTemp = profile?.temperatureC ?: 93,
+            labClicks = profile?.clicks ?: 18
         ) }
         calculateOfflineLabHypothesis()
         showToast("Enviado a Laboratorio de Variables.")
@@ -918,12 +937,18 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                 val scaledSteps = if (selectedStillMatches) {
                     BrewTechniqueCatalog.scaleSteps(sourceSteps, current.activePrepWater, updated.water)
                 } else sourceSteps
+                val bean = updated.beansList.firstOrNull { it.id == updated.calculatorBeanId }
+                val profile = bean?.let { BeanBrewProfiles.read(it.brewProfilesJSON, updated.method) }
+                val keepBeanContext = selectedStillMatches && current.activePrepBeanId == bean?.id
                 updated.copy(
                     activePrepMethod = updated.method,
                     activePrepCoffee = updated.coffee,
                     activePrepWater = updated.water,
                     activePrepRatio = updated.ratio,
-                    activePrepTemp = if (selectedStillMatches) current.activePrepTemp else 93,
+                    activePrepBeanId = bean?.id,
+                    activePrepBean = bean?.name ?: "Sin grano seleccionado",
+                    activePrepClicks = profile?.clicks ?: if (keepBeanContext) current.activePrepClicks else 18,
+                    activePrepTemp = profile?.temperatureC ?: if (keepBeanContext) current.activePrepTemp else 93,
                     activePrepTechniqueName = techniqueName,
                     activePrepTechniqueId = if (selectedStillMatches) current.activePrepTechniqueId else null,
                     activePrepMethodId = if (selectedStillMatches) current.activePrepMethodId else methodIdForName(updated.method),
@@ -1844,6 +1869,28 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     // --- ALMACÉN / STORAGE INVENTORY ---
+    fun selectCalculatorBean(id: String?) {
+        if (id != null && _state.value.beansList.none { it.id == id }) return
+        updateCalculatorAndPreparation { it.copy(calculatorBeanId = id) }
+        settingsPreferences.edit().putString("calculator.bean.${_state.value.ownerScopeKey}", id).apply()
+    }
+
+    fun saveBeanBrewProfile(id: String, method: String, clicks: Int, temperatureC: Int, onCompleted: (Boolean) -> Unit) {
+        val owner = activeOwnerId.value
+        viewModelScope.launch {
+            try {
+                database.withTransaction {
+                    val bean = requireNotNull(database.beanDao().getBeanById(id))
+                    require(OwnerScopeRules.isVisible(bean.ownerUserId, owner) && activeOwnerId.value == owner)
+                    database.beanDao().insertBean(bean.copy(
+                        brewProfilesJSON = BeanBrewProfiles.write(bean.brewProfilesJSON, BeanBrewProfile(method, clicks, temperatureC)),
+                        updatedAt = currentIso8601(), syncStatus = pendingWriteStatus(bean.remoteId)))
+                }
+                onCompleted(true)
+            } catch (_: Exception) { onCompleted(false); showToast("No se pudieron guardar los ajustes del grano.") }
+        }
+    }
+
     fun saveBean(
         id: String? = null,
         roaster: String,
@@ -1862,7 +1909,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         if (!beanSaveInFlight.add(saveKey)) return
         viewModelScope.launch {
             try {
-                val existing = _state.value.beansList.firstOrNull { it.id == id }
+                val existing = id?.let { database.beanDao().getBeanById(it) }
                 val bean = existing?.copy(
                     roaster = roaster,
                     name = name,

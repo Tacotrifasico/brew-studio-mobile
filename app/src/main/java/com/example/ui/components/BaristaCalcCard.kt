@@ -2,6 +2,9 @@ package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -71,11 +74,15 @@ fun BaristaCalcCard(
     onLab: () -> Unit,
     onFavorite: () -> Unit,
     onToggleMethodPinned: ((String) -> Unit)? = null,
+    backContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
     var showManageMethodsDialog by remember { mutableStateOf(false) }
+    var flipped by rememberSaveable { mutableStateOf(false) }
+    val rotation by animateFloatAsState(if (flipped) 180f else 0f, tween(420), label = "calculatorFlip")
+    val showBack = rotation > 90f
 
     val isCurrentRatioSaved = remember(state.method, state.coffee, state.ratio, state.savedRatioPresets) {
         state.savedRatioPresets.any {
@@ -122,6 +129,7 @@ fun BaristaCalcCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer { rotationY = rotation; cameraDistance = 16 * density }
             .shadow(
                 elevation = 6.dp,
                 shape = RoundedCornerShape(32.dp),
@@ -139,20 +147,31 @@ fun BaristaCalcCard(
     ) {
         Column(
             modifier = Modifier
+                .graphicsLayer { rotationY = if (showBack) 180f else 0f }
                 .padding(20.dp)
                 .fillMaxWidth()
         ) {
+            if (showBack && backContent != null) {
+                TextButton(onClick = { focusManager.clearFocus(); flipped = false }) {
+                    Icon(Icons.Default.Flip, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Calculadora barista")
+                }
+                Spacer(Modifier.height(8.dp))
+                backContent()
+            } else {
             // --- HEADER ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(Modifier.weight(1f).clickable(enabled = backContent != null) { focusManager.clearFocus(); flipped = true }
+                    .semantics { contentDescription = "Calculadora barista. Ver ajustes del grano" }) {
                     Text(
-                        text = "Barc",
+                        text = "Calculadora barista ↻",
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                        fontSize = 26.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Black,
                         color = TextPrincipal
                     )
@@ -843,6 +862,7 @@ fun BaristaCalcCard(
                         tint = if (isCurrentRatioSaved) Advertencia else TextSecundario
                     )
                 }
+            }
             }
         }
     }

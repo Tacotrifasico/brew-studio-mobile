@@ -9,6 +9,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import java.time.Instant
 import java.util.UUID
 
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE beans ADD COLUMN brewProfilesJSON TEXT NOT NULL DEFAULT '{}'")
+    }
+}
+
 val MIGRATION_8_9 = object : Migration(8, 9) {
     override fun migrate(db: SupportSQLiteDatabase) {
         // Preferences created before account scoping belonged to the local
@@ -931,7 +937,7 @@ private fun String?.isNull_or_Empty(): Boolean {
         CataFlavorNote::class,
         LabExperiment::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -965,7 +971,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "brew_studio_database_v2"
                 )
-                .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .build()
                 INSTANCE = instance
                 instance

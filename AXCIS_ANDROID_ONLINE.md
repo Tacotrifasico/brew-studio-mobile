@@ -1,5 +1,9 @@
 # Axcis — pendientes Android para conexión online
 
+BARC reversible: el contrato de ajustes por grano/método y su pendiente de sync
+están en [BARC_BEAN_PROFILES.md](BARC_BEAN_PROFILES.md). Persistencia local lista;
+no declarar sincronización entre teléfonos hasta conectar `beans.brew_profiles`.
+
 La guía integral y el protocolo iPhone↔Android están en `AXCIS_BACKEND_HANDOFF.md` de la rama `ios-production-migration`.
 
 Pendientes que bloquean declarar Android online:

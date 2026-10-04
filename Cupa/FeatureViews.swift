@@ -1266,26 +1266,9 @@ private struct CupHistoryView: View {
                 )
                 .listRowBackground(Color.clear)
             } else {
-                ForEach(cups) { cup in
+                ForEach(Array(cups), id: \.objectID) { (cup: CupSessionRecord) in
                     Button { selectedCup = cup } label: {
-                        VStack(alignment: .leading, spacing: 7) {
-                            HStack {
-                                Text(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot).font(.headline)
-                                Spacer()
-                                Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").foregroundStyle(CupaTheme.goldText)
-                            }
-                            if cup.syncStatus != .synced { inventorySyncBadge(cup.syncStatus) }
-                            Text("\(cup.techniqueNameSnapshot) · \(cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))) g → \(cup.executedWaterMl) ml")
-                                .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
-                            HStack {
-                                Label(cup.cupLifeState.localizedCupLife, systemImage: "thermometer.medium")
-                                if !cup.executedGrindSetting.isEmpty { Label(cup.executedGrindSetting, systemImage: "dial.medium") }
-                            }
-                            .font(.caption).foregroundStyle(CupaTheme.forestText)
-                            if !cup.comment.isEmpty { Text(cup.comment).font(.caption) }
-                            if let date = cup.brewDate { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary) }
-                        }
-                        .padding(.vertical, 6)
+                        CupHistoryRow(cup: cup)
                     }
                     .buttonStyle(.plain)
                     .accessibilityElement(children: .combine)
@@ -1305,6 +1288,32 @@ private struct CupHistoryView: View {
     private func delete(_ cup: CupSessionRecord) -> Bool {
         do { try TastingRepository(context: context).delete(cup); return true }
         catch { context.rollback(); errorMessage = error.localizedDescription; return false }
+    }
+}
+
+private struct CupHistoryRow: View {
+    @ObservedObject var cup: CupSessionRecord
+    private var rating: String { cup.rating.formatted(.number.precision(.fractionLength(0...1))) + " ★" }
+    private var quantities: String {
+        let dose = cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))
+        return "\(cup.techniqueNameSnapshot) · \(dose) g → \(cup.executedWaterMl) ml"
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot).font(.headline)
+                Spacer()
+                Text(rating).foregroundStyle(CupaTheme.goldText)
+            }
+            if cup.syncStatus != .synced { inventorySyncBadge(cup.syncStatus) }
+            Text(quantities).font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+            HStack {
+                Label(cup.cupLifeState.localizedCupLife, systemImage: "thermometer.medium")
+                if !cup.executedGrindSetting.isEmpty { Label(cup.executedGrindSetting, systemImage: "dial.medium") }
+            }.font(.caption).foregroundStyle(CupaTheme.forestText)
+            if !cup.comment.isEmpty { Text(cup.comment).font(.caption) }
+            if let date = cup.brewDate { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary) }
+        }.padding(.vertical, 6)
     }
 }
 

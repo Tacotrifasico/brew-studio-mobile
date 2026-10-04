@@ -216,7 +216,12 @@ final class CupSessionRecord: NSManagedObject, SyncTrackedRecord {
     @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
     func markUpdated() { trackUpdate() }; func markDeleted() { trackDeletion() }
 }
-extension CupSessionRecord: Identifiable {}
+extension CupSessionRecord: Identifiable {
+    var syncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .error }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+}
 
 @MainActor
 struct TastingRepository {

@@ -1,5 +1,6 @@
 import Network
 import SwiftUI
+import CoreData
 
 @MainActor
 final class ConnectivityMonitor: ObservableObject {

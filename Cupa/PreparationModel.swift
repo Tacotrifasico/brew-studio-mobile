@@ -168,17 +168,20 @@ final class PreparationModel: ObservableObject {
     }
 
     func load(calculator: CalculatorModel) {
+        guard state.status != .running && state.status != .paused else { return }
         timer?.invalidate(); timer = nil
         let template = PreparationTechniqueCatalog.techniques(for: calculator.method)[0]
         let keepSelectedTechnique = state.status == .ready && !state.steps.isEmpty &&
             state.methodName.caseInsensitiveCompare(calculator.method) == .orderedSame
+        let keepBeanContext = keepSelectedTechnique && state.beanId == calculator.selectedBeanId
         state = PreparationState(
             techniqueId: keepSelectedTechnique ? state.techniqueId : nil,
             techniqueName: keepSelectedTechnique ? state.techniqueName : template.name,
             methodId: calculator.selectedMethodId, methodName: calculator.method,
+            beanId: calculator.selectedBeanId,
             doseGrams: calculator.coffee, waterMl: calculator.water, ratio: calculator.ratio,
-            temperatureC: keepSelectedTechnique ? state.temperatureC : template.temperatureC,
-            grindDescription: keepSelectedTechnique ? state.grindDescription : template.grindDescription,
+            temperatureC: calculator.selectedBeanProfile?.temperatureC ?? (keepBeanContext ? state.temperatureC : template.temperatureC),
+            grindDescription: calculator.selectedBeanProfile.map { "\($0.clicks) clics" } ?? (keepBeanContext ? state.grindDescription : template.grindDescription),
             executionMode: "GUIDED",
             steps: keepSelectedTechnique
                 ? Self.scaled(state.steps, sourceWater: state.waterMl, targetWater: calculator.water)

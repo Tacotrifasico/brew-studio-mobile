@@ -41,6 +41,7 @@ struct LabGoldenVerifier {
         verifyCalculatorQuickPreparation()
         verifyTransfersAndHistoricalSnapshots()
         verifyLocalPersistence()
+        verifyBeanBrewProfilesAndMigration()
         verifyRecipeTechniqueAggregates()
         verifyRecipeTextImport()
         verifyPreparationRecovery()
@@ -462,6 +463,61 @@ struct LabGoldenVerifier {
         precondition(linkedCup.beanNameSnapshot == "Etiopía Guji")
         precondition(tasting.beanId == bean.id && tasting.evaluatorNotes == "Jazmín al enfriar")
         experiment.markDeleted(); try! context.save(); precondition(experiment.syncStatus == .pendingDelete && experiment.deletedAt != nil)
+    }
+
+    @MainActor private static func verifyBeanBrewProfilesAndMigration() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CupaBeanProfileTest-\(UUID().uuidString)")
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("Cupa.sqlite")
+        let beanId: UUID
+        do {
+            let legacy = NSPersistentContainer(name: "Cupa", managedObjectModel: PersistenceController.makeModel(includeBeanProfiles: false))
+            let description = NSPersistentStoreDescription(url: url); legacy.persistentStoreDescriptions = [description]
+            legacy.loadPersistentStores { _, error in precondition(error == nil) }
+            let bean = CoffeeBeanRecord(context: legacy.viewContext, name: "Mi café anterior", brand: "Tostador", remainingQuantityGrams: 100)
+            beanId = bean.id
+            try! legacy.viewContext.save()
+            for store in legacy.persistentStoreCoordinator.persistentStores { try! legacy.persistentStoreCoordinator.remove(store) }
+        }
+        do {
+            let migrated = PersistenceController(storeURL: url, enablePersistentHistory: false)
+            precondition(migrated.storageRecoveryMessage == nil, "Debe migrar sin perder el almacén")
+            let context = migrated.container.viewContext
+            let bean = try! context.fetch(NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")).first!
+            precondition(bean.id == beanId && bean.name == "Mi café anterior" && bean.brewProfilesJSON == "{}")
+            try! bean.setBrewProfile(.init(methodName: "V60", clicks: 22, temperatureC: 91))
+            try! bean.setBrewProfile(.init(methodName: "AeroPress", clicks: 15, temperatureC: 87))
+            try! context.save()
+            precondition(BeanBrewProfile.key("Método") == BeanBrewProfile.key("metodo"))
+            let suite = "CupaBeanSelectionTest-\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let calculator = CalculatorModel(defaults: defaults)
+            calculator.selectBean(bean)
+            let lab = LabModel(defaults: defaults); lab.load(calculator: calculator)
+            let prep = PreparationModel(defaults: defaults); prep.load(calculator: calculator)
+            precondition(lab.state.beanId == beanId && lab.state.grindClicks == 22 && lab.state.temperatureC == 91)
+            precondition(prep.state.beanId == beanId && prep.state.temperatureC == 91 && prep.state.grindDescription == "22 clics")
+            calculator.selectMethod("AeroPress"); prep.load(calculator: calculator)
+            precondition(prep.state.temperatureC == 87 && prep.state.grindDescription == "15 clics")
+            calculator.selectMethod("V60"); prep.load(calculator: calculator)
+            precondition(prep.state.temperatureC == 91)
+            let other = CoffeeBeanRecord(context: context, name: "Otro grano", brand: "Tostador", remainingQuantityGrams: 100)
+            calculator.selectBean(other); prep.load(calculator: calculator)
+            precondition(prep.state.beanId == other.id && prep.state.temperatureC != 91)
+            calculator.selectBean(bean); prep.load(calculator: calculator)
+            prep.start(); calculator.selectBean(other); prep.load(calculator: calculator)
+            precondition(prep.state.beanId == beanId && prep.state.temperatureC == 91)
+            prep.reset(); calculator.selectBean(bean)
+            let reopened = CalculatorModel(defaults: defaults)
+            precondition(reopened.selectedBeanId == beanId)
+            for store in migrated.container.persistentStoreCoordinator.persistentStores { try! migrated.container.persistentStoreCoordinator.remove(store) }
+        }
+        let reopened = PersistenceController(storeURL: url, enablePersistentHistory: false)
+        precondition(reopened.storageRecoveryMessage == nil)
+        let bean = try! reopened.container.viewContext.fetch(NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")).first!
+        precondition(bean.brewProfile(for: " v60 ")?.clicks == 22 && bean.brewProfile(for: "AeroPress")?.temperatureC == 87)
+        print("BARC: migración SQLite, memoria por grano/método, reapertura y envío a Lab/Preparar aprobados")
     }
 
     private static func verifyLocalPersistence() {

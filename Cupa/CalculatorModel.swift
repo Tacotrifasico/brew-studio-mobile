@@ -41,7 +41,8 @@ final class CalculatorModel: ObservableObject {
     static let coffeeRange = 1.0...100.0
     static let ratioRange = 1.0...40.0
     static let waterRange = 10...2_000
-    @Published var method = "V60"
+    @Published var method = "V60" { didSet { selectedBeanProfile = selectedBean?.brewProfile(for: method) } }
+    private weak var selectedBean: CoffeeBeanRecord?
     @Published private(set) var selectedMethodId: UUID?
     @Published var coffee = 15.0
     @Published var ratio = 16.0
@@ -50,6 +51,8 @@ final class CalculatorModel: ObservableObject {
     @Published var ratioInput = "16.0"
     @Published var waterInput = "240"
     @Published var microcopy = "Listo para preparar."
+    @Published private(set) var selectedBeanId: UUID?
+    @Published private(set) var selectedBeanProfile: BeanBrewProfile?
     @Published private(set) var savedPresets: [BrewPreset] = []
     @Published private(set) var pinnedMethodNames: Set<String> = []
     @Published private(set) var transferVersion = 0
@@ -106,12 +109,25 @@ final class CalculatorModel: ObservableObject {
         restoreScope()
     }
 
+    func selectBean(_ bean: CoffeeBeanRecord?) {
+        let nextProfile = bean?.brewProfile(for: method)
+        let changed = selectedBeanId != bean?.id || selectedBeanProfile != nextProfile
+        selectedBean = bean
+        selectedBeanId = bean?.id
+        selectedBeanProfile = nextProfile
+        userDefaults.set(selectedBeanId?.uuidString, forKey: LocalDataScope.scopedKey("cupa.calculatorBean.v1", ownerId: scopeOwnerId))
+        if changed { transferVersion += 1 }
+    }
+
     func switchScope(to ownerId: UUID?) {
         guard scopeOwnerId != ownerId else { return }
         scopeOwnerId = ownerId; restoreScope()
     }
 
     private func restoreScope() {
+        selectedBean = nil
+        selectedBeanId = userDefaults.string(forKey: LocalDataScope.scopedKey("cupa.calculatorBean.v1", ownerId: scopeOwnerId)).flatMap(UUID.init(uuidString:))
+        selectedBeanProfile = nil
         method = "V60"; selectedMethodId = nil; coffee = 15; ratio = 16; water = 240
         coffeeInput = "15.0"; ratioInput = "16.0"; waterInput = "240"; microcopy = "Listo para preparar."
         savedPresets = []

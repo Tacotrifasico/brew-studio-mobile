@@ -59,6 +59,7 @@ struct HomeView: View {
 
                     BaristaCalculatorCard(
                         calculator: calculator,
+                        settings: settings,
                         onLab: {
                             lab.load(calculator: calculator)
                             selection = .lab
@@ -200,6 +201,80 @@ struct BrewView: View {
     }
 }
 
+/// Swaps faces at the midpoint, keeping text upright during a true whole-card flip.
+private struct CalculatorFlip: AnimatableModifier {
+    var rotation: Double
+    let back: AnyView
+    var animatableData: Double { get { rotation } set { rotation = newValue } }
+    func body(content: Content) -> some View {
+        Group {
+            if rotation > 90 { back.rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0)) }
+            else { content }
+        }
+        .rotation3DEffect(.degrees(rotation), axis: (x: 0, y: 1, z: 0), perspective: 0.35)
+    }
+}
+
+private struct BeanMethodSettings: View {
+    @Environment(\.managedObjectContext) private var context
+    @ObservedObject var bean: CoffeeBeanRecord
+    let method: String
+    let unit: TemperatureUnit
+    @State private var saveError: String?
+    private var profile: BeanBrewProfile { bean.brewProfile(for: method) ?? .init(methodName: method) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Clics de molino").font(.caption.bold())
+                    Text("\(profile.clicks)").font(.title3.monospacedDigit().bold())
+                    Stepper("Clics de molino", value: Binding(get: { profile.clicks }, set: { save(clicks: $0, temperature: profile.temperatureC) }), in: 1...200).labelsHidden()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Temperatura").font(.caption.bold())
+                    Text(unit == .celsius ? "\(profile.temperatureC) °C" : "\(Int((Double(profile.temperatureC) * 1.8 + 32).rounded())) °F")
+                        .font(.title3.monospacedDigit().bold())
+                    Stepper("Temperatura", value: Binding(get: { profile.temperatureC }, set: { save(clicks: profile.clicks, temperature: $0) }), in: 1...100).labelsHidden()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(12).background(CupaTheme.backgroundAlt).clipShape(RoundedRectangle(cornerRadius: 14))
+            Text(saveError ?? (bean.brewProfile(for: method) == nil ? "Ajusta para guardar tu punto favorito." : "Guardado para este grano · \(method)"))
+                .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+        }
+    }
+
+    private func save(clicks: Int, temperature: Int) {
+        let previous = bean.brewProfilesJSON
+        let version = bean.version; let status = bean.syncStatusRaw; let updated = bean.updatedAt
+        do {
+            try bean.setBrewProfile(.init(methodName: method, clicks: clicks, temperatureC: temperature))
+            try context.save(); saveError = nil
+        } catch {
+            bean.brewProfilesJSON = previous; bean.version = version; bean.syncStatusRaw = status; bean.updatedAt = updated
+            saveError = "No se guardó. Vuelve a ajustar para reintentar."
+        }
+    }
+}
+
+private struct InventoryBeanBrewSettings: View {
+    @ObservedObject var bean: CoffeeBeanRecord
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var equipment: FetchedResults<EquipmentRecord>
+    @AppStorage("settings.temperature") private var rawUnit = TemperatureUnit.celsius.rawValue
+    @State private var method = "V60"
+    private var methods: [String] {
+        Array(Set(["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"] + equipment.filter { $0.isActive && $0.isBrewingMethod }.map(\.name))).sorted()
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("Método", selection: $method) { ForEach(methods, id: \.self) { Text($0).tag($0) } }
+            BeanMethodSettings(bean: bean, method: method, unit: TemperatureUnit(rawValue: rawUnit) ?? .celsius)
+        }
+    }
+}
+
 private struct BaristaCalculatorCard: View {
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(
@@ -207,6 +282,10 @@ private struct BaristaCalculatorCard: View {
         predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "isActive == YES"))
     ) private var activeEquipment: FetchedResults<EquipmentRecord>
     @ObservedObject var calculator: CalculatorModel
+    @ObservedObject var settings: SettingsModel
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var flipped = false
     let onLab: () -> Void
     let onPrepare: () -> Void
     @State private var showingMethodManager = false
@@ -216,10 +295,53 @@ private struct BaristaCalculatorCard: View {
     @State private var waterDragStep = 0
 
     var body: some View {
+        frontCard
+            .modifier(CalculatorFlip(rotation: flipped ? 180 : 0, back: AnyView(backCard)))
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.42), value: flipped)
+            .onAppear { recallBean() }
+            .onChange(of: calculator.method) { _, _ in recallBean() }
+            .onChange(of: beans.map { $0.id.uuidString + $0.brewProfilesJSON }) { _, _ in recallBean() }
+    }
+
+    private func recallBean() {
+        calculator.selectBean(beans.first { $0.id == calculator.selectedBeanId })
+    }
+
+    private var backCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Button { flipped = false } label: {
+                    Label("Calculadora barista", systemImage: "arrow.triangle.2.circlepath").font(.headline)
+                }
+                .foregroundStyle(CupaTheme.text)
+                .frame(minHeight: 44)
+                .accessibilityLabel("Calculadora barista. Volver al cálculo")
+                Text("Método · \(calculator.method)").font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
+                Picker("Grano", selection: Binding(get: { calculator.selectedBeanId }, set: { id in calculator.selectBean(beans.first { $0.id == id }) })) {
+                    Text("Elegir grano del Almacén").tag(Optional<UUID>.none)
+                    ForEach(beans) { bean in Text(bean.name).tag(Optional(bean.id)) }
+                }
+                .tint(CupaTheme.forestText)
+                if let bean = beans.first(where: { $0.id == calculator.selectedBeanId }) {
+                    BeanMethodSettings(bean: bean, method: calculator.method, unit: settings.temperatureUnit)
+                } else {
+                    Text(beans.isEmpty ? "Agrega un grano en Almacén para guardar sus ajustes." : "Cada grano recuerda sus ajustes por método.")
+                        .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                }
+            }
+        }
+    }
+
+    private var frontCard: some View {
         CupaCard {
             VStack(spacing: 10) {
                 HStack {
-                    Label("Calculadora barista", systemImage: "dial.medium").font(.headline)
+                    Button { flipped = true } label: {
+                        Label("Calculadora barista", systemImage: "arrow.triangle.2.circlepath").font(.headline)
+                    }
+                    .foregroundStyle(CupaTheme.text)
+                    .frame(minHeight: 44)
+                    .accessibilityLabel("Calculadora barista. Ver ajustes del grano")
                     Spacer()
                     Text("1:\(calculator.ratioInput)")
                         .font(.subheadline.bold())
@@ -1398,6 +1520,10 @@ private struct CoffeeBeanDetail: View {
                         if !record.notes.isEmpty { Text(record.notes).font(.subheadline).foregroundStyle(CupaTheme.secondaryText) }
                     }
                     .padding(.vertical, 4)
+                }
+
+                Section("Cómo lo preparo") {
+                    InventoryBeanBrewSettings(bean: record)
                 }
 
                 Section("Uso") {

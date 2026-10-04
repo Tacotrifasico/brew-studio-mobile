@@ -281,6 +281,9 @@ final class LabModel: ObservableObject {
             $0.recipeName = nil
             $0.techniqueName = nil
             $0.method = calculator.method
+            $0.beanId = calculator.selectedBeanId
+            $0.temperatureC = calculator.selectedBeanProfile?.temperatureC ?? 93
+            $0.grindClicks = calculator.selectedBeanProfile?.clicks ?? 18
             $0.coffeeGrams = Float(calculator.coffee)
             $0.waterMl = calculator.water
             Self.normalizeQuantities(&$0)

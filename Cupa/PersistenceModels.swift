@@ -238,6 +238,24 @@ enum CoffeeBeanInputValidator {
     }
 }
 
+/// Same JSON contract as Android: one entry per normalized method, owned by the bean.
+/// AXCIS: future sync maps this attribute to beans.brew_profiles (not free-form notes).
+struct BeanBrewProfile: Codable, Equatable {
+    let methodName: String
+    let clicks: Int
+    let temperatureC: Int
+    init(methodName: String, clicks: Int = 18, temperatureC: Int = 93) {
+        self.methodName = methodName
+        self.clicks = min(200, max(1, clicks))
+        self.temperatureC = min(100, max(1, temperatureC))
+    }
+    static func key(_ method: String) -> String {
+        method.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .lowercased(with: Locale(identifier: "en_US_POSIX"))
+    }
+}
+
 @objc(CoffeeBeanRecord)
 final class CoffeeBeanRecord: NSManagedObject {
     @NSManaged var id: UUID
@@ -254,6 +272,7 @@ final class CoffeeBeanRecord: NSManagedObject {
     @NSManaged var openedDate: Date?
     @NSManaged var initialQuantityGrams: Double
     @NSManaged var remainingQuantityGrams: Double
+    @NSManaged var brewProfilesJSON: String
     @NSManaged var notes: String
     @NSManaged var createdAt: Date
     @NSManaged var updatedAt: Date
@@ -264,6 +283,21 @@ final class CoffeeBeanRecord: NSManagedObject {
     var altitudeMeters: Int? {
         get { altitudeMetersValue?.intValue }
         set { altitudeMetersValue = newValue.map(NSNumber.init(value:)) }
+    }
+
+    func brewProfile(for method: String) -> BeanBrewProfile? {
+        guard let data = brewProfilesJSON.data(using: .utf8),
+              let profiles = try? JSONDecoder().decode([String: BeanBrewProfile].self, from: data),
+              let value = profiles[BeanBrewProfile.key(method)] else { return nil }
+        return BeanBrewProfile(methodName: value.methodName, clicks: value.clicks, temperatureC: value.temperatureC)
+    }
+
+    func setBrewProfile(_ profile: BeanBrewProfile) throws {
+        // Decode strictly: malformed JSON must not erase the other method associations.
+        var profiles = try JSONDecoder().decode([String: BeanBrewProfile].self, from: Data(brewProfilesJSON.utf8))
+        profiles[BeanBrewProfile.key(profile.methodName)] = profile
+        brewProfilesJSON = String(decoding: try JSONEncoder().encode(profiles), as: UTF8.self)
+        markUpdated()
     }
 
     var syncStatus: SyncStatus {
@@ -286,7 +320,7 @@ final class CoffeeBeanRecord: NSManagedObject {
         notes: String = "", createdAt: Date = .now, updatedAt: Date = .now,
         version: Int64 = 1, syncStatus: SyncStatus = .pendingCreate, deletedAt: Date? = nil
     ) {
-        self.init(context: context)
+        self.init(entity: NSEntityDescription.entity(forEntityName: "CoffeeBeanRecord", in: context)!, insertInto: context)
         self.id = id; self.ownerId = ownerId ?? context.activeOwnerId; self.name = name; self.brand = brand
         self.origin = origin; self.producer = producer; self.variety = variety; self.process = process
         self.altitudeMeters = altitudeMeters; self.roastLevel = roastLevel
@@ -467,7 +501,11 @@ struct PersistenceController {
         }
         requestedContainer.persistentStoreDescriptions = [description]
         var requestedError: Error?
-        requestedContainer.loadPersistentStores { _, error in requestedError = error }
+        if !inMemory, let url = description.url {
+            do { try Self.migrateBeanProfilesIfNeeded(at: url) }
+            catch { requestedError = error }
+        }
+        if requestedError == nil { requestedContainer.loadPersistentStores { _, error in requestedError = error } }
 
         if let requestedError, !inMemory {
             NSLog("Cupa: no se pudo abrir el almacén persistente; se usará una sesión temporal. %@", requestedError.localizedDescription)
@@ -488,7 +526,28 @@ struct PersistenceController {
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
 
-    static func makeModel() -> NSManagedObjectModel {
+    /// Programmatic models are not discoverable in a .momd bundle. Retain the exact
+    /// previous model and explicitly infer this additive migration before opening.
+    /// Never delete the original store or silently reset the user's inventory.
+    private static func migrateBeanProfilesIfNeeded(at url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
+        guard !sharedModel.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
+        let previous = makeModel(includeBeanProfiles: false)
+        guard previous.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
+        let mapping = try NSMappingModel.inferredMappingModel(forSourceModel: previous, destinationModel: sharedModel)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cupa-bean-migration-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let migrated = directory.appendingPathComponent("Cupa.sqlite")
+        let manager = NSMigrationManager(sourceModel: previous, destinationModel: sharedModel)
+        try manager.migrateStore(from: url, sourceType: NSSQLiteStoreType, options: nil, with: mapping,
+                                 toDestinationURL: migrated, destinationType: NSSQLiteStoreType, destinationOptions: nil)
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: sharedModel)
+        try coordinator.replacePersistentStore(at: url, destinationOptions: nil, withPersistentStoreFrom: migrated, sourceOptions: nil, ofType: NSSQLiteStoreType)
+    }
+
+    static func makeModel(includeBeanProfiles: Bool = true) -> NSManagedObjectModel {
         let model = NSManagedObjectModel()
         let coffeeEntity = NSEntityDescription()
         coffeeEntity.name = "CoffeeBeanRecord"
@@ -512,6 +571,7 @@ struct PersistenceController {
             attribute("syncStatusRaw", .stringAttributeType, defaultValue: SyncStatus.pendingCreate.rawValue),
             attribute("deletedAt", .dateAttributeType, optional: true)
         ]
+        if includeBeanProfiles { coffeeEntity.properties.append(attribute("brewProfilesJSON", .stringAttributeType, defaultValue: "{}")) }
         coffeeEntity.uniquenessConstraints = [["id"]]
 
         let experimentEntity = NSEntityDescription()

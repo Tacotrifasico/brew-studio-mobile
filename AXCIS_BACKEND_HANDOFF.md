@@ -88,6 +88,12 @@ Repetir el recorrido al revés con nombres diferentes. En Android la receta impo
 4. Intentar leer por REST una fila privada del otro usuario: RLS debe devolver cero filas o 403.
 5. Interrumpir una descarga entre `techniques` y `technique_steps`: iOS debe conservar el agregado local anterior y Android no debe importar la técnica nueva. Al reintentar, sólo debe aparecer cuando todos los pasos y acumulados sean válidos.
 
+## BARC reversible: memoria por grano y método
+
+Consultar [BARC_BEAN_PROFILES.md](BARC_BEAN_PROFILES.md): incluye el formato JSON
+compartido, migración local sin perder inventario y pasos pendientes para habilitar
+`beans.brew_profiles` en ambas plataformas. Actualmente estos ajustes son locales.
+
 ## Evidencia obligatoria
 
 Guardar fecha, SHA de ambas apps, UUID de usuarios/receta/técnica/shares, capturas de Almacenes y buzones, resultado offline/reinicio/RLS, conteos de migración y errores con responsable. La salida se acepta cuando una receta y una técnica con pasos completan el recorrido en ambos sentidos y sobreviven reinicio, reinstalación/login y cambio de cuenta.

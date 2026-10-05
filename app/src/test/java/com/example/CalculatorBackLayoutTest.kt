@@ -54,6 +54,8 @@ class CalculatorBackLayoutTest {
         }
         compose.waitUntil(10_000) { model.state.value.beansList.any { it.id == bean.id } }
         compose.runOnIdle { model.selectCalculatorBean(bean.id) }
+        compose.onNodeWithText("Ver reverso").assertIsDisplayed()
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/barc-android-front-320.png")
         compose.onNodeWithContentDescription("Calculadora barista. Ver ajustes del grano").performClick()
         compose.onNodeWithText(bean.name).assertIsDisplayed()
         compose.onNodeWithText("22").assertIsDisplayed()

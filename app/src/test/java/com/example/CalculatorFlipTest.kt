@@ -27,10 +27,12 @@ class CalculatorFlipTest {
                     backContent = { Text("Grano del Almacén") })
             }
         }
+        compose.onNodeWithText("Ver reverso").assertIsDisplayed()
         compose.onNodeWithContentDescription("Calculadora barista. Ver ajustes del grano").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Grano del Almacén").assertIsDisplayed()
-        compose.onNodeWithText("Calculadora barista").performClick()
+        compose.onNodeWithText("Volver al cálculo").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Calculadora barista. Volver al cálculo").performClick()
         compose.waitForIdle()
         compose.onNodeWithContentDescription("Calculadora barista. Ver ajustes del grano").assertIsDisplayed()
         compose.onNodeWithText("Grano del Almacén").assertDoesNotExist()

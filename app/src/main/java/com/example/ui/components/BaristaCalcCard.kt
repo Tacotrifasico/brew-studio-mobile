@@ -53,6 +53,29 @@ import com.example.ui.viewmodel.BaristaCalcState
 import com.example.ui.viewmodel.BaristaPreset
 import com.example.ui.viewmodel.RatioCategory
 
+/** Compact, mirrored two-sided affordance; method/ratio remain in the result panel. */
+@Composable
+private fun CalculatorFlipHeader(back: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+    val tint = Color(if (isDarkThemeGlobal) 0xFFF09A7D else 0xFFA94F28)
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
+        .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+        .semantics(mergeDescendants = true) {
+            contentDescription = if (back) "Calculadora barista. Volver al cálculo" else "Calculadora barista. Ver ajustes del grano"
+        }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Calculadora barista", fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = TextPrincipal)
+            if (enabled) Text(if (back) "Volver al cálculo" else "Ver reverso",
+                fontSize = 11.sp, fontWeight = FontWeight.Medium, color = tint)
+        }
+        if (enabled) Box(Modifier.size(36.dp).clip(CircleShape)
+            .background(tint.copy(alpha = 0.08f)).border(1.dp, tint.copy(alpha = 0.18f), CircleShape),
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Flip, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BaristaCalcCard(
@@ -152,51 +175,14 @@ fun BaristaCalcCard(
                 .fillMaxWidth()
         ) {
             if (showBack && backContent != null) {
-                TextButton(onClick = { focusManager.clearFocus(); flipped = false },
-                    contentPadding = PaddingValues(0.dp),
-                    colors = ButtonDefaults.textButtonColors(contentColor = TextPrincipal)) {
-                    Icon(Icons.Default.Flip, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Calculadora barista", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                }
+                CalculatorFlipHeader(back = true) { focusManager.clearFocus(); flipped = false }
                 Spacer(Modifier.height(8.dp))
                 backContent()
             } else {
             // --- HEADER ---
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f).clickable(enabled = backContent != null) { focusManager.clearFocus(); flipped = true }
-                    .semantics { contentDescription = "Calculadora barista. Ver ajustes del grano" }) {
-                    Text(
-                        text = "Calculadora barista ↻",
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Black,
-                        color = TextPrincipal
-                    )
-                }
+            CalculatorFlipHeader(back = false, enabled = backContent != null) { focusManager.clearFocus(); flipped = true }
 
-                // Active Method Badge
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(sensorTheme.glowColor)
-                        .border(1.dp, sensorTheme.accentColor.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "${state.method} • 1:${state.ratioInput}",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = sensorTheme.accentColor
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // --- ZONA PRINCIPAL: RESULTADO GRANDE (DINÁMICO & ORGÁNICO) ---
             val ratio = state.ratio.coerceIn(2f, 25f)

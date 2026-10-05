@@ -31,7 +31,13 @@ JSON compartido:
 
 Clave: nombre de método sin espacios perimetrales, sin diacríticos, en minúsculas
 con locale estable. Se admite un método personalizado. Celsius es la unidad
-persistida; Fahrenheit sólo es presentación. Límites: 1–200 clics, 1–100 °C.
+persistida; los controles avanzan en la unidad elegida (1 °C o 1 °F).
+`temperatureC` admite decimales: 195 °F equivale a 90.555555… °C y debe conservar
+esa precisión al guardar, leer y sincronizar, sin convertir el campo a entero.
+Los JSON anteriores con Celsius entero siguen siendo válidos, sin migración de DB.
+Límites: 1–200 clics, 1–100 °C (34–212 °F enteros en el control).
+Los motores actuales de Preparar/Laboratorio usan Celsius entero y reciben el
+valor redondeado; esto no modifica el favorito preciso almacenado en el grano.
 Un método sin asociación no hereda los ajustes de otro método/grano.
 Los clics representan el molino que usa la persona, no una equivalencia universal.
 
@@ -86,4 +92,3 @@ store con historial lo vuelve de sólo lectura. El verificador ahora migra store
 reales con historial activado y desactivado, guarda un café nuevo y reabre SQLite.
 No borrar/reinstalar desde cero para resolver el aviso: actualizar la app conserva
 el inventario anterior y ejecuta la migración.
-

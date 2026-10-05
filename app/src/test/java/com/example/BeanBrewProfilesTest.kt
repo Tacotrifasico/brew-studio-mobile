@@ -18,18 +18,35 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class BeanBrewProfilesTest {
+    @Test fun fahrenheitStepsInclude195AndPersistFractionalCelsiusWithoutLosingOtherMethods() {
+        val initial = BeanBrewProfile("V60", 22, 91)
+        assertEquals("196 °F", initial.temperatureText(true))
+        val favorite = initial.copy(temperatureC = initial.steppedTemperature(-1, true))
+        assertEquals("195 °F", favorite.temperatureText(true))
+        assertEquals(195.0, favorite.temperatureC * 1.8 + 32, 0.000001)
+        val json = BeanBrewProfiles.write(BeanBrewProfiles.write("{}", BeanBrewProfile("AeroPress", 18, 88)), favorite)
+        val restored = BeanBrewProfiles.read(json, "V60")!!
+        assertEquals("195 °F", restored.temperatureText(true))
+        assertEquals(88.0, BeanBrewProfiles.read(json, "AeroPress")!!.temperatureC, 0.0)
+        assertEquals("194 °F", restored.copy(temperatureC = restored.steppedTemperature(-1, true)).temperatureText(true))
+        assertEquals("196 °F", restored.copy(temperatureC = restored.steppedTemperature(1, true)).temperatureText(true))
+        assertEquals(92.0, initial.steppedTemperature(1, false), 0.0)
+        assertEquals(100.0, BeanBrewProfile("V60", 22, 100).steppedTemperature(1, true), 0.0)
+        // Old integer JSON still decodes after adding precision.
+        assertEquals(91.0, BeanBrewProfiles.read("{\"v60\":{\"methodName\":\"V60\",\"clicks\":22,\"temperatureC\":91}}", "V60")!!.temperatureC, 0.0)
+    }
     @Test fun methodStartingPointsStaySeparateFromSavedBeanFavorites() {
         val expected = mapOf("V60" to (22 to 92), "AeroPress" to (18 to 88), "Prensa francesa" to (28 to 94),
             "Chemex" to (26 to 93), "Espresso" to (8 to 93), "Moka" to (12 to 90), "Cold brew" to (32 to 20))
         expected.forEach { (method, values) ->
             val profile = BeanBrewProfiles.resolve("{}", method)
-            assertEquals(values.first, profile.clicks); assertEquals(values.second, profile.temperatureC)
+            assertEquals(values.first, profile.clicks); assertEquals(values.second.toDouble(), profile.temperatureC, 0.0)
             assertNull(BeanBrewProfiles.read("{}", method))
         }
         val stored = BeanBrewProfiles.write("{}", BeanBrewProfile("V60", 31, 89))
         assertEquals(31, BeanBrewProfiles.resolve(stored, "v60").clicks)
         assertEquals(18, BeanBrewProfiles.resolve(stored, "AeroPress").clicks)
-        assertEquals(89, BeanBrewProfiles.resolve(stored, "V60").temperatureC)
+        assertEquals(89.0, BeanBrewProfiles.resolve(stored, "V60").temperatureC, 0.0)
     }
 
     @Test fun switchingMethodsRecallsBeanFavoritesImmediatelyWithoutPrepareButton() {
@@ -55,11 +72,11 @@ class BeanBrewProfilesTest {
         val first = BeanBrewProfiles.write("{}", BeanBrewProfile("Prensa francesa", 26, 90))
         val second = BeanBrewProfiles.write(first, BeanBrewProfile("V60", 22, 94))
         assertEquals(26, BeanBrewProfiles.read(second, " PRENSA FRANCESA ")!!.clicks)
-        assertEquals(94, BeanBrewProfiles.read(second, "v60")!!.temperatureC)
+        assertEquals(94.0, BeanBrewProfiles.read(second, "v60")!!.temperatureC, 0.0)
         assertNull(BeanBrewProfiles.read(second, "AeroPress"))
         assertEquals(BeanBrewProfiles.key("Método"), BeanBrewProfiles.key("metodo"))
         val changed = BeanBrewProfiles.write(second, BeanBrewProfile("V60", 20, 91))
-        assertEquals(90, BeanBrewProfiles.read(changed, "Prensa francesa")!!.temperatureC)
+        assertEquals(90.0, BeanBrewProfiles.read(changed, "Prensa francesa")!!.temperatureC, 0.0)
         assertEquals(20, BeanBrewProfiles.read(changed, "V60")!!.clicks)
         assertNull(BeanBrewProfiles.read("not json", "V60"))
     }
@@ -111,7 +128,7 @@ class BeanBrewProfilesTest {
         restored.onMethodSelected("V60"); restored.onActionLab()
         assertEquals(22, restored.state.value.labClicks)
         val read = runBlocking { db.beanDao().getBeanById(bean.id) }!!
-        assertEquals(87, BeanBrewProfiles.read(read.brewProfilesJSON, "AeroPress")!!.temperatureC)
+        assertEquals(87.0, BeanBrewProfiles.read(read.brewProfilesJSON, "AeroPress")!!.temperatureC, 0.0)
         val other = bean.copy(id = java.util.UUID.randomUUID().toString(), name = "Otro grano", brewProfilesJSON = "{}")
         runBlocking { db.beanDao().insertBean(other) }
         await { model.state.value.beansList.any { it.id == other.id } }
@@ -136,7 +153,7 @@ class BeanBrewProfilesTest {
         val sample = model.state.value.beansList.first { it.isSample }
         assertEquals("Ronpotrero", sample.name)
         assertNull(sample.ownerUserId)
-        assertEquals(92, BeanBrewProfiles.read(sample.brewProfilesJSON, "V60")!!.temperatureC)
+        assertEquals(92.0, BeanBrewProfiles.read(sample.brewProfilesJSON, "V60")!!.temperatureC, 0.0)
         var saved = false
         model.saveBeanBrewProfile(sample.id, "V60", 25, 91) { saved = it }
         await { saved && BeanBrewProfiles.read(model.state.value.beansList.first { it.isSample }.brewProfilesJSON, "V60")?.clicks == 25 }

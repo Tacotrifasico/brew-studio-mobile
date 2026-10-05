@@ -184,7 +184,7 @@ fun BaristaCalcCard(
                 com.example.data.database.BeanBrewProfiles.resolve(it.brewProfilesJSON, state.method)
             }
             val preview = profile?.let {
-                val temperature = if (state.useFahrenheit) "${kotlin.math.round(it.temperatureC * 1.8 + 32).toInt()} °F" else "${it.temperatureC} °C"
+                val temperature = it.temperatureText(state.useFahrenheit)
                 "${it.clicks} clics · $temperature"
             }
             CalculatorFlipHeader(back = false, enabled = backContent != null, detail = preview) { focusManager.clearFocus(); flipped = true }

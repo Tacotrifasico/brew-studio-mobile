@@ -9,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.data.database.*
 import com.example.ui.components.BaristaCalcCard
 import com.example.ui.components.CalculatorBeanBack
+import com.example.ui.components.BeanSettingsControls
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.BaristaCalcViewModel
 import kotlinx.coroutines.runBlocking
@@ -24,6 +25,20 @@ import org.robolectric.annotation.Config
 @Config(sdk = [36], qualifiers = "w360dp-h780dp")
 class CalculatorMethodProfilesTest {
     @get:Rule val compose = createComposeRule()
+    @Test fun fahrenheitTemperatureButtonsDoNotSkip195() {
+        var profile by mutableStateOf(BeanBrewProfile("V60", 22, 91))
+        compose.setContent {
+            MyApplicationTheme { BeanSettingsControls(profile, true, false, onClicks = {},
+                onTemperature = { profile = profile.copy(temperatureC = it) }) }
+        }
+        compose.onNodeWithText("196 °F").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Reducir temperatura").performClick()
+        compose.onNodeWithText("195 °F").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Reducir temperatura").performClick()
+        compose.onNodeWithText("194 °F").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Aumentar temperatura").performClick()
+        compose.onNodeWithText("195 °F").assertIsDisplayed()
+    }
     @Test fun calculatorPreviewAndBackRecallAndSaveOnlyTheSelectedBeanMethod() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val bean = SampleCoffee.bean().copy(id = java.util.UUID.randomUUID().toString(), name = "Perfil por método", brewProfilesJSON = "{}")

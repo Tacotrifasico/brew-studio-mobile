@@ -57,7 +57,7 @@ fun BeanMethodSettings(bean: Bean, method: String, fahrenheit: Boolean, viewMode
     val profile = BeanBrewProfiles.resolve(bean.brewProfilesJSON, method)
     var saving by remember(bean.id, method) { mutableStateOf(false) }
     var error by remember(bean.id, method) { mutableStateOf(false) }
-    fun save(clicks: Int, temperature: Int) {
+    fun save(clicks: Int, temperature: Double) {
         saving = true
         viewModel.saveBeanBrewProfile(bean.id, method, clicks, temperature) { success -> saving = false; error = !success }
     }
@@ -75,7 +75,7 @@ fun BeanMethodSettings(bean: Bean, method: String, fahrenheit: Boolean, viewMode
  * or text wrapping can squeeze the adjacent metric on a small phone. */
 @Composable
 internal fun BeanSettingsControls(profile: BeanBrewProfile, fahrenheit: Boolean, saving: Boolean,
-    onClicks: (Int) -> Unit, onTemperature: (Int) -> Unit) {
+    onClicks: (Int) -> Unit, onTemperature: (Double) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()
         .background(MainBackgroundAlt, RoundedCornerShape(14.dp)).padding(12.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -86,10 +86,11 @@ internal fun BeanSettingsControls(profile: BeanBrewProfile, fahrenheit: Boolean,
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Temperatura", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecundario)
-            val display = if (fahrenheit) "${kotlin.math.round(profile.temperatureC * 1.8 + 32).toInt()} °F" else "${profile.temperatureC} °C"
+            val display = profile.temperatureText(fahrenheit)
             Text(display, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-            BeanSettingsStepper("temperatura", !saving && profile.temperatureC > 1, !saving && profile.temperatureC < 100,
-                { onTemperature(profile.temperatureC - 1) }, { onTemperature(profile.temperatureC + 1) })
+            BeanSettingsStepper("temperatura", !saving && profile.displayDegrees(fahrenheit) > (if (fahrenheit) 34 else 1),
+                !saving && profile.displayDegrees(fahrenheit) < (if (fahrenheit) 212 else 100),
+                { onTemperature(profile.steppedTemperature(-1, fahrenheit)) }, { onTemperature(profile.steppedTemperature(1, fahrenheit)) })
         }
     }
 }

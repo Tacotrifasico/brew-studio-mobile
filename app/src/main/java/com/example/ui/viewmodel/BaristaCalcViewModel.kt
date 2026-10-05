@@ -833,7 +833,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             activePrepBeanId = bean?.id,
             activePrepBean = bean?.name ?: "Sin grano seleccionado",
             activePrepClicks = profile?.clicks ?: if (keepSelectedTechnique) currentVal.activePrepClicks else 18,
-            activePrepTemp = profile?.temperatureC ?: if (keepSelectedTechnique) currentVal.activePrepTemp else 93,
+            activePrepTemp = profile?.displayDegrees(false) ?: if (keepSelectedTechnique) currentVal.activePrepTemp else 93,
             activePrepTechniqueName = if (keepSelectedTechnique) currentVal.activePrepTechniqueName
                 else BrewTechniqueCatalog.firstTechniqueFor(currentVal.method)?.name ?: "${currentVal.method} Estándar",
             activePrepTechniqueId = if (keepSelectedTechnique) currentVal.activePrepTechniqueId else null,
@@ -858,7 +858,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
             labRatio = it.ratio,
             labBeanId = bean?.id,
             labBean = bean?.name ?: "Sin grano seleccionado",
-            labTemp = profile?.temperatureC ?: 93,
+            labTemp = profile?.displayDegrees(false) ?: 93,
             labClicks = profile?.clicks ?: 18
         ) }
         calculateOfflineLabHypothesis()
@@ -953,7 +953,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     activePrepBeanId = bean?.id,
                     activePrepBean = bean?.name ?: "Sin grano seleccionado",
                     activePrepClicks = profile?.clicks ?: if (keepBeanContext) current.activePrepClicks else 18,
-                    activePrepTemp = profile?.temperatureC ?: if (keepBeanContext) current.activePrepTemp else 93,
+                    activePrepTemp = profile?.displayDegrees(false) ?: if (keepBeanContext) current.activePrepTemp else 93,
                     activePrepTechniqueName = techniqueName,
                     activePrepTechniqueId = if (selectedStillMatches) current.activePrepTechniqueId else null,
                     activePrepMethodId = if (selectedStillMatches) current.activePrepMethodId else methodIdForName(updated.method),
@@ -1881,6 +1881,10 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun saveBeanBrewProfile(id: String, method: String, clicks: Int, temperatureC: Int, onCompleted: (Boolean) -> Unit) {
+        saveBeanBrewProfile(id, method, clicks, temperatureC.toDouble(), onCompleted)
+    }
+
+    fun saveBeanBrewProfile(id: String, method: String, clicks: Int, temperatureC: Double, onCompleted: (Boolean) -> Unit) {
         val owner = activeOwnerId.value
         viewModelScope.launch {
             try {

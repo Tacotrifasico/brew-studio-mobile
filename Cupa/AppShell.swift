@@ -87,7 +87,7 @@ struct AppShell: View {
         }
         .id(account.localScopeKey)
         .tint(CupaTheme.forest)
-        .background(CupaTheme.background.ignoresSafeArea())
+        .background(BrewOrganicCanvas().ignoresSafeArea())
         .toolbarBackground(CupaTheme.card, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .onOpenURL { _ = account.handleAuthCallback($0) }

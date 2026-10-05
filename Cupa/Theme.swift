@@ -65,10 +65,10 @@ extension UIColor {
 }
 
 extension View {
-    func brewScrollableCanvas() -> some View {
+    func brewScrollableCanvas(warmTop: Bool = false) -> some View {
         scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.interactively)
-            .background(CupaTheme.background)
+            .background(BrewOrganicCanvas(warmTop: warmTop).ignoresSafeArea())
             .brewKeyboardDismissToolbar()
     }
 
@@ -87,6 +87,34 @@ extension View {
                 .accessibilityLabel("Cerrar teclado")
             }
         }
+    }
+}
+
+/// Shared layered paper/ceramic canvas, matching Android's normalized geometry.
+/// Static vector gradients: no images, animation, network or touch interception.
+struct BrewOrganicCanvas: View {
+    var warmTop = false
+    @Environment(\.colorScheme) private var colorScheme
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(CupaTheme.background))
+            let dark = colorScheme == .dark
+            let top = warmTop ? CupaTheme.terracotta : CupaTheme.forest
+            let bottom = warmTop ? CupaTheme.forest : CupaTheme.terracotta
+            func sphere(_ center: CGPoint, _ radius: CGFloat, _ color: Color) {
+                let disk = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+                context.fill(disk, with: .color(color.opacity(dark ? 0.11 : 0.065)))
+                context.fill(disk, with: .radialGradient(Gradient(colors: [color.opacity(dark ? 0.10 : 0.06), color.opacity(0)]),
+                    center: CGPoint(x: center.x - radius * 0.28, y: center.y - radius * 0.3), startRadius: 0, endRadius: radius * 1.2))
+            }
+            sphere(CGPoint(x: size.width * 0.88, y: size.height * 0.10), size.width * 0.55, top)
+            sphere(CGPoint(x: size.width * 0.12, y: size.height * 0.82), size.width * 0.48, bottom)
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .radialGradient(
+                Gradient(colors: [.white.opacity(dark ? 0.015 : 0.24), .white.opacity(0)]),
+                center: CGPoint(x: size.width * 0.42, y: 0), startRadius: 0, endRadius: size.width * 1.15))
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

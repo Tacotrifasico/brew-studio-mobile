@@ -15,7 +15,7 @@ struct TastingView: View {
 
     var body: some View {
         ZStack {
-            CupaTheme.background.ignoresSafeArea()
+            BrewOrganicCanvas(warmTop: true).ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 16) {
                     SectionHeader(eyebrow: "Evaluación sensorial", title: "Cata artesanal", subtitle: "Registra cómo cambia la taza mientras se enfría.")

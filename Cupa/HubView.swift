@@ -44,7 +44,7 @@ struct HubView: View {
                 if account.tokens == nil { signedOut }
                 else { Group { switch tab { case 0: profileTab; case 1: communityTab; case 2: formulasTab; default: historyTab } } }
             }
-            .background(CupaTheme.background.ignoresSafeArea())
+            .background(BrewOrganicCanvas().ignoresSafeArea())
             .navigationTitle("Brew Studio Hub")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { if account.tokens != nil { Button { synchronize() } label: { Image(systemName: "arrow.triangle.2.circlepath") }.accessibilityLabel("Sincronizar datos") } }

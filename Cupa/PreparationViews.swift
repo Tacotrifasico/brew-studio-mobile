@@ -27,7 +27,7 @@ struct PreparationExecutionView: View {
         .sheet(isPresented: $showingTechniques) {
             NavigationStack {
                 ScrollView { techniqueLibraryCard.padding() }
-                    .background(CupaTheme.background)
+                    .background(BrewOrganicCanvas(warmTop: true).ignoresSafeArea())
                     .navigationTitle("Técnica")
                     .toolbar { Button("Cerrar") { showingTechniques = false } }
             }

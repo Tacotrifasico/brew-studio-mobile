@@ -29,12 +29,7 @@ struct HomeView: View {
 
     var body: some View {
         ZStack {
-            CupaTheme.background.ignoresSafeArea()
-            LinearGradient(
-                colors: [CupaTheme.card.opacity(0.72), CupaTheme.background.opacity(0)],
-                startPoint: .top,
-                endPoint: .center
-            ).ignoresSafeArea().allowsHitTesting(false)
+            BrewOrganicCanvas().ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 20) {
                     HStack {
@@ -185,7 +180,7 @@ struct BrewView: View {
 
     var body: some View {
         ZStack {
-            CupaTheme.background.ignoresSafeArea()
+            BrewOrganicCanvas(warmTop: true).ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 20) {
                     SectionHeader(eyebrow: "Secuencia de extracción", title: "Preparar café", subtitle: "Elige una técnica para los datos calculados y sigue cada paso.")
@@ -762,7 +757,7 @@ struct LabView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            CupaTheme.background.ignoresSafeArea()
+            BrewOrganicCanvas().ignoresSafeArea()
             ScrollView {
             VStack(spacing: 8) {
                 HStack {
@@ -793,7 +788,7 @@ struct LabView: View {
                         if !experiments.isEmpty { savedExperimentsCard }
                     }.padding()
                 }
-                .background(CupaTheme.background)
+                .background(BrewOrganicCanvas().ignoresSafeArea())
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { showLabDetails = false } }
@@ -1231,7 +1226,7 @@ struct StorageView: View {
             case .cups: CupHistoryView()
             }
         }
-        .background(CupaTheme.background)
+        .background(BrewOrganicCanvas(warmTop: true).ignoresSafeArea())
         .navigationTitle("Almacén")
     }
 }
@@ -1388,7 +1383,7 @@ private struct CoffeeInventoryView: View {
 
     var body: some View {
         ZStack {
-            CupaTheme.background.ignoresSafeArea()
+            BrewOrganicCanvas(warmTop: true).ignoresSafeArea()
             List {
                 Section("Cafés activos") {
                     if activeBeans.isEmpty {
@@ -1408,7 +1403,7 @@ private struct CoffeeInventoryView: View {
                     }
                 }
             }
-            .brewScrollableCanvas()
+            .brewScrollableCanvas(warmTop: true)
         }
         .toolbar {
             Button { showAddBean = true } label: { Image(systemName: "plus") }

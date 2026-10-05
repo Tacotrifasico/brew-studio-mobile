@@ -413,42 +413,17 @@ private fun OwnerScopedStorageScreen(
                             )
                         }
                         items(finishedBeans) { bean ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .border(1.dp, BordeSuave.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                                    .clickable { activeBeanDetailId = bean.id },
-                                colors = CardDefaults.cardColors(containerColor = SurfaceCard.copy(alpha = 0.6f)),
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = bean.name,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextSecundario
-                                        )
-                                        Text(
-                                            text = "Terminado • Origen: ${bean.origin}",
-                                            fontSize = 11.sp,
-                                            color = TextSecundario.copy(alpha = 0.7f)
-                                        )
-                                    }
-                                    IconButton(onClick = {
-                                        pendingDeletion = StorageDeletionRequest(
-                                            title = "¿Eliminar ${bean.name}?",
-                                            message = "Se quitará este lote histórico del Almacén."
-                                        ) { viewModel.deleteBean(bean) }
-                                    }) {
-                                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar", tint = Advertencia.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-                                    }
-                                }
-                            }
+                            BeanItemCard(bean = bean,
+                                onDetailRequest = { activeBeanDetailId = bean.id },
+                                onBrewSelected = { viewModel.selectBeanForBrewing(bean) },
+                                onLabSelected = { viewModel.selectBeanForLab(bean) },
+                                onEditSelected = { activeBeanEditId = bean.id },
+                                onDelete = {
+                                    pendingDeletion = StorageDeletionRequest(
+                                        title = "¿Eliminar ${bean.name}?",
+                                        message = "Se quitará este lote histórico del Almacén."
+                                    ) { viewModel.deleteBean(bean) }
+                                })
                         }
                     }
                 }
@@ -1273,7 +1248,8 @@ fun MiniSummaryCard(
 @Composable
 fun BeanFreshnessGraph(
     freshnessResult: FreshnessResult,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
 ) {
     val progress = freshnessResult.freshnessProgress
     val daysLabel = if (freshnessResult.daysFromRoast != null) {
@@ -1298,12 +1274,12 @@ fun BeanFreshnessGraph(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "$daysLabel $daysOpenLabel",
+                text = if (compact) "$daysLabel · ${freshnessResult.freshnessState.label}" else "$daysLabel $daysOpenLabel",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = AcentoPrincipal
             )
-            Text(
+            if (!compact) Text(
                 text = "${(progress * 100).toInt()}% est. útil",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -1317,7 +1293,7 @@ fun BeanFreshnessGraph(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(24.dp)
+                .height(if (compact) 12.dp else 24.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(
                     Brush.horizontalGradient(
@@ -1374,7 +1350,7 @@ fun BeanFreshnessGraph(
         Spacer(modifier = Modifier.height(4.dp))
         
         // Labels
-        Row(
+        if (!compact) Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -1401,166 +1377,61 @@ fun BeanItemCard(
     onEditSelected: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val freshnessResult = remember(bean) { calculateBeanFreshness(bean.roastDate, bean.firstUseDate) }
-    
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(24.dp), ambientColor = Color.Black.copy(alpha = 0.05f))
-            .border(1.dp, BordeSuave, RoundedCornerShape(24.dp))
-            .combinedClickable(
-                onClickLabel = "Ver detalles de ${bean.name}",
-                onLongClickLabel = "Editar ${bean.name}",
-                onClick = onDetailRequest,
-                onLongClick = onEditSelected
-            ),
-        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-        shape = RoundedCornerShape(24.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Header Row: brand name and state chips
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = bean.name,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Black,
-                        color = TextPrincipal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = bean.roaster.ifBlank { "Tostador Desconocido" },
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecundario,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (bean.syncStatus != "SYNCED") {
-                        LocalSyncStatusLabel(bean.syncStatus)
-                    }
-                    if (bean.isSample) Text("Muestra · Datos ficticios", fontSize = 10.sp, color = TextSecundario)
+    val freshness = remember(bean) { calculateBeanFreshness(bean.roastDate, bean.firstUseDate) }
+    val accent = coffeeAccent(bean.id)
+    Card(Modifier.fillMaxWidth()
+        .shadow(4.dp, RoundedCornerShape(24.dp), ambientColor = Color(0xFF1E1A17).copy(alpha = 0.08f))
+        .border(1.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(24.dp)),
+        colors = CardDefaults.cardColors(containerColor = SurfaceCard), shape = RoundedCornerShape(24.dp)) {
+        Column(Modifier.background(Brush.linearGradient(listOf(accent.copy(alpha = 0.10f), Color.Transparent)))
+            .padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().combinedClickable(onClick = onDetailRequest, onLongClick = onEditSelected,
+                onClickLabel = "Ver detalles de ${bean.name}", onLongClickLabel = "Editar ${bean.name}"),
+                verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.width(4.dp).height(28.dp).background(accent, RoundedCornerShape(2.dp)))
+                    Text(bean.name, Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Serif, color = TextPrincipal,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                
-                // Chip badge with exact Hex color mapping
-                val stateColor = Color(android.graphics.Color.parseColor(freshnessResult.freshnessState.colorHex))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(stateColor.copy(alpha = 0.12f))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = freshnessResult.freshnessState.label.uppercase(),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Black,
-                        color = stateColor
-                    )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(bean.origin.ifBlank { "Origen sin registrar" }, Modifier.weight(1f),
+                        fontSize = 12.sp, color = TextSecundario, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(bean.altitude.ifBlank { "Altura sin registrar" }.let {
+                        if (bean.altitude.isNotBlank() && it.all { char -> char.isDigit() }) "$it m" else it
+                    }, fontSize = 12.sp, color = accent, fontWeight = FontWeight.Medium)
                 }
+                BeanFreshnessGraph(freshnessResult = freshness, compact = true)
             }
-
-            // Specs section
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                SpecChip(label = "Origen", value = bean.origin)
-                SpecChip(label = "Proceso", value = bean.process)
-                SpecChip(label = "Estado", value = bean.status)
+            TextButton(onClick = onDetailRequest, contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = accent)) {
+                Text("Cómo lo preparo", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Default.ChevronRight, null, Modifier.size(18.dp))
             }
-
-            // Continuous Degradation Graph
-            BeanFreshnessGraph(freshnessResult = freshnessResult)
-
-            // Warning if opened too long
-            if (freshnessResult.openWarning != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Advertencia.copy(alpha = 0.1f))
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = Advertencia, modifier = Modifier.size(13.dp))
-                    Text(text = freshnessResult.openWarning, fontSize = 10.sp, color = Advertencia, fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onEditSelected, modifier = Modifier.size(44.dp)) {
+                    Icon(Icons.Default.Edit, "Editar", Modifier.size(18.dp), tint = accent)
                 }
-            }
-
-            // Action Quick Buttons Row
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Disponible: ${bean.stockGrams} g",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = CafeCalidoOscuro
-                )
-                
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Edit bean
-                    IconButton(
-                        onClick = onEditSelected,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFF2F7F3))
-                    ) {
-                        Icon(imageVector = Icons.Default.Edit, contentDescription = "Editar", tint = TextSecundario, modifier = Modifier.size(16.dp))
-                    }
-
-                    // Lab
-                    IconButton(
-                        onClick = onLabSelected,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(AcentoSecundario.copy(alpha = 0.12f))
-                    ) {
-                        Icon(imageVector = Icons.Default.Science, contentDescription = "Usar en Laboratorio", tint = AcentoSecundario, modifier = Modifier.size(16.dp))
-                    }
-
-                    // Brew
-                    Button(
-                        onClick = onBrewSelected,
-                        modifier = Modifier.height(36.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal),
-                        shape = RoundedCornerShape(18.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.LocalCafe, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Preparar", fontSize = 11.sp, fontWeight = FontWeight.Black)
-                    }
-
-                    // Keep the built-in sample available.
-                    if (!bean.isSample) IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Borrar", tint = Advertencia.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-                    }
+                IconButton(onClick = onLabSelected, modifier = Modifier.size(44.dp)) {
+                    Icon(Icons.Default.Science, "Usar en Laboratorio", Modifier.size(18.dp), tint = accent)
+                }
+                Button(onClick = onBrewSelected, colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal),
+                    shape = RoundedCornerShape(22.dp), contentPadding = PaddingValues(horizontal = 14.dp),
+                    modifier = Modifier.heightIn(min = 44.dp)) {
+                    Icon(Icons.Default.LocalCafe, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Preparar", fontSize = 12.sp)
+                }
+                if (!bean.isSample) IconButton(onClick = onDelete, modifier = Modifier.size(44.dp)) {
+                    Icon(Icons.Default.Delete, "Borrar", Modifier.size(18.dp), tint = Advertencia)
                 }
             }
         }
     }
 }
-
 @Composable
 fun SpecChip(label: String, value: String) {
     Box(
@@ -1592,17 +1463,19 @@ fun BeanDetailSheet(
     onEdit: () -> Unit
 ) {
     val freshnessResult = remember(bean) { calculateBeanFreshness(bean.roastDate, bean.firstUseDate) }
+    var detailsExpanded by rememberSaveable(bean.id) { mutableStateOf(false) }
     
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color.White,
+        containerColor = SurfaceCard,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1616,23 +1489,41 @@ fun BeanDetailSheet(
                 ) {
                     Text(
                         text = bean.name,
+                        modifier = Modifier.weight(1f),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Black,
-                        color = TextPrincipal
+                        color = TextPrincipal,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     IconButton(onClick = onDismiss) {
                         Icon(imageVector = Icons.Default.Close, contentDescription = "Cerrar")
                     }
                 }
                 Text(
-                    text = "Tostador: ${bean.roaster.ifBlank { "N/A" }}",
-                    fontSize = 14.sp,
+                    text = "${bean.origin.ifBlank { "Origen sin registrar" }} · ${bean.altitude.ifBlank { "Altura sin registrar" }.let { if (it.all { char -> char.isDigit() }) "$it m" else it }}",
+                    fontSize = 12.sp,
                     color = TextSecundario,
                     fontWeight = FontWeight.Medium
                 )
+                Spacer(Modifier.height(8.dp))
+                BeanFreshnessGraph(freshnessResult, compact = true)
             }
             
             HorizontalDivider(color = BordeSuave.copy(alpha = 0.4f))
+
+            // Available directly from the coffee card, not hidden inside Edit.
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                com.example.ui.components.InventoryBeanBrewSettings(bean, viewModel)
+            }
+
+            TextButton(onClick = { detailsExpanded = !detailsExpanded }, modifier = Modifier.fillMaxWidth()) {
+                Text("Ficha completa", color = TextPrincipal)
+                Spacer(Modifier.weight(1f))
+                Icon(if (detailsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, tint = TextSecundario)
+            }
+            if (detailsExpanded) {
+            Text("Tostador: ${bean.roaster.ifBlank { "Sin tostador" }}", fontSize = 12.sp, color = TextSecundario)
             
             // Freshness Highlights
             Row(
@@ -1753,6 +1644,8 @@ fun BeanDetailSheet(
                 }
             }
 
+            }
+
             // Immediate actions Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1767,11 +1660,12 @@ fun BeanDetailSheet(
                         .weight(1f)
                         .height(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(imageVector = Icons.Default.LocalCafe, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("En Preparar", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("Preparar", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
 
                 Button(
@@ -1783,11 +1677,12 @@ fun BeanDetailSheet(
                         .weight(1f)
                         .height(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AcentoSecundario),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(imageVector = Icons.Default.Science, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Llevar a Lab", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("Laboratorio", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
 

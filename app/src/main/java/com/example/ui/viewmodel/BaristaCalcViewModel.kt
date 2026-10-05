@@ -39,7 +39,7 @@ enum class FreshnessState(val label: String, val colorHex: String, val microcopy
     NoDate("Sin fecha", "#60756A", "Agrega fecha de tostado para calcular frescura."),
     VeryFresh("Muy fresco", "#84AD92", "Muy fresco. Puede tener mucho gas; cuida el bloom."),
     InWindow("En ventana", "#3F7A63", "Buena ventana de uso. Perfil más estable."),
-    Ideal("Puntal ideal", "#C28B46", "Punto ideal para muchas preparaciones filtradas."),
+    Ideal("Punto ideal", "#C28B46", "Punto ideal para muchas preparaciones filtradas."),
     Declining("Bajando", "#B76545", "Va perdiendo expresión. Ajusta molienda o temperatura."),
     Old("Viejo", "#8C5A2B", "Perfil más plano. Úsalo pronto o para recetas con leche/frías.")
 }

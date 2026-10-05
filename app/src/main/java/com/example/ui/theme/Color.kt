@@ -8,6 +8,13 @@ import androidx.compose.runtime.mutableStateOf
 // Global theme state flag
 var isDarkThemeGlobal by mutableStateOf(false)
 
+// Stable per-lot identity, mirrored by CupaTheme.coffeeAccent (UUID ASCII sum).
+fun coffeeAccent(id: String): Color {
+    val index = id.lowercase().sumOf { it.code } % 4
+    return Color((if (isDarkThemeGlobal) listOf(0xFF8FC1A9, 0xFFF09A7D, 0xFFF0B35B, 0xFF85BEC4)
+        else listOf(0xFF234E3C, 0xFFA94F28, 0xFF965000, 0xFF2E646A))[index])
+}
+
 // Premium, warm 4-color dynamic variables matching base image
 var MainBackground by mutableStateOf(Color(0xFFF7F5F0))
 var MainBackgroundAlt by mutableStateOf(Color(0xFFEFECE6))
@@ -73,5 +80,4 @@ fun updateThemeColors(isDark: Boolean) {
         AcentoSuave = Color(0x1A234E3C) // Very soft forest green tint
     }
 }
-
 

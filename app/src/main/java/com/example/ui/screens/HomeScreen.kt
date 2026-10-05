@@ -55,25 +55,24 @@ fun HomeScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("app_quick_access_prefs", android.content.Context.MODE_PRIVATE) }
 
-    val allQuickAccessOptions = remember(onNavigateToSection) {
-        listOf(
-            QuickAccessOptionItem("cata", "Cata", Icons.Default.RateReview, CafeCalidoClaro) { onNavigateToSection("cata") },
-            QuickAccessOptionItem("lab", "Laboratorio", Icons.Default.Science, AcentoSecundario) { onNavigateToSection("lab") },
-            QuickAccessOptionItem("storage", "Almacén", Icons.Default.Inventory, CafeCalidoOscuro) { onNavigateToSection("storage") },
-            QuickAccessOptionItem("social", "Brew Hub", Icons.Default.Groups, Color(0xFFA15A95)) { onNavigateToSection("social") },
-            QuickAccessOptionItem("add_coffee", "Agregar Café", Icons.Default.Grass, AcentoPrincipal) { onNavigateToSection("storage") },
-            QuickAccessOptionItem("add_recipe", "Nueva Receta", Icons.AutoMirrored.Filled.MenuBook, CafeCalidoOscuro) { onNavigateToSection("storage") },
-            QuickAccessOptionItem("add_technique", "Nueva Técnica", V60Icon, AcentoSecundario) { onNavigateToSection("brew") },
-            QuickAccessOptionItem("add_grinder", "Registrar Molienda", Icons.Default.Tune, CafeCalidoClaro) { onNavigateToSection("storage") },
-            QuickAccessOptionItem("add_equipment", "Nuevo Equipo", Icons.Default.Handyman, TextSecundario) { onNavigateToSection("storage") }
-        )
+    var quickAction by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val allQuickAccessOptions = QuickAccessAction.entries.map { action ->
+        val icon = when (action) {
+            QuickAccessAction.ADD_COFFEE -> Icons.Default.Grass
+            QuickAccessAction.ADD_EQUIPMENT -> Icons.Default.Handyman
+            QuickAccessAction.SHARE_RECIPE -> Icons.Default.Share
+            QuickAccessAction.ADD_RECIPE -> Icons.AutoMirrored.Filled.MenuBook
+            QuickAccessAction.ADD_TECHNIQUE -> V60Icon
+            QuickAccessAction.ADD_GRINDER -> Icons.Default.Tune
+        }
+        QuickAccessOptionItem(action.id, action.title, icon,
+            if (action.ordinal % 2 == 0) Color(if (isDarkThemeGlobal) 0xFF8FC1A9 else 0xFF234E3C)
+            else Color(if (isDarkThemeGlobal) 0xFFF09A7D else 0xFFA94F28)) { quickAction = action.id }
     }
 
     var selectedAccessIds by remember {
-        val saved = prefs.getStringSet("selected_ids", null) ?: setOf("cata", "lab", "storage", "social")
-        mutableStateOf(saved)
+        mutableStateOf(QuickAccessAction.normalize(prefs.getStringSet("selected_ids", null) ?: QuickAccessAction.defaults))
     }
-
     var showCustomizeQuickAccessDialog by remember { mutableStateOf(false) }
 
     Box(
@@ -368,7 +367,7 @@ fun HomeScreen(
                                     end = Offset(600f, 600f)
                                 )
                             )
-                            .clickable { onNavigateToSection("brew") }
+                            .clickable { viewModel.onActionPrepare(); onNavigateToSection("brew") }
                             .padding(horizontal = 16.dp, vertical = 16.dp)
                     ) {
                         Canvas(modifier = Modifier.matchParentSize()) {
@@ -470,7 +469,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(Icons.Default.Tune, contentDescription = null, tint = AcentoPrincipal)
-                            Text("Personalizar Accesos Rápidos", fontWeight = FontWeight.Bold, color = TextPrincipal, fontSize = 16.sp)
+                            Text("Personalizar accesos rápidos", fontWeight = FontWeight.Bold, color = TextPrincipal, fontSize = 16.sp)
                         }
                     },
                     text = {
@@ -479,7 +478,7 @@ fun HomeScreen(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                "Selecciona las acciones directas que deseas tener a la mano en la pantalla de inicio:",
+                                "Elige tus acciones. Mantén al menos un acceso activo.",
                                 fontSize = 12.sp,
                                 color = TextSecundario,
                                 modifier = Modifier.padding(bottom = 6.dp)
@@ -492,12 +491,7 @@ fun HomeScreen(
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(if (isChecked) AcentoSuave else MainBackgroundAlt)
                                         .clickable {
-                                            val newSet = selectedAccessIds.toMutableSet()
-                                            if (isChecked) {
-                                                if (newSet.size > 1) newSet.remove(option.id)
-                                            } else {
-                                                newSet.add(option.id)
-                                            }
+                                            val newSet = QuickAccessAction.toggle(selectedAccessIds, option.id)
                                             selectedAccessIds = newSet
                                             prefs.edit().putStringSet("selected_ids", newSet).apply()
                                         }
@@ -532,13 +526,8 @@ fun HomeScreen(
                                     }
                                     Checkbox(
                                         checked = isChecked,
-                                        onCheckedChange = { checked ->
-                                            val newSet = selectedAccessIds.toMutableSet()
-                                            if (checked) {
-                                                newSet.add(option.id)
-                                            } else {
-                                                if (newSet.size > 1) newSet.remove(option.id)
-                                            }
+                                        onCheckedChange = { _ ->
+                                            val newSet = QuickAccessAction.toggle(selectedAccessIds, option.id)
                                             selectedAccessIds = newSet
                                             prefs.edit().putStringSet("selected_ids", newSet).apply()
                                         },
@@ -550,7 +539,7 @@ fun HomeScreen(
                     },
                     confirmButton = {
                         TextButton(onClick = { showCustomizeQuickAccessDialog = false }) {
-                            Text("Guardar", fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                            Text("Listo", fontWeight = FontWeight.Bold, color = AcentoPrincipal)
                         }
                     },
                     containerColor = SurfaceCard,
@@ -716,6 +705,10 @@ fun HomeScreen(
         }
     }
 }
+
+    androidx.compose.runtime.key(state.ownerScopeKey) {
+        QuickAccessActionHost(quickAction, viewModel, onDismiss = { quickAction = null }, onChangeAction = { quickAction = it })
+    }
 }
 
 @Composable
@@ -761,18 +754,19 @@ fun QuickAccessPill(
 ) {
     Row(
         modifier = modifier
+            .heightIn(min = 52.dp)
             .shadow(elevation = 1.dp, shape = RoundedCornerShape(18.dp), spotColor = accentColor.copy(alpha = 0.15f))
             .clip(RoundedCornerShape(18.dp))
             .background(MainBackgroundAlt.copy(alpha = 0.5f))
             .border(1.dp, BordeSuave, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(32.dp)
+                .size(24.dp)
                 .background(
                     Brush.linearGradient(
                         colors = listOf(accentColor.copy(alpha = 0.2f), accentColor.copy(alpha = 0.05f)),
@@ -792,7 +786,9 @@ fun QuickAccessPill(
         }
         Text(
             text = label,
+            modifier = Modifier.weight(1f),
             fontSize = 12.sp,
+            lineHeight = 16.sp,
             fontWeight = FontWeight.Bold,
             color = TextPrincipal
         )

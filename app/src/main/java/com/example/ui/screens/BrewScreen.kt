@@ -1074,7 +1074,7 @@ fun CreateTechniqueFormView(
         ) {
             // Header with ambient glow blob
             FormHeaderWithBlob(
-                title = "Preparar Café",
+                title = "Nueva técnica",
                 subtitle = "Crear nueva técnica de extracción con temporizador guiado",
                 icon = V60Icon,
                 onClose = onDone

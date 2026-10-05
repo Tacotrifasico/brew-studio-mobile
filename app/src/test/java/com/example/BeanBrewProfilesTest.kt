@@ -18,6 +18,39 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class BeanBrewProfilesTest {
+    @Test fun methodStartingPointsStaySeparateFromSavedBeanFavorites() {
+        val expected = mapOf("V60" to (22 to 92), "AeroPress" to (18 to 88), "Prensa francesa" to (28 to 94),
+            "Chemex" to (26 to 93), "Espresso" to (8 to 93), "Moka" to (12 to 90), "Cold brew" to (32 to 20))
+        expected.forEach { (method, values) ->
+            val profile = BeanBrewProfiles.resolve("{}", method)
+            assertEquals(values.first, profile.clicks); assertEquals(values.second, profile.temperatureC)
+            assertNull(BeanBrewProfiles.read("{}", method))
+        }
+        val stored = BeanBrewProfiles.write("{}", BeanBrewProfile("V60", 31, 89))
+        assertEquals(31, BeanBrewProfiles.resolve(stored, "v60").clicks)
+        assertEquals(18, BeanBrewProfiles.resolve(stored, "AeroPress").clicks)
+        assertEquals(89, BeanBrewProfiles.resolve(stored, "V60").temperatureC)
+    }
+
+    @Test fun switchingMethodsRecallsBeanFavoritesImmediatelyWithoutPrepareButton() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val bean = Bean(roaster = "", name = "Por método", origin = "", altitude = "", process = "", roastDate = "", firstUseDate = "", notes = "", stockGrams = 100f,
+            brewProfilesJSON = BeanBrewProfiles.write(BeanBrewProfiles.write("{}", BeanBrewProfile("V60", 27, 91)), BeanBrewProfile("AeroPress", 16, 86)))
+        runBlocking { AppDatabase.getDatabase(app).beanDao().insertBean(bean) }
+        val model = BaristaCalcViewModel(app)
+        await { model.state.value.beansList.any { it.id == bean.id } }
+        model.selectCalculatorBean(bean.id)
+        model.onMethodSelected("AeroPress")
+        assertEquals(16, model.state.value.activePrepClicks); assertEquals(86, model.state.value.activePrepTemp)
+        model.onMethodSelected("Chemex")
+        assertEquals(26, model.state.value.activePrepClicks); assertEquals(93, model.state.value.activePrepTemp)
+        assertNull(BeanBrewProfiles.read(model.state.value.beansList.first { it.id == bean.id }.brewProfilesJSON, "Chemex"))
+        model.onMethodSelected("V60")
+        assertEquals(27, model.state.value.activePrepClicks); assertEquals(91, model.state.value.activePrepTemp)
+        model.onActionLab()
+        assertEquals(27, model.state.value.labClicks); assertEquals(91, model.state.value.labTemp)
+    }
+
     @Test fun profilesArePerMethodAndDoNotEraseOtherAssociations() {
         val first = BeanBrewProfiles.write("{}", BeanBrewProfile("Prensa francesa", 26, 90))
         val second = BeanBrewProfiles.write(first, BeanBrewProfile("V60", 22, 94))
@@ -84,8 +117,8 @@ class BeanBrewProfilesTest {
         await { model.state.value.beansList.any { it.id == other.id } }
         model.selectCalculatorBean(other.id)
         model.onActionPrepare()
-        assertEquals(93, model.state.value.activePrepTemp)
-        assertEquals(18, model.state.value.activePrepClicks)
+        assertEquals(92, model.state.value.activePrepTemp)
+        assertEquals(22, model.state.value.activePrepClicks)
         model.selectCalculatorBean(bean.id)
         model.startTimer()
         model.selectCalculatorBean(other.id)

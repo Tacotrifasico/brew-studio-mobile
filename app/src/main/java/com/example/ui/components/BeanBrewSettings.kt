@@ -54,7 +54,7 @@ fun CalculatorBeanBack(viewModel: BaristaCalcViewModel) {
 
 @Composable
 fun BeanMethodSettings(bean: Bean, method: String, fahrenheit: Boolean, viewModel: BaristaCalcViewModel) {
-    val profile = BeanBrewProfiles.read(bean.brewProfilesJSON, method) ?: BeanBrewProfile(method)
+    val profile = BeanBrewProfiles.resolve(bean.brewProfilesJSON, method)
     var saving by remember(bean.id, method) { mutableStateOf(false) }
     var error by remember(bean.id, method) { mutableStateOf(false) }
     fun save(clicks: Int, temperature: Int) {
@@ -64,7 +64,10 @@ fun BeanMethodSettings(bean: Bean, method: String, fahrenheit: Boolean, viewMode
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     BeanSettingsControls(profile, fahrenheit, saving, onClicks = { save(it, profile.temperatureC) },
         onTemperature = { save(profile.clicks, it) })
-    Text(when { error -> "No se guardó. Vuelve a ajustar para reintentar."; saving -> "Guardando…"; BeanBrewProfiles.read(bean.brewProfilesJSON, method) != null -> "Guardado para este grano · $method"; else -> "Ajusta para guardar tu punto favorito." }, fontSize = 12.sp, color = TextSecundario)
+    if (BeanBrewProfiles.read(bean.brewProfilesJSON, method) == null && !saving && !error) {
+        Text("Punto inicial · calibra según tu molino.", fontSize = 12.sp, color = TextSecundario)
+        TextButton(onClick = { save(profile.clicks, profile.temperatureC) }) { Text("Guardar favorito", color = TextPrincipal) }
+    } else Text(when { error -> "No se guardó. Vuelve a ajustar para reintentar."; saving -> "Guardando…"; else -> "Guardado para este grano · $method" }, fontSize = 12.sp, color = TextSecundario)
     }
 }
 

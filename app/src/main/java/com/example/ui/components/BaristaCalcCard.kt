@@ -55,7 +55,7 @@ import com.example.ui.viewmodel.RatioCategory
 
 /** Compact, mirrored two-sided affordance; method/ratio remain in the result panel. */
 @Composable
-private fun CalculatorFlipHeader(back: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+private fun CalculatorFlipHeader(back: Boolean, enabled: Boolean = true, detail: String? = null, onClick: () -> Unit) {
     val tint = Color(if (isDarkThemeGlobal) 0xFFF09A7D else 0xFFA94F28)
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
         .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
@@ -65,7 +65,7 @@ private fun CalculatorFlipHeader(back: Boolean, enabled: Boolean = true, onClick
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("Calculadora barista", fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                 fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = TextPrincipal)
-            if (enabled) Text(if (back) "Volver al cálculo" else "Ver reverso",
+            if (enabled) Text(if (back) "Volver al cálculo" else if (detail != null) "Ver reverso · $detail" else "Ver reverso",
                 fontSize = 11.sp, fontWeight = FontWeight.Medium, color = tint)
         }
         if (enabled) Box(Modifier.size(36.dp).clip(CircleShape)
@@ -180,7 +180,14 @@ fun BaristaCalcCard(
                 backContent()
             } else {
             // --- HEADER ---
-            CalculatorFlipHeader(back = false, enabled = backContent != null) { focusManager.clearFocus(); flipped = true }
+            val profile = state.beansList.firstOrNull { it.id == state.calculatorBeanId }?.let {
+                com.example.data.database.BeanBrewProfiles.resolve(it.brewProfilesJSON, state.method)
+            }
+            val preview = profile?.let {
+                val temperature = if (state.useFahrenheit) "${kotlin.math.round(it.temperatureC * 1.8 + 32).toInt()} °F" else "${it.temperatureC} °C"
+                "${it.clicks} clics · $temperature"
+            }
+            CalculatorFlipHeader(back = false, enabled = backContent != null, detail = preview) { focusManager.clearFocus(); flipped = true }
 
             Spacer(modifier = Modifier.height(12.dp))
 

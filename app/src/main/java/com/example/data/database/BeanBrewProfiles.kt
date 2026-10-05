@@ -10,6 +10,22 @@ import java.util.Locale
 data class BeanBrewProfile(val methodName: String, val clicks: Int = 18, val temperatureC: Int = 93)
 
 object BeanBrewProfiles {
+    /** Configurable starting points, not universal grinder calibration or saved favorites. */
+    fun startingPoint(method: String): BeanBrewProfile {
+        val (clicks, temperature) = when (key(method)) {
+            "v60" -> 22 to 92
+            "aeropress" -> 18 to 88
+            "prensa francesa" -> 28 to 94
+            "chemex" -> 26 to 93
+            "espresso" -> 8 to 93
+            "moka" -> 12 to 90
+            "cold brew" -> 32 to 20
+            else -> 18 to 93
+        }
+        return BeanBrewProfile(method, clicks, temperature)
+    }
+    fun resolve(json: String, method: String): BeanBrewProfile = read(json, method) ?: startingPoint(method)
+
     fun key(method: String): String = Normalizer.normalize(method.trim(), Normalizer.Form.NFD)
         .replace(Regex("\\p{M}"), "").lowercase(Locale.ROOT)
 

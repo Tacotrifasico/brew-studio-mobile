@@ -821,7 +821,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
         val currentVal = _state.value
         if (currentVal.timerRunning) { showToast("Tu preparación sigue activa. Cancélala antes de cambiar sus datos."); return }
         val bean = currentVal.beansList.firstOrNull { it.id == currentVal.calculatorBeanId }
-        val profile = bean?.let { BeanBrewProfiles.read(it.brewProfilesJSON, currentVal.method) }
+        val profile = bean?.let { BeanBrewProfiles.resolve(it.brewProfilesJSON, currentVal.method) }
         val keepSelectedTechnique = currentVal.activePrepMethod.equals(currentVal.method, ignoreCase = true) &&
             currentVal.activePrepSteps.isNotEmpty()
         // Envia variables a Preparar
@@ -846,7 +846,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun onActionLab() {
         val bean = _state.value.beansList.firstOrNull { it.id == _state.value.calculatorBeanId }
-        val profile = bean?.let { BeanBrewProfiles.read(it.brewProfilesJSON, _state.value.method) }
+        val profile = bean?.let { BeanBrewProfiles.resolve(it.brewProfilesJSON, _state.value.method) }
         // Envia variables a Laboratorio
         _state.update { it.copy(
             labMethod = it.method,
@@ -943,7 +943,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
                     BrewTechniqueCatalog.scaleSteps(sourceSteps, current.activePrepWater, updated.water)
                 } else sourceSteps
                 val bean = updated.beansList.firstOrNull { it.id == updated.calculatorBeanId }
-                val profile = bean?.let { BeanBrewProfiles.read(it.brewProfilesJSON, updated.method) }
+                val profile = bean?.let { BeanBrewProfiles.resolve(it.brewProfilesJSON, updated.method) }
                 val keepBeanContext = selectedStillMatches && current.activePrepBeanId == bean?.id
                 updated.copy(
                     activePrepMethod = updated.method,

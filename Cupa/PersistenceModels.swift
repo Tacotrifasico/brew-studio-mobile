@@ -244,6 +244,21 @@ struct BeanBrewProfile: Codable, Equatable {
     let methodName: String
     let clicks: Int
     let temperatureC: Int
+    // Mirrored starting points; clicks must be calibrated to the user's grinder.
+    static func startingPoint(for method: String) -> BeanBrewProfile {
+        let values: (Int, Int)
+        switch key(method) {
+        case "v60": values = (22, 92)
+        case "aeropress": values = (18, 88)
+        case "prensa francesa": values = (28, 94)
+        case "chemex": values = (26, 93)
+        case "espresso": values = (8, 93)
+        case "moka": values = (12, 90)
+        case "cold brew": values = (32, 20)
+        default: values = (18, 93)
+        }
+        return .init(methodName: method, clicks: values.0, temperatureC: values.1)
+    }
     init(methodName: String, clicks: Int = 18, temperatureC: Int = 93) {
         self.methodName = methodName
         self.clicks = min(200, max(1, clicks))
@@ -292,6 +307,10 @@ final class CoffeeBeanRecord: NSManagedObject {
               let profiles = try? JSONDecoder().decode([String: BeanBrewProfile].self, from: data),
               let value = profiles[BeanBrewProfile.key(method)] else { return nil }
         return BeanBrewProfile(methodName: value.methodName, clicks: value.clicks, temperatureC: value.temperatureC)
+    }
+
+    func effectiveBrewProfile(for method: String) -> BeanBrewProfile {
+        brewProfile(for: method) ?? .startingPoint(for: method)
     }
 
     func setBrewProfile(_ profile: BeanBrewProfile) throws {

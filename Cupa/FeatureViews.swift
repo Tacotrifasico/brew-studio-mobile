@@ -302,7 +302,7 @@ private struct BeanMethodSettings: View {
     let method: String
     let unit: TemperatureUnit
     @State private var saveError: String?
-    private var profile: BeanBrewProfile { bean.brewProfile(for: method) ?? .init(methodName: method) }
+    private var profile: BeanBrewProfile { bean.effectiveBrewProfile(for: method) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -322,8 +322,14 @@ private struct BeanMethodSettings: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(12).background(CupaTheme.backgroundAlt).clipShape(RoundedRectangle(cornerRadius: 14))
-            Text(saveError ?? (bean.brewProfile(for: method) == nil ? "Ajusta para guardar tu punto favorito." : "Guardado para este grano · \(method)"))
-                .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+            if bean.brewProfile(for: method) == nil && saveError == nil {
+                Text("Punto inicial · calibra según tu molino.").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                Button("Guardar favorito") { save(clicks: profile.clicks, temperature: profile.temperatureC) }
+                    .font(.subheadline).foregroundStyle(CupaTheme.text).frame(minHeight: 44)
+            } else {
+                Text(saveError ?? "Guardado para este grano · \(method)")
+                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+            }
         }
     }
 
@@ -400,7 +406,7 @@ private struct BaristaCalculatorCard: View {
                     Text("Calculadora barista")
                         .font(.system(size: 17, weight: .semibold, design: .serif))
                         .foregroundStyle(CupaTheme.text)
-                    Text(back ? "Volver al cálculo" : "Ver reverso")
+                    Text(back ? "Volver al cálculo" : flipHint)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(CupaTheme.terracottaText)
                 }
@@ -417,6 +423,12 @@ private struct BaristaCalculatorCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(back ? "Calculadora barista. Volver al cálculo" : "Calculadora barista. Ver ajustes del grano")
+    }
+
+    private var flipHint: String {
+        guard let profile = calculator.selectedBeanProfile else { return "Ver reverso" }
+        let temperature = settings.temperatureUnit == .celsius ? "\(profile.temperatureC) °C" : "\(Int((Double(profile.temperatureC) * 1.8 + 32).rounded())) °F"
+        return "Ver reverso · \(profile.clicks) clics · \(temperature)"
     }
 
     private var backCard: some View {

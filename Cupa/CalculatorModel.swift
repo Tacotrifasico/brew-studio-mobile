@@ -41,7 +41,7 @@ final class CalculatorModel: ObservableObject {
     static let coffeeRange = 1.0...100.0
     static let ratioRange = 1.0...40.0
     static let waterRange = 10...2_000
-    @Published var method = "V60" { didSet { selectedBeanProfile = selectedBean?.brewProfile(for: method) } }
+    @Published var method = "V60" { didSet { selectedBeanProfile = selectedBean?.effectiveBrewProfile(for: method) } }
     private weak var selectedBean: CoffeeBeanRecord?
     @Published private(set) var selectedMethodId: UUID?
     @Published var coffee = 15.0
@@ -110,7 +110,7 @@ final class CalculatorModel: ObservableObject {
     }
 
     func selectBean(_ bean: CoffeeBeanRecord?) {
-        let nextProfile = bean?.brewProfile(for: method)
+        let nextProfile = bean?.effectiveBrewProfile(for: method)
         let changed = selectedBeanId != bean?.id || selectedBeanProfile != nextProfile
         selectedBean = bean
         selectedBeanId = bean?.id

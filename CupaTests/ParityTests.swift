@@ -1666,6 +1666,43 @@ final class EntitySyncTests: XCTestCase {
 }
 
 final class NavigationAndThemeTests: XCTestCase {
+    @MainActor func testGrainMethodFavoritesOverrideDistinctStartingPointsAndTransferImmediately() throws {
+        let persistence = PersistenceController(inMemory: true)
+        let context = persistence.container.viewContext
+        let bean = CoffeeBeanRecord(context: context, name: "Por método", brand: "", remainingQuantityGrams: 100)
+        let suite = "BeanMethodFavorites.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let calculator = CalculatorModel(defaults: defaults)
+        calculator.selectBean(bean)
+        let expected = [("V60", 22, 92), ("AeroPress", 18, 88), ("Prensa francesa", 28, 94), ("Chemex", 26, 93), ("Espresso", 8, 93), ("Moka", 12, 90), ("Cold brew", 32, 20)]
+        for (method, clicks, temperature) in expected {
+            calculator.selectMethod(method)
+            XCTAssertEqual(calculator.selectedBeanProfile?.clicks, clicks)
+            XCTAssertEqual(calculator.selectedBeanProfile?.temperatureC, temperature)
+            XCTAssertNil(bean.brewProfile(for: method))
+        }
+        try bean.setBrewProfile(.init(methodName: "V60", clicks: 27, temperatureC: 91))
+        try bean.setBrewProfile(.init(methodName: "AeroPress", clicks: 16, temperatureC: 86))
+        try context.save()
+        calculator.selectBean(bean)
+        calculator.selectMethod("AeroPress")
+        XCTAssertEqual(calculator.selectedBeanProfile?.clicks, 16)
+        XCTAssertEqual(calculator.selectedBeanProfile?.temperatureC, 86)
+        calculator.selectMethod("V60")
+        let preparation = PreparationModel()
+        preparation.load(calculator: calculator)
+        XCTAssertEqual(preparation.state.temperatureC, 91)
+        XCTAssertEqual(preparation.state.grindDescription, "27 clics")
+        calculator.selectMethod("Chemex")
+        XCTAssertNil(bean.brewProfile(for: "Chemex"))
+        calculator.selectMethod("V60")
+        XCTAssertEqual(calculator.selectedBeanProfile?.clicks, 27)
+        let restored = CalculatorModel(defaults: defaults)
+        restored.selectBean(bean); restored.selectMethod("AeroPress")
+        XCTAssertEqual(restored.selectedBeanProfile?.temperatureC, 86)
+    }
+
     func testQuickAccessCatalogAndMinimumSelectionMatchAndroid() {
         XCTAssertEqual(QuickAccessAction.allCases.map(\.rawValue), ["add_coffee", "add_equipment", "share_recipe", "add_recipe", "add_technique", "add_grinder"])
         XCTAssertEqual(QuickAccessAction.normalize(["cata", "storage"]), QuickAccessAction.defaults)

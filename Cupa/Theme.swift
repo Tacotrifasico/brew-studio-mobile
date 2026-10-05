@@ -1,6 +1,37 @@
 import SwiftUI
 import UIKit
 
+// Same IDs, default order and minimum selection as Android QuickAccessAction.
+enum QuickAccessAction: String, CaseIterable, Identifiable {
+    case addCoffee = "add_coffee", addEquipment = "add_equipment", shareRecipe = "share_recipe"
+    case addRecipe = "add_recipe", addTechnique = "add_technique", addGrinder = "add_grinder"
+    var id: String { rawValue }
+    static let defaults: Set<String> = ["add_coffee", "add_equipment", "share_recipe", "add_recipe"]
+    static func normalize(_ ids: Set<String>) -> Set<String> {
+        let valid = ids.intersection(Set(allCases.map(\.rawValue)))
+        return valid.isEmpty ? defaults : valid
+    }
+    static func toggle(_ ids: Set<String>, _ id: String) -> Set<String> {
+        var current = normalize(ids)
+        guard allCases.contains(where: { $0.rawValue == id }) else { return current }
+        if current.contains(id) { if current.count > 1 { current.remove(id) } } else { current.insert(id) }
+        return current
+    }
+    var title: String {
+        switch self {
+        case .addCoffee: "Agregar grano"; case .addEquipment: "Agregar instrumento"; case .shareRecipe: "Compartir receta"
+        case .addRecipe: "Nueva receta"; case .addTechnique: "Nueva técnica"; case .addGrinder: "Agregar molino"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .addCoffee: "leaf"; case .addEquipment: "wrench.and.screwdriver"; case .shareRecipe: "square.and.arrow.up"
+        case .addRecipe: "book"; case .addTechnique: "drop"; case .addGrinder: "dial.low"
+        }
+    }
+    var color: Color { [Self.addCoffee, .shareRecipe, .addTechnique].contains(self) ? CupaTheme.forestText : CupaTheme.terracottaText }
+}
+
 enum CupaPalette {
     enum Light {
         static let background: UInt = 0xF7F5F0, backgroundAlt: UInt = 0xEFECE6, card: UInt = 0xFFFFFF

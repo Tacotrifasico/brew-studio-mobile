@@ -402,7 +402,7 @@ private struct TechniqueDetailView: View {
     }
 }
 
-private struct RecipeEditorView: View {
+struct RecipeEditorView: View {
     @Environment(\.dismiss) private var dismiss; @Environment(\.managedObjectContext) private var context
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "equipmentType == 'BREWER_METHOD'"))) private var methods: FetchedResults<EquipmentRecord>
     let recipe: RecipeRecord?
@@ -544,7 +544,7 @@ private struct RecipeImporterView: View {
     }
 }
 
-private struct TechniqueEditorView: View {
+struct TechniqueEditorView: View {
     @Environment(\.dismiss) private var dismiss; @Environment(\.managedObjectContext) private var context
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>

@@ -1666,6 +1666,27 @@ final class EntitySyncTests: XCTestCase {
 }
 
 final class NavigationAndThemeTests: XCTestCase {
+    func testQuickAccessCatalogAndMinimumSelectionMatchAndroid() {
+        XCTAssertEqual(QuickAccessAction.allCases.map(\.rawValue), ["add_coffee", "add_equipment", "share_recipe", "add_recipe", "add_technique", "add_grinder"])
+        XCTAssertEqual(QuickAccessAction.normalize(["cata", "storage"]), QuickAccessAction.defaults)
+        XCTAssertEqual(QuickAccessAction.normalize(["storage", "add_equipment"]), ["add_equipment"])
+        XCTAssertEqual(QuickAccessAction.toggle(["share_recipe"], "share_recipe"), ["share_recipe"])
+        let selection = QuickAccessAction.toggle(["share_recipe"], "add_coffee")
+        XCTAssertEqual(QuickAccessAction.normalize(Set(selection.sorted().joined(separator: ",").split(separator: ",").map(String.init))), selection)
+    }
+
+    func testRecipeShareTextIncludesIngredientsStepsAndTimingWithoutIdentifiers() {
+        var draft = RecipeDraftModel()
+        draft.name = "V60 dulce"; draft.intention = "Taza redonda"; draft.suggestedMethodName = "V60"
+        draft.ingredients = [RecipeIngredientDraft(name: "Café", amount: 15, unit: "GRAMS"), RecipeIngredientDraft(name: "Agua", amount: 240, unit: "MILLILITERS")]
+        draft.steps = [RecipeStepDraft(instruction: "Bloom 45 ml", durationSeconds: 30), RecipeStepDraft(instruction: "Agregar 195 ml")]
+        let text = recipeShareText(draft)
+        for value in ["V60 dulce", "15 g", "240 ml", "Bloom 45 ml", "30 s", "Agregar 195 ml", "Método: V60"] {
+            XCTAssertTrue(text.contains(value))
+        }
+        XCTAssertFalse(text.contains(draft.id.uuidString))
+    }
+
     func testWarmSpecialtyCanvasUsesCanonicalLightTokens() {
         XCTAssertEqual(CupaPalette.Light.background, 0xF7F5F0)
         XCTAssertEqual(CupaPalette.Light.backgroundAlt, 0xEFECE6)

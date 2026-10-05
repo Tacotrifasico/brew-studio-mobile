@@ -151,7 +151,7 @@ struct EquipmentInventoryView: View {
     }
 }
 
-private struct GrinderDraft {
+struct GrinderDraft {
     var name: String; var brand: String; var model: String; var type: String; var unit: String
     var minimum: Int; var maximum: Int; var calibration: String; var notes: String
 
@@ -191,7 +191,7 @@ private struct GrinderEditorFormDraft: Codable, Equatable {
     }
 }
 
-private struct GrinderEditor: View {
+struct GrinderEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var context
     let record: GrinderRecord?
@@ -321,7 +321,7 @@ private struct GrinderDetailView: View {
     private var identity: String { [grinder.brand, grinder.model].filter { !$0.isEmpty }.joined(separator: " · ") }
 }
 
-private struct EquipmentDraft {
+struct EquipmentDraft {
     var name: String; var type: String; var brand: String; var model: String; var capacity: Int?
     var configuration: String; var notes: String; var favorite: Bool; var active: Bool
     func insert(in context: NSManagedObjectContext) -> EquipmentRecord { EquipmentRecord(context: context, name: name, equipmentType: type, brand: brand, model: model, capacityMl: capacity, configuration: configuration, notes: notes, isFavorite: favorite, isActive: active) }
@@ -354,7 +354,7 @@ private struct EquipmentEditorFormDraft: Codable, Equatable {
     }
 }
 
-private struct EquipmentEditor: View {
+struct EquipmentEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var context
     let record: EquipmentRecord?; let onSave: (EquipmentDraft) -> Bool

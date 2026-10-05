@@ -2,7 +2,51 @@ import SwiftUI
 import CoreData
 import UIKit
 
+// Plain-text handoff through the system share sheet; no automatic feed publication.
+func recipeShareText(_ draft: RecipeDraftModel) -> String {
+    let units = ["GRAMS": "g", "MILLILITERS": "ml", "UNITS": "uds", "TEASPOONS": "cdta", "TABLESPOONS": "cda", "OUNCES": "oz"]
+    return ["Brew Studio · \(draft.name)", draft.intention,
+        draft.suggestedMethodName.isEmpty ? "" : "Método: \(draft.suggestedMethodName)",
+        "Ingredientes", draft.ingredients.map { "\($0.amount.formatted(.number.precision(.fractionLength(0...2)))) \(units[$0.unit] ?? $0.unit) · \($0.name)" }.joined(separator: "\n"),
+        "Pasos", draft.steps.enumerated().map { "\($0.offset + 1). \($0.element.instruction)" + ($0.element.durationSeconds.map { " (\($0) s)" } ?? "") }.joined(separator: "\n"),
+        draft.tags.isEmpty ? "" : "Etiquetas: \(draft.tags)"].filter { !$0.isEmpty }.joined(separator: "\n\n")
+}
+
+private struct QuickRecipeShareView: View {
+    @Environment(\.dismiss) private var dismiss
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeIngredientRecord.orderIndex, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var ingredients: FetchedResults<RecipeIngredientRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeStepRecord.stepNumber, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var steps: FetchedResults<RecipeStepRecord>
+    let onCreateRecipe: () -> Void
+    var body: some View {
+        NavigationStack {
+            List {
+                if recipes.isEmpty {
+                    Text("Aún no tienes recetas. Crea una para poder compartirla.")
+                    Button("Nueva receta", action: onCreateRecipe)
+                } else {
+                    Text("Elige una receta para compartir desde tu teléfono.").font(.subheadline)
+                    ForEach(recipes) { recipe in
+                        ShareLink(item: text(recipe)) { Label(recipe.name, systemImage: "square.and.arrow.up") }
+                    }
+                }
+            }.brewScrollableCanvas()
+            .navigationTitle("Compartir receta").navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("Cerrar") { dismiss() } }
+        }
+    }
+    private func text(_ recipe: RecipeRecord) -> String {
+        var draft = RecipeDraftModel()
+        draft.name = recipe.name; draft.intention = recipe.intention; draft.tags = recipe.tags
+        draft.suggestedMethodName = recipe.suggestedMethodName
+        draft.ingredients = ingredients.filter { $0.recipeId == recipe.id }.map { RecipeIngredientDraft(name: $0.name, amount: $0.amount, unit: $0.unit) }
+        draft.steps = steps.filter { $0.recipeId == recipe.id }.map { RecipeStepDraft(instruction: $0.instruction, durationSeconds: $0.durationSeconds) }
+        return recipeShareText(draft)
+    }
+}
+
 struct HomeView: View {
+    @Environment(\.managedObjectContext) private var context
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CupSessionRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var cups: FetchedResults<CupSessionRecord>
@@ -20,12 +64,10 @@ struct HomeView: View {
     @State private var showNotifications = false
     @State private var showHub = false
 
-    private let shortcuts: [(String, String, CupaTab, Color)] = [
-        ("Cata", "heart.text.square", .tasting, CupaTheme.terracotta),
-        ("Laboratorio", "flask", .lab, CupaTheme.gold),
-        ("Almacén", "shippingbox", .storage, CupaTheme.forest),
-        ("Preparar", "mug", .brew, CupaTheme.terracotta)
-    ]
+    @AppStorage("brew.quickAccess.v2") private var storedAccesses = ""
+    @State private var showCustomizeAccesses = false
+    @State private var quickAction: QuickAccessAction?
+    private var selectedAccesses: Set<String> { QuickAccessAction.normalize(Set(storedAccesses.split(separator: ",").map(String.init))) }
 
     var body: some View {
         ZStack {
@@ -66,23 +108,32 @@ struct HomeView: View {
                     )
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Accesos rápidos")
-                            .font(.title3.bold())
+                        HStack {
+                            Text("Accesos rápidos").font(.title3.bold())
+                            Spacer()
+                            Button { showCustomizeAccesses = true } label: {
+                                Label("Personalizar", systemImage: "slider.horizontal.3").font(.caption.bold())
+                            }.foregroundStyle(CupaTheme.forestText)
+                        }
+                        Button {
+                            preparation.load(calculator: calculator); selection = .brew
+                        } label: {
+                            Label("Preparar extracción", systemImage: "play.circle")
+                                .font(.subheadline.bold()).frame(maxWidth: .infinity, minHeight: 48)
+                                .foregroundStyle(CupaTheme.onAccent).background(CupaTheme.forest, in: RoundedRectangle(cornerRadius: 18))
+                        }
                         LazyVGrid(columns: [.init(.flexible()), .init(.flexible())], spacing: 12) {
-                            ForEach(shortcuts, id: \.0) { item in
-                                Button { selection = item.2 } label: {
-                                    VStack(alignment: .leading, spacing: 14) {
-                                        Image(systemName: item.1)
-                                            .font(.title2)
-                                            .foregroundStyle(item.3)
-                                        Text(item.0)
-                                            .font(.subheadline.weight(.semibold))
+                            ForEach(QuickAccessAction.allCases.filter { selectedAccesses.contains($0.rawValue) }) { item in
+                                Button { quickAction = item } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: item.icon).foregroundStyle(item.color)
+                                        Text(item.title).font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(CupaTheme.text)
                                     }
-                                    .frame(maxWidth: .infinity, minHeight: 90, alignment: .leading)
-                                    .padding(14)
+                                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                                    .padding(.horizontal, 10)
                                     .background(CupaTheme.card)
-                                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
                                 }
                             }
                         }
@@ -99,6 +150,41 @@ struct HomeView: View {
         .sheet(isPresented: $showSettings) { SettingsView(model: settings, account: account) }
         .alert("Notificaciones", isPresented: $showNotifications) { Button("Cerrar", role: .cancel) {} } message: { Text("Sin notificaciones nuevas") }
         .sheet(isPresented: $showHub) { HubView(account: account) }
+        .sheet(isPresented: $showCustomizeAccesses) {
+            NavigationStack {
+                List {
+                    Section { Text("Elige tus acciones. Mantén al menos un acceso activo.").font(.subheadline) }
+                    ForEach(QuickAccessAction.allCases) { action in
+                        Toggle(isOn: Binding(get: { selectedAccesses.contains(action.rawValue) }, set: { _ in
+                            storedAccesses = QuickAccessAction.toggle(selectedAccesses, action.rawValue).sorted().joined(separator: ",")
+                        })) { Label(action.title, systemImage: action.icon) }
+                        .tint(CupaTheme.forest)
+                        .disabled(selectedAccesses.count == 1 && selectedAccesses.contains(action.rawValue))
+                    }
+                }.brewScrollableCanvas()
+                .navigationTitle("Personalizar accesos rápidos").navigationBarTitleDisplayMode(.inline)
+                .toolbar { Button("Listo") { showCustomizeAccesses = false } }
+            }
+        }
+        .sheet(item: $quickAction) { action in
+            switch action {
+            case .addCoffee: CoffeeBeanEditor(record: nil) { draft in
+                _ = draft.makeRecord(in: context)
+                do { try context.save(); return nil } catch { context.rollback(); return error.localizedDescription }
+            }
+            case .addEquipment: EquipmentEditor(record: nil) { draft in
+                _ = draft.insert(in: context)
+                do { try context.save(); return true } catch { context.rollback(); return false }
+            }
+            case .addGrinder: GrinderEditor(record: nil) { draft in
+                _ = draft.insert(in: context)
+                do { try context.save(); return true } catch { context.rollback(); return false }
+            }
+            case .addRecipe: RecipeEditorView(recipe: nil)
+            case .addTechnique: TechniqueEditorView(technique: nil)
+            case .shareRecipe: QuickRecipeShareView { quickAction = .addRecipe }
+            }
+        }
     }
 
     private var workshopStatusCard: some View {

@@ -1606,7 +1606,7 @@ private struct CoffeeBeanDetail: View {
                         Button { onPrepare(); dismiss() } label: { Label("Preparar", systemImage: "mug") }
                             .buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
                         Spacer()
-                        Button { onLab(); dismiss() } label: { Label("Llevar a Lab", systemImage: "flask") }
+                        Button { onLab(); dismiss() } label: { Label("Laboratorio", systemImage: "flask") }
                             .buttonStyle(.bordered).tint(CupaTheme.terracotta)
                     }
                     if record.inventoryStatus == .closed {

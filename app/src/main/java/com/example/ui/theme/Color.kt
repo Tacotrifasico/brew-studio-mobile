@@ -9,16 +9,16 @@ import androidx.compose.runtime.mutableStateOf
 var isDarkThemeGlobal by mutableStateOf(false)
 
 // Premium, warm 4-color dynamic variables matching base image
-var MainBackground by mutableStateOf(Color(0xFFF4F1EA))
-var MainBackgroundAlt by mutableStateOf(Color(0xFFEBE6DC))
+var MainBackground by mutableStateOf(Color(0xFFF7F5F0))
+var MainBackgroundAlt by mutableStateOf(Color(0xFFEFECE6))
 var MainBackgroundLight by mutableStateOf(Color(0xFFDFD8CC))
 
 var SurfaceCard by mutableStateOf(Color(0xFFFFFFFF))
 
-var TextPrincipal by mutableStateOf(Color(0xFF1A1C1A))
+var TextPrincipal by mutableStateOf(Color(0xFF1E1A17))
 var TextSecundario by mutableStateOf(Color(0xFF5A655D))
 
-var BordeSuave by mutableStateOf(Color(0xFFE2DDD2))
+var BordeSuave by mutableStateOf(Color(0xFFE6DFD5))
 var BordeMedio by mutableStateOf(Color(0xFFD0C8B8))
 
 var AcentoSuave by mutableStateOf(Color(0x1A234E3C))
@@ -31,7 +31,7 @@ val AcentoSecundario = Color(0xFFC86D51) // Warm Terracotta Accent
 val CafeCalidoOscuro = Color(0xFFB85D42) // Rich terracotta
 val CafeCalidoClaro = Color(0xFFC86D51) // Terracotta gold
 val AccentGold = Color(0xFFD97706) // Warm Gold
-val SurfaceElevated = Color(0xFFEBE6DC) // Surface Elevated
+val SurfaceElevated = Color(0xFFEFECE6) // Surface Elevated
 
 val Advertencia = Color(0xFFD9534F) // Clean red warning
 
@@ -62,17 +62,16 @@ fun updateThemeColors(isDark: Boolean) {
         BordeMedio = Color(0xFF3B4440)
         AcentoSuave = Color(0x332E5A44)
     } else {
-        MainBackground = Color(0xFFF4F1EA) // Warm bone/cream background
-        MainBackgroundAlt = Color(0xFFEBE6DC)
+        MainBackground = Color(0xFFF7F5F0) // Warm bone/cream background
+        MainBackgroundAlt = Color(0xFFEFECE6)
         MainBackgroundLight = Color(0xFFDFD8CC)
         SurfaceCard = Color(0xFFFFFFFF) // Pure pristine white card surfaces
-        TextPrincipal = Color(0xFF1A1C1A) // Deep charcoal text color
+        TextPrincipal = Color(0xFF1E1A17) // Deep charcoal text color
         TextSecundario = Color(0xFF5A655D) // Muted olive-gray
-        BordeSuave = Color(0xFFE2DDD2) // Soft boundaries
+        BordeSuave = Color(0xFFE6DFD5) // Soft boundaries
         BordeMedio = Color(0xFFD0C8B8) // Medium contrast lines
         AcentoSuave = Color(0x1A234E3C) // Very soft forest green tint
     }
 }
-
 
 

@@ -81,24 +81,7 @@ fun HomeScreen(
             .fillMaxSize()
             .background(MainBackground)
     ) {
-        // Atmospheric organic blurred / glowing gradient shapes (depth & atmosphere)
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val greenGlow = if (isDarkThemeGlobal) AcentoPrincipal.copy(alpha = 0.22f) else AcentoPrincipal.copy(alpha = 0.12f)
-            val terracottaGlow = if (isDarkThemeGlobal) CafeCalidoOscuro.copy(alpha = 0.18f) else CafeCalidoOscuro.copy(alpha = 0.10f)
-
-            // Top right organic circle
-            drawCircle(
-                color = greenGlow,
-                radius = size.width * 0.55f,
-                center = Offset(size.width * 0.88f, size.height * 0.10f)
-            )
-            // Bottom left organic circle
-            drawCircle(
-                color = terracottaGlow,
-                radius = size.width * 0.48f,
-                center = Offset(size.width * 0.12f, size.height * 0.78f)
-            )
-        }
+        com.example.ui.components.BrewOrganicBackground(warmTop = false)
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

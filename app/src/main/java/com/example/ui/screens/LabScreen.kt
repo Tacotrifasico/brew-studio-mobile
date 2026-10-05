@@ -326,22 +326,7 @@ fun LabScreen(
             .fillMaxSize()
             .background(MainBackground)
     ) {
-        // Atmospheric organic background blobs (depth & atmosphere)
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val greenGlow = if (isDarkThemeGlobal) AcentoPrincipal.copy(alpha = 0.20f) else AcentoPrincipal.copy(alpha = 0.10f)
-            val terracottaGlow = if (isDarkThemeGlobal) CafeCalidoOscuro.copy(alpha = 0.18f) else CafeCalidoOscuro.copy(alpha = 0.08f)
-
-            drawCircle(
-                color = greenGlow,
-                radius = size.width * 0.50f,
-                center = Offset(size.width * 0.82f, size.height * 0.08f)
-            )
-            drawCircle(
-                color = terracottaGlow,
-                radius = size.width * 0.45f,
-                center = Offset(size.width * 0.18f, size.height * 0.85f)
-            )
-        }
+        com.example.ui.components.BrewOrganicBackground(warmTop = false)
 
         Column(
             modifier = Modifier

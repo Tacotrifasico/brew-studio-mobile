@@ -74,24 +74,7 @@ fun FormAtmosphereBackground(
             .fillMaxSize()
             .background(MainBackground)
     ) {
-        // Atmospheric organic blurred / glowing gradient shapes
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val greenGlow = if (isDarkThemeGlobal) AcentoPrincipal.copy(alpha = 0.22f) else AcentoPrincipal.copy(alpha = 0.12f)
-            val terracottaGlow = if (isDarkThemeGlobal) CafeCalidoOscuro.copy(alpha = 0.18f) else CafeCalidoOscuro.copy(alpha = 0.10f)
-
-            // Top right organic blob
-            drawCircle(
-                color = greenGlow,
-                radius = size.width * 0.55f,
-                center = Offset(size.width * 0.88f, size.height * 0.08f)
-            )
-            // Bottom left organic blob
-            drawCircle(
-                color = terracottaGlow,
-                radius = size.width * 0.50f,
-                center = Offset(size.width * 0.10f, size.height * 0.82f)
-            )
-        }
+        com.example.ui.components.BrewOrganicBackground(warmTop = false)
 
         content()
     }

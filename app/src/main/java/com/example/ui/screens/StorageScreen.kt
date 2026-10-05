@@ -208,22 +208,7 @@ private fun OwnerScopedStorageScreen(
             .fillMaxSize()
             .background(MainBackground)
     ) {
-        // Atmospheric organic background blobs
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val greenGlow = if (isDarkThemeGlobal) AcentoPrincipal.copy(alpha = 0.20f) else AcentoPrincipal.copy(alpha = 0.10f)
-            val terracottaGlow = if (isDarkThemeGlobal) CafeCalidoOscuro.copy(alpha = 0.18f) else CafeCalidoOscuro.copy(alpha = 0.08f)
-
-            drawCircle(
-                color = terracottaGlow,
-                radius = size.width * 0.52f,
-                center = Offset(size.width * 0.85f, size.height * 0.08f)
-            )
-            drawCircle(
-                color = greenGlow,
-                radius = size.width * 0.45f,
-                center = Offset(size.width * 0.15f, size.height * 0.82f)
-            )
-        }
+        com.example.ui.components.BrewOrganicBackground(warmTop = true)
 
         Column(
             modifier = Modifier

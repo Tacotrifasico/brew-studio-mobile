@@ -1390,6 +1390,8 @@ private struct CoffeeInventoryView: View {
     @ObservedObject var preparation: PreparationModel
     @State private var showAddBean = false
     @State private var selectedBean: CoffeeBeanRecord?
+    @State private var editedBean: CoffeeBeanRecord?
+    @State private var pendingDeleteBean: CoffeeBeanRecord?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -1435,6 +1437,21 @@ private struct CoffeeInventoryView: View {
                 onDelete: { delete(bean) }
             )
         }
+        .sheet(item: $editedBean) { bean in
+            CoffeeBeanEditor(record: bean) { draft in
+                draft.apply(to: bean)
+                bean.markUpdated()
+                return save()
+            }
+        }
+        .confirmationDialog("¿Eliminar este café?", isPresented: Binding(
+            get: { pendingDeleteBean != nil }, set: { if !$0 { pendingDeleteBean = nil } }), titleVisibility: .visible) {
+            Button("Eliminar café", role: .destructive) {
+                if let bean = pendingDeleteBean { errorMessage = delete(bean) }
+                pendingDeleteBean = nil
+            }
+            Button("Cancelar", role: .cancel) { pendingDeleteBean = nil }
+        } message: { Text("Las preparaciones y tazas conservarán sus datos históricos.") }
         .alert("No se pudo guardar el café", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("Aceptar") {}
         } message: { Text(errorMessage ?? "") }
@@ -1445,31 +1462,73 @@ private struct CoffeeInventoryView: View {
 
     private func coffeeRow(_ bean: CoffeeBeanRecord) -> some View {
         let freshness = CoffeeFreshnessEngine.evaluate(roastDate: bean.roastDate, openedDate: bean.openedDate)
-        return Button { selectedBean = bean } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(bean.name).font(.headline)
-                    Spacer()
-                    Text(bean.inventoryStatus.label.uppercased()).font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
-                    CoffeeFreshnessBadge(state: freshness.state)
-                }
-                if bean.syncStatus != .synced { inventorySyncBadge(bean.syncStatus) }
-                if bean.isSample { Text("Muestra · Datos ficticios").font(.caption2).foregroundStyle(CupaTheme.secondaryText) }
-                Text("\(bean.brand.isEmpty ? "Sin tostador" : bean.brand) · Tueste \(bean.roastLevel.lowercased())")
-                    .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
-                Text("\(bean.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles")
-                    .font(.caption).foregroundStyle(bean.inventoryStatus == .finished ? CupaTheme.secondaryText : CupaTheme.forestText)
-                CoffeeFreshnessBar(result: freshness)
-                if let warning = freshness.openWarning {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill").font(.caption2).foregroundStyle(CupaTheme.terracottaText)
-                }
+        let accent = CupaTheme.coffeeAccent(bean.id)
+        return VStack(alignment: .leading, spacing: 10) {
+            Button { selectedBean = bean } label: {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 10) {
+                        RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 4, height: 28)
+                        Text(bean.name).font(.system(size: 18, weight: .semibold, design: .serif))
+                            .foregroundStyle(CupaTheme.text).lineLimit(2)
+                        Spacer(minLength: 0)
+                    }
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(bean.origin.isEmpty ? "Origen sin registrar" : bean.origin)
+                            .foregroundStyle(CupaTheme.secondaryText).lineLimit(2)
+                        Spacer(minLength: 0)
+                        Text(bean.altitudeMeters.map { "\($0) m" } ?? "Altura sin registrar")
+                            .foregroundStyle(accent)
+                    }.font(.system(size: 12))
+                    CoffeeFreshnessBar(result: freshness, compact: true)
+                }.contentShape(Rectangle())
             }
-            .padding(.vertical, 6)
+            .accessibilityIdentifier("coffee.row.\(bean.id.uuidString)")
+            Button { selectedBean = bean } label: {
+                HStack {
+                    Text("Cómo lo preparo").font(.system(size: 12, weight: .semibold))
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.system(size: 14))
+                }.foregroundStyle(accent).frame(minHeight: 40).contentShape(Rectangle())
+            }.accessibilityIdentifier("coffee.preparation.\(bean.id.uuidString)")
+            HStack(spacing: 0) {
+                Button { editedBean = bean } label: {
+                    Image(systemName: "pencil").frame(width: 44, height: 44)
+                }.accessibilityLabel("Editar")
+                Spacer(minLength: 0)
+                Button { lab.load(bean: bean); selection = .lab } label: {
+                    Image(systemName: "flask").frame(width: 44, height: 44)
+                }.accessibilityLabel("Usar en Laboratorio")
+                Spacer(minLength: 0)
+                Button { preparation.selectBean(bean); selection = .brew } label: {
+                    Label("Preparar", systemImage: "mug")
+                        .font(.system(size: 12, weight: .medium)).padding(.horizontal, 14)
+                        .frame(minHeight: 44).foregroundStyle(CupaTheme.onAccent)
+                        .background(CupaTheme.forest, in: Capsule())
+                }
+                if !bean.isSample {
+                    Spacer(minLength: 0)
+                    Button { pendingDeleteBean = bean } label: {
+                        Image(systemName: "trash").foregroundStyle(CupaTheme.terracottaText)
+                            .frame(width: 44, height: 44)
+                    }.accessibilityLabel("Borrar")
+                }
+            }.foregroundStyle(accent)
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("coffee.row.\(bean.id.uuidString)")
+        .padding(16)
+        .background {
+            ZStack {
+                CupaTheme.card
+                LinearGradient(colors: [accent.opacity(0.10), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(accent.opacity(0.22), lineWidth: 1))
+        .shadow(color: CupaTheme.warmShadow.opacity(0.08), radius: 4, y: 2)
+        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
     }
-
     private func delete(_ bean: CoffeeBeanRecord) -> String? {
         guard !bean.isSample else { return "Ronpotrero es el café de muestra y siempre estará disponible." }
         bean.markDeleted()
@@ -1518,18 +1577,10 @@ private struct CoffeeBeanDetail: View {
             List {
                 Section("Café") {
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(record.name).font(.title3.bold())
-                            Spacer()
-                            CoffeeFreshnessBadge(state: freshness.state)
-                        }
-                        Text(record.brand.isEmpty ? "Sin tostador" : record.brand)
-                            .foregroundStyle(CupaTheme.secondaryText)
-                        if !details.isEmpty { Text(details).font(.subheadline) }
-                        CoffeeFreshnessBar(result: freshness)
-                        Label("\(record.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles", systemImage: "scalemass")
-                            .font(.subheadline).foregroundStyle(CupaTheme.forestText)
-                        if !record.notes.isEmpty { Text(record.notes).font(.subheadline).foregroundStyle(CupaTheme.secondaryText) }
+                        Text(record.name).font(.title3.bold())
+                        Text("\(record.origin.isEmpty ? "Origen sin registrar" : record.origin) · \(record.altitudeMeters.map { "\($0) m" } ?? "Altura sin registrar")")
+                            .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                        CoffeeFreshnessBar(result: freshness, compact: true)
                     }
                     .padding(.vertical, 4)
                 }
@@ -1538,9 +1589,16 @@ private struct CoffeeBeanDetail: View {
                     InventoryBeanBrewSettings(bean: record)
                 }
 
-                Section("Uso") {
-                    LabeledContent("Preparaciones", value: "\(brews.count)")
-                    LabeledContent("Tazas catadas", value: "\(cups.count)")
+                Section {
+                    DisclosureGroup("Ficha completa") {
+                        Text(record.brand.isEmpty ? "Sin tostador" : record.brand)
+                        if !details.isEmpty { Text(details) }
+                        Label("\(record.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles", systemImage: "scalemass")
+                        if !record.notes.isEmpty { Text(record.notes) }
+                        if record.isSample { Text("Muestra · Datos ficticios") }
+                        if record.syncStatus != .synced { inventorySyncBadge(record.syncStatus) }
+                        if let warning = freshness.openWarning { Text(warning).foregroundStyle(CupaTheme.terracottaText) }
+                    }.font(.subheadline)
                 }
 
                 Section("Acciones") {
@@ -1558,6 +1616,11 @@ private struct CoffeeBeanDetail: View {
                         Button("Marcar como terminado", systemImage: "checkmark.circle") { confirmingFinished = true }
                             .foregroundStyle(CupaTheme.terracottaText)
                     }
+                }
+
+                Section("Uso") {
+                    LabeledContent("Preparaciones", value: "\(brews.count)")
+                    LabeledContent("Tazas catadas", value: "\(cups.count)")
                 }
 
                 Section("Preparaciones recientes") {
@@ -1680,19 +1743,34 @@ private struct CoffeeFreshnessBadge: View {
 
 private struct CoffeeFreshnessBar: View {
     let result: CoffeeFreshnessResult
+    var compact = false
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(result.daysFromRoast.map { "Día \($0) desde tostado" } ?? "Sin datos de tueste")
                 Spacer()
-                Text("\(Int((result.progress * 100).rounded(.towardZero)))% est. útil")
+                Text(compact ? result.state.label : "\(Int((result.progress * 100).rounded(.towardZero)))% est. útil")
             }
             .font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
-            ProgressView(value: result.progress)
+            if compact {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(LinearGradient(colors: [0x84AD92, 0x3F7A63, 0xC28B46, 0xB76545, 0x8C5A2B].map { Color(hex: UInt($0)) }, startPoint: .leading, endPoint: .trailing))
+                        if result.daysFromRoast != nil {
+                            Circle().fill(Color(hex: result.state.colorHex)).frame(width: 8, height: 8)
+                                .overlay(Circle().stroke(.white, lineWidth: 2))
+                                .offset(x: max(0, min(geometry.size.width - 8, geometry.size.width * result.progress - 4)))
+                        }
+                    }
+                }.frame(height: 12)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Maduración estimada: \(result.state.label)")
+            } else { ProgressView(value: result.progress)
                 .tint(Color(hex: result.state.colorHex))
                 .accessibilityLabel("Maduración estimada")
                 .accessibilityValue("\(Int((result.progress * 100).rounded())) por ciento")
             Text(result.openStatusDetails).font(.caption2).foregroundStyle(CupaTheme.secondaryText)
+            }
         }
     }
 }

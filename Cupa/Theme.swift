@@ -41,6 +41,13 @@ enum CupaTheme {
     static let onTerracotta = adaptive(light: CupaPalette.Light.onTerracotta, dark: CupaPalette.Dark.onTerracotta)
     static let warmShadow = Color(hex: 0x1E1A17)
 
+    // Stable per-lot identity; same UUID ASCII sum and palettes as Android.
+    static func coffeeAccent(_ id: UUID) -> Color {
+        let index = id.uuidString.lowercased().unicodeScalars.reduce(0) { $0 + Int($1.value) } % 4
+        return adaptive(light: [0x234E3C, 0xA94F28, 0x965000, 0x2E646A][index],
+                        dark: [0x8FC1A9, 0xF09A7D, 0xF0B35B, 0x85BEC4][index])
+    }
+
     private static func adaptive(light: UInt, dark: UInt) -> Color {
         Color(uiColor: UIColor { traits in UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light) })
     }

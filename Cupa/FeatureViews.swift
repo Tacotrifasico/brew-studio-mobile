@@ -306,15 +306,37 @@ private struct BaristaCalculatorCard: View {
         }
     }
 
+    // Matches Android: one compact touch target, with the next face explicitly named.
+    private func flipHeader(back: Bool) -> some View {
+        Button { flipped = !back } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Calculadora barista")
+                        .font(.system(size: 17, weight: .semibold, design: .serif))
+                        .foregroundStyle(CupaTheme.text)
+                    Text(back ? "Volver al cálculo" : "Ver reverso")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(CupaTheme.terracottaText)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(CupaTheme.terracottaText)
+                    .frame(width: 36, height: 36)
+                    .background(CupaTheme.terracottaText.opacity(0.08), in: Circle())
+                    .overlay(Circle().stroke(CupaTheme.terracottaText.opacity(0.18), lineWidth: 1))
+            }
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(back ? "Calculadora barista. Volver al cálculo" : "Calculadora barista. Ver ajustes del grano")
+    }
+
     private var backCard: some View {
         CupaCard {
             VStack(alignment: .leading, spacing: 12) {
-                Button { flipped = false } label: {
-                    Label("Calculadora barista", systemImage: "arrow.triangle.2.circlepath").font(.headline)
-                }
-                .foregroundStyle(CupaTheme.text)
-                .frame(minHeight: 44)
-                .accessibilityLabel("Calculadora barista. Volver al cálculo")
+                flipHeader(back: true)
                 Text("Método · \(calculator.method)").font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
                 Picker("Grano", selection: Binding(get: { calculator.selectedBeanId }, set: { id in calculator.selectBean(beans.first { $0.id == id }) })) {
                     Text("Elegir grano del Almacén").tag(Optional<UUID>.none)
@@ -334,18 +356,7 @@ private struct BaristaCalculatorCard: View {
     private var frontCard: some View {
         CupaCard {
             VStack(spacing: 10) {
-                HStack {
-                    Button { flipped = true } label: {
-                        Label("Calculadora barista", systemImage: "arrow.triangle.2.circlepath").font(.headline)
-                    }
-                    .foregroundStyle(CupaTheme.text)
-                    .frame(minHeight: 44)
-                    .accessibilityLabel("Calculadora barista. Ver ajustes del grano")
-                    Spacer()
-                    Text("1:\(calculator.ratioInput)")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(categoryTextColor)
-                }
+                flipHeader(back: false)
 
                 VStack(spacing: 2) {
                     Text("AGUA").font(.caption2.bold()).tracking(1.5)

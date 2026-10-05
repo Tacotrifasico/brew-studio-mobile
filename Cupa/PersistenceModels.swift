@@ -243,7 +243,7 @@ enum CoffeeBeanInputValidator {
 struct BeanBrewProfile: Codable, Equatable {
     let methodName: String
     let clicks: Int
-    let temperatureC: Int
+    let temperatureC: Double
     // Mirrored starting points; clicks must be calibrated to the user's grinder.
     static func startingPoint(for method: String) -> BeanBrewProfile {
         let values: (Int, Int)
@@ -257,12 +257,24 @@ struct BeanBrewProfile: Codable, Equatable {
         case "cold brew": values = (32, 20)
         default: values = (18, 93)
         }
-        return .init(methodName: method, clicks: values.0, temperatureC: values.1)
+        return .init(methodName: method, clicks: values.0, temperatureC: Double(values.1))
     }
-    init(methodName: String, clicks: Int = 18, temperatureC: Int = 93) {
+    init(methodName: String, clicks: Int = 18, temperatureC: Double = 93) {
         self.methodName = methodName
         self.clicks = min(200, max(1, clicks))
         self.temperatureC = min(100, max(1, temperatureC))
+    }
+    func displayDegrees(fahrenheit: Bool) -> Int {
+        Int((fahrenheit ? temperatureC * 1.8 + 32 : temperatureC).rounded())
+    }
+    func temperatureText(fahrenheit: Bool) -> String {
+        fahrenheit ? "\(displayDegrees(fahrenheit: true)) °F" : "\(temperatureC.formatted(.number.precision(.fractionLength(0...1)))) °C"
+    }
+    func steppedTemperature(_ direction: Int, fahrenheit: Bool) -> Double {
+        // Same wire format as Android: retain fractional Celsius for exact Fahrenheit favorites.
+        if !fahrenheit { return min(100, max(1, temperatureC + Double(direction))) }
+        let next = min(fahrenheit ? 212 : 100, max(fahrenheit ? 34 : 1, displayDegrees(fahrenheit: fahrenheit) + direction))
+        return fahrenheit ? Double(next - 32) / 1.8 : Double(next)
     }
     static func key(_ method: String) -> String {
         method.trimmingCharacters(in: .whitespacesAndNewlines)

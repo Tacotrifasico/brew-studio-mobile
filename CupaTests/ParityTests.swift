@@ -1666,6 +1666,19 @@ final class EntitySyncTests: XCTestCase {
 }
 
 final class NavigationAndThemeTests: XCTestCase {
+    func testFahrenheitFavoritesInclude195AndRetainPrecisionAcrossJSON() throws {
+        let initial = BeanBrewProfile(methodName: "V60", clicks: 22, temperatureC: 91)
+        XCTAssertEqual(initial.temperatureText(fahrenheit: true), "196 °F")
+        let favorite = BeanBrewProfile(methodName: "V60", clicks: 22, temperatureC: initial.steppedTemperature(-1, fahrenheit: true))
+        XCTAssertEqual(favorite.temperatureText(fahrenheit: true), "195 °F")
+        XCTAssertEqual(favorite.temperatureC * 1.8 + 32, 195, accuracy: 0.000001)
+        let restored = try JSONDecoder().decode(BeanBrewProfile.self, from: JSONEncoder().encode(favorite))
+        XCTAssertEqual(restored.temperatureText(fahrenheit: true), "195 °F")
+        XCTAssertEqual(BeanBrewProfile(methodName: "V60", temperatureC: restored.steppedTemperature(-1, fahrenheit: true)).temperatureText(fahrenheit: true), "194 °F")
+        XCTAssertEqual(BeanBrewProfile(methodName: "V60", temperatureC: restored.steppedTemperature(1, fahrenheit: true)).temperatureText(fahrenheit: true), "196 °F")
+        let oldJSON = Data("{\"methodName\":\"V60\",\"clicks\":22,\"temperatureC\":91}".utf8)
+        XCTAssertEqual(try JSONDecoder().decode(BeanBrewProfile.self, from: oldJSON).temperatureC, 91)
+    }
     @MainActor func testGrainMethodFavoritesOverrideDistinctStartingPointsAndTransferImmediately() throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
@@ -1679,7 +1692,7 @@ final class NavigationAndThemeTests: XCTestCase {
         for (method, clicks, temperature) in expected {
             calculator.selectMethod(method)
             XCTAssertEqual(calculator.selectedBeanProfile?.clicks, clicks)
-            XCTAssertEqual(calculator.selectedBeanProfile?.temperatureC, temperature)
+            XCTAssertEqual(calculator.selectedBeanProfile?.temperatureC, Double(temperature))
             XCTAssertNil(bean.brewProfile(for: method))
         }
         try bean.setBrewProfile(.init(methodName: "V60", clicks: 27, temperatureC: 91))

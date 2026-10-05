@@ -180,7 +180,7 @@ final class PreparationModel: ObservableObject {
             methodId: calculator.selectedMethodId, methodName: calculator.method,
             beanId: calculator.selectedBeanId,
             doseGrams: calculator.coffee, waterMl: calculator.water, ratio: calculator.ratio,
-            temperatureC: calculator.selectedBeanProfile?.temperatureC ?? (keepBeanContext ? state.temperatureC : template.temperatureC),
+            temperatureC: calculator.selectedBeanProfile?.displayDegrees(fahrenheit: false) ?? (keepBeanContext ? state.temperatureC : template.temperatureC),
             grindDescription: calculator.selectedBeanProfile.map { "\($0.clicks) clics" } ?? (keepBeanContext ? state.grindDescription : template.grindDescription),
             executionMode: "GUIDED",
             steps: keepSelectedTechnique

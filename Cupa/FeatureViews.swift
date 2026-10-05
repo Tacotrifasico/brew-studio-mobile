@@ -315,9 +315,9 @@ private struct BeanMethodSettings: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Temperatura").font(.caption.bold())
-                    Text(unit == .celsius ? "\(profile.temperatureC) °C" : "\(Int((Double(profile.temperatureC) * 1.8 + 32).rounded())) °F")
+                    Text(profile.temperatureText(fahrenheit: unit == .fahrenheit))
                         .font(.title3.monospacedDigit().bold())
-                    Stepper("Temperatura", value: Binding(get: { profile.temperatureC }, set: { save(clicks: profile.clicks, temperature: $0) }), in: 1...100).labelsHidden()
+                    Stepper("Temperatura", onIncrement: { save(clicks: profile.clicks, temperature: profile.steppedTemperature(1, fahrenheit: unit == .fahrenheit)) }, onDecrement: { save(clicks: profile.clicks, temperature: profile.steppedTemperature(-1, fahrenheit: unit == .fahrenheit)) }).labelsHidden()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -333,7 +333,7 @@ private struct BeanMethodSettings: View {
         }
     }
 
-    private func save(clicks: Int, temperature: Int) {
+    private func save(clicks: Int, temperature: Double) {
         let previous = bean.brewProfilesJSON
         let version = bean.version; let status = bean.syncStatusRaw; let updated = bean.updatedAt
         do {
@@ -427,7 +427,7 @@ private struct BaristaCalculatorCard: View {
 
     private var flipHint: String {
         guard let profile = calculator.selectedBeanProfile else { return "Ver reverso" }
-        let temperature = settings.temperatureUnit == .celsius ? "\(profile.temperatureC) °C" : "\(Int((Double(profile.temperatureC) * 1.8 + 32).rounded())) °F"
+        let temperature = profile.temperatureText(fahrenheit: settings.temperatureUnit == .fahrenheit)
         return "Ver reverso · \(profile.clicks) clics · \(temperature)"
     }
 

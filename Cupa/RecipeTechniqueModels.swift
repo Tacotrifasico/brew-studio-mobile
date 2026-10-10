@@ -144,6 +144,8 @@ final class BrewSessionRecord: NSManagedObject, SyncTrackedRecord {
     @NSManaged var techniqueNameSnapshot: String; @NSManaged var recipeNameSnapshot: String; @NSManaged var methodNameSnapshot: String; @NSManaged var beanNameSnapshot: String; @NSManaged var grinderNameSnapshot: String
     @NSManaged var doseGrams: Double; @NSManaged var waterMl: Int64; @NSManaged var ratio: Double; @NSManaged var temperatureC: Int64
     @NSManaged var grindDescription: String; @NSManaged var elapsedSeconds: Int64; @NSManaged var completedAt: Date; @NSManaged var stepsSnapshotJSON: String
+    @NSManaged var preciseTemperatureC: NSNumber?
+    var effectiveTemperatureC: Double { preciseTemperatureC?.doubleValue ?? Double(temperatureC) }
     @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
     @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
     convenience init(context: NSManagedObjectContext, state: PreparationState, recipeName: String = "", beanName: String, grinderName: String) {
@@ -151,6 +153,7 @@ final class BrewSessionRecord: NSManagedObject, SyncTrackedRecord {
         techniqueId = state.techniqueId; recipeId = state.recipeId; methodId = state.methodId; beanId = state.beanId; grinderId = state.grinderId
         techniqueNameSnapshot = state.techniqueName; recipeNameSnapshot = recipeName; methodNameSnapshot = state.methodName; beanNameSnapshot = beanName; grinderNameSnapshot = grinderName
         doseGrams = state.doseGrams; waterMl = Int64(state.waterMl); ratio = state.ratio; temperatureC = Int64(state.temperatureC)
+        preciseTemperatureC = NSNumber(value: state.effectiveTemperatureC)
         grindDescription = state.grindDescription; elapsedSeconds = Int64(state.elapsedSeconds); completedAt = .now
         stepsSnapshotJSON = String(data: (try? JSONEncoder().encode(state.steps)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
         createdAt = state.startedAt ?? .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil

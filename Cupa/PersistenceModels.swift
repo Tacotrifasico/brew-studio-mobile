@@ -423,6 +423,8 @@ final class LabExperimentRecord: NSManagedObject {
     @NSManaged var waterMl: Int64
     @NSManaged var ratio: Double
     @NSManaged var temperatureC: Int64
+    @NSManaged var preciseTemperatureC: NSNumber?
+    var effectiveTemperatureC: Double { preciseTemperatureC?.doubleValue ?? Double(temperatureC) }
     @NSManaged var grindClicks: Int64
     @NSManaged var freshness: String
     @NSManaged var timeSeconds: Int64
@@ -444,6 +446,7 @@ final class LabExperimentRecord: NSManagedObject {
         coffeeGrams = Double(state.coffeeGrams); waterMl = Int64(state.waterMl)
         ratio = state.coffeeGrams > 0 ? Double(state.waterMl) / Double(state.coffeeGrams) : Double(state.ratio)
         temperatureC = Int64(state.temperatureC); grindClicks = Int64(state.grindClicks)
+        preciseTemperatureC = NSNumber(value: state.effectiveTemperatureC)
         freshness = state.freshness; timeSeconds = Int64(state.timeSeconds)
         altitudeMeters = Int64(state.altitudeMeters); cityName = state.cityName; notes = state.notes
         extractionIndex = Double(profile.extractionIndex); summary = profile.summary
@@ -601,8 +604,8 @@ struct PersistenceController {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
         guard !sharedModel.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
-        let previous = makeModel(includeBeanProfiles: false)
-        guard previous.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
+        let previousModels = [makeModel(includeExactTemperature: false), makeModel(includeBeanProfiles: false, includeExactTemperature: false)]
+        guard let previous = previousModels.first(where: { $0.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) }) else { return }
         let mapping = try NSMappingModel.inferredMappingModel(forSourceModel: previous, destinationModel: sharedModel)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cupa-bean-migration-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -618,7 +621,7 @@ struct PersistenceController {
         try coordinator.replacePersistentStore(at: url, destinationOptions: historyOptions, withPersistentStoreFrom: migrated, sourceOptions: historyOptions, ofType: NSSQLiteStoreType)
     }
 
-    static func makeModel(includeBeanProfiles: Bool = true) -> NSManagedObjectModel {
+    static func makeModel(includeBeanProfiles: Bool = true, includeExactTemperature: Bool = true) -> NSManagedObjectModel {
         let model = NSManagedObjectModel()
         let coffeeEntity = NSEntityDescription()
         coffeeEntity.name = "CoffeeBeanRecord"
@@ -769,6 +772,11 @@ struct PersistenceController {
             attribute("completedAt", .dateAttributeType), attribute("stepsSnapshotJSON", .stringAttributeType, defaultValue: "[]")
         ]
         brewSessionEntity.uniquenessConstraints = [["id"]]
+        if includeExactTemperature {
+            for entity in [experimentEntity, brewSessionEntity] {
+                entity.properties.append(attribute("preciseTemperatureC", .doubleAttributeType, optional: true))
+            }
+        }
 
         let tastingEntity = NSEntityDescription()
         tastingEntity.name = "TastingRecord"; tastingEntity.managedObjectClassName = NSStringFromClass(TastingRecord.self)
@@ -801,7 +809,7 @@ struct PersistenceController {
         let cupSessionEntity = NSEntityDescription()
         cupSessionEntity.name = "CupSessionRecord"; cupSessionEntity.managedObjectClassName = NSStringFromClass(CupSessionRecord.self)
         cupSessionEntity.properties = syncProperties(attribute: attribute) + [
-            attribute("brewSessionId", .UUIDAttributeType, optional: true), attribute("tastingId", .UUIDAttributeType),
+            attribute("brewSessionId", .UUIDAttributeType, optional: true), attribute("tastingId", .UUIDAttributeType, optional: includeExactTemperature),
             attribute("recipeId", .UUIDAttributeType, optional: true), attribute("beanId", .UUIDAttributeType, optional: true),
             attribute("techniqueId", .UUIDAttributeType, optional: true), attribute("methodId", .UUIDAttributeType, optional: true), attribute("grinderId", .UUIDAttributeType, optional: true),
             attribute("executedDoseGrams", .doubleAttributeType, defaultValue: 0), attribute("executedWaterMl", .integer64AttributeType, defaultValue: 0),
@@ -816,6 +824,7 @@ struct PersistenceController {
             attribute("beanSnapshotJSON", .stringAttributeType, defaultValue: "{}"), attribute("grinderSnapshotJSON", .stringAttributeType, defaultValue: "{}")
         ]
         cupSessionEntity.uniquenessConstraints = [["id"], ["tastingId"]]
+        if includeExactTemperature { cupSessionEntity.properties.append(attribute("preciseTemperatureC", .doubleAttributeType, optional: true)) }
 
         let syncOperationEntity = NSEntityDescription()
         syncOperationEntity.name = "SyncOperationRecord"; syncOperationEntity.managedObjectClassName = NSStringFromClass(SyncOperationRecord.self)

@@ -1,4 +1,5 @@
 import Foundation
+import CoreData
 
 struct PreparationTechniqueTemplate: Identifiable, Equatable {
     let id: String
@@ -21,12 +22,13 @@ enum PreparationTechniqueCatalog {
     ]
 
     static func techniques(for method: String) -> [PreparationTechniqueTemplate] {
-        let names = techniqueNames[method] ?? ["Balanceada en 3 fases", "Flujo continuo", "Pulsos suaves"]
+        guard let canonical = techniqueNames.keys.first(where: { $0.caseInsensitiveCompare(method) == .orderedSame }),
+              let names = techniqueNames[canonical] else { return [] }
         return names.enumerated().map { index, name in
             .init(
-                id: "builtin:\(method):\(index)", method: method, name: name,
-                temperatureC: temperature(for: method, variant: index),
-                grindDescription: grind(for: method, variant: index), variant: index
+                id: "builtin:\(canonical):\(index)", method: canonical, name: name,
+                temperatureC: temperature(for: canonical, variant: index),
+                grindDescription: grind(for: canonical, variant: index), variant: index
             )
         }
     }
@@ -100,7 +102,11 @@ enum PreparationStatus: String, Codable { case ready, running, paused, completed
 struct PreparationState: Codable, Equatable {
     var sessionId = UUID(); var techniqueId: UUID?; var techniqueName = "Preparación libre"; var methodId: UUID?; var methodName = "V60"
     var recipeId: UUID?; var beanId: UUID?; var grinderId: UUID?
+    var beanNameSnapshot: String?
+    var contextSource: String?
     var doseGrams = 15.0; var waterMl = 240; var ratio = 16.0; var temperatureC = 92; var grindDescription = ""
+    var preciseTemperatureC: Double?
+    var effectiveTemperatureC: Double { preciseTemperatureC ?? Double(temperatureC) }
     var executionMode = "MANUAL"; var steps: [PreparationStepSnapshot] = []
     var elapsedSeconds = 0; var activeStepIndex = 0; var status = PreparationStatus.ready
     var startedAt: Date?; var lastTickAt: Date?; var savedAt: Date?; var updatedAt = Date()
@@ -130,11 +136,34 @@ final class PreparationModel: ObservableObject {
         let stored = defaults.object(forKey: key) ?? LocalDataScope.migrateLegacyObject(in: defaults, baseKey: keyBase, ownerId: ownerId)
         if let data = stored as? Data, let restored = try? JSONDecoder().decode(PreparationState.self, from: data), restored.status != .completed || restored.savedAt == nil { state = restored }
         else { state = PreparationState() }
+        if state.status == .ready, state.techniqueId == nil,
+           PreparationTechniqueCatalog.techniques(for: state.methodName).isEmpty,
+           ["Balanceada en 3 fases", "Flujo continuo", "Pulsos suaves"].contains(state.techniqueName) {
+            state.steps = []; state.techniqueName = "Sin técnica seleccionada"
+        }
         if state.status == .running { synchronizeClock(); scheduleTimer() }
     }
 
     var activeStep: PreparationStepSnapshot? { state.steps.indices.contains(state.activeStepIndex) ? state.steps[state.activeStepIndex] : nil }
     var totalDuration: Int { state.steps.reduce(0) { $0 + $1.durationSeconds } }
+    /// Called by the app shell too: a timer finishing outside the Prepare tab
+    /// must still persist a cup. A stable session ID makes retries idempotent.
+    @discardableResult func saveCompletedCup(in context: NSManagedObjectContext) throws -> CupSessionRecord {
+        let existing = try context.existingBrewSession(id: state.sessionId)
+        func name(_ entity: String, _ id: UUID?) throws -> String {
+            guard let id else { return "" }
+            let request = NSFetchRequest<NSManagedObject>(entityName: entity)
+            request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "id == %@", id as CVarArg))
+            return try context.fetch(request).first?.value(forKey: "name") as? String ?? ""
+        }
+        let brew = try existing ?? BrewSessionRecord(context: context, state: state,
+            recipeName: name("RecipeRecord", state.recipeId),
+            beanName: state.beanNameSnapshot ?? name("CoffeeBeanRecord", state.beanId),
+            grinderName: name("GrinderRecord", state.grinderId))
+        let cup = try TastingRepository(context: context).savePreparationCup(brew)
+        if state.savedAt == nil { markSaved() }
+        return cup
+    }
     var stepElapsed: Int {
         let prior = state.steps.prefix(state.activeStepIndex).reduce(0) { $0 + $1.durationSeconds }
         return max(0, state.elapsedSeconds - prior)
@@ -163,6 +192,7 @@ final class PreparationModel: ObservableObject {
         timer?.invalidate(); timer = nil
         state.techniqueId = nil; state.techniqueName = template.name; state.methodName = template.method
         state.temperatureC = template.temperatureC; state.grindDescription = template.grindDescription
+        state.preciseTemperatureC = Double(template.temperatureC)
         state.executionMode = "GUIDED"; state.steps = PreparationTechniqueCatalog.steps(for: template, waterMl: state.waterMl)
         state.elapsedSeconds = 0; state.activeStepIndex = 0; state.status = .ready; state.updatedAt = .now
     }
@@ -170,23 +200,24 @@ final class PreparationModel: ObservableObject {
     func load(calculator: CalculatorModel) {
         guard state.status != .running && state.status != .paused else { return }
         timer?.invalidate(); timer = nil
-        let template = PreparationTechniqueCatalog.techniques(for: calculator.method)[0]
+        let template = PreparationTechniqueCatalog.techniques(for: calculator.method).first
         let keepSelectedTechnique = state.status == .ready && !state.steps.isEmpty &&
             state.methodName.caseInsensitiveCompare(calculator.method) == .orderedSame
         let keepBeanContext = keepSelectedTechnique && state.beanId == calculator.selectedBeanId
         state = PreparationState(
             techniqueId: keepSelectedTechnique ? state.techniqueId : nil,
-            techniqueName: keepSelectedTechnique ? state.techniqueName : template.name,
+            techniqueName: keepSelectedTechnique ? state.techniqueName : (template?.name ?? "Sin técnica seleccionada"),
             methodId: calculator.selectedMethodId, methodName: calculator.method,
             beanId: calculator.selectedBeanId,
             doseGrams: calculator.coffee, waterMl: calculator.water, ratio: calculator.ratio,
-            temperatureC: calculator.selectedBeanProfile?.displayDegrees(fahrenheit: false) ?? (keepBeanContext ? state.temperatureC : template.temperatureC),
-            grindDescription: calculator.selectedBeanProfile.map { "\($0.clicks) clics" } ?? (keepBeanContext ? state.grindDescription : template.grindDescription),
+            temperatureC: calculator.selectedBeanProfile?.displayDegrees(fahrenheit: false) ?? (keepBeanContext ? state.temperatureC : template?.temperatureC ?? 93),
+            grindDescription: calculator.selectedBeanProfile.map { "\($0.clicks) clics" } ?? (keepBeanContext ? state.grindDescription : template?.grindDescription ?? "Sin molienda asignada"),
             executionMode: "GUIDED",
             steps: keepSelectedTechnique
                 ? Self.scaled(state.steps, sourceWater: state.waterMl, targetWater: calculator.water)
-                : PreparationTechniqueCatalog.steps(for: template, waterMl: calculator.water)
+                : template.map { PreparationTechniqueCatalog.steps(for: $0, waterMl: calculator.water) } ?? []
         )
+        state.preciseTemperatureC = calculator.selectedBeanProfile?.temperatureC ?? Double(state.temperatureC)
     }
 
     func loadCalculatorDraftIfPossible(_ calculator: CalculatorModel) {
@@ -195,7 +226,7 @@ final class PreparationModel: ObservableObject {
     }
 
     func loadCalculatorIfPristine(_ calculator: CalculatorModel) {
-        guard state.status == .ready, state.steps.isEmpty, state.elapsedSeconds == 0, state.savedAt == nil else { return }
+        guard state.contextSource == nil, state.status == .ready, state.steps.isEmpty, state.elapsedSeconds == 0, state.savedAt == nil else { return }
         load(calculator: calculator)
     }
 
@@ -207,8 +238,38 @@ final class PreparationModel: ObservableObject {
             doseGrams: Double(lab.coffeeGrams), waterMl: lab.waterMl,
             ratio: lab.coffeeGrams > 0 ? Double(lab.waterMl) / Double(lab.coffeeGrams) : Double(lab.ratio), temperatureC: lab.temperatureC,
             grindDescription: "\(lab.grindClicks) clics", executionMode: "MANUAL",
-            steps: [.init(id: UUID(), number: 1, title: "Preparar hipótesis", durationSeconds: lab.timeSeconds, waterAddedMl: lab.waterMl, waterAccumulatedMl: lab.waterMl, gesture: "MANUAL", intensity: "MEDIUM", note: lab.notes)]
+            steps: []
         )
+        state.preciseTemperatureC = lab.effectiveTemperatureC
+        state.contextSource = "LAB"
+        state.techniqueId = nil
+        state.techniqueName = "Selecciona una técnica"
+    }
+
+    /// Replicate immutable executed steps, not a technique that may have changed.
+    func replicate(cup: CupSessionRecord, brew: BrewSessionRecord?) -> Bool {
+        let data = (brew?.stepsSnapshotJSON ?? cup.techniqueSnapshotJSON).data(using: .utf8)
+        let steps = data.flatMap { try? JSONDecoder().decode([PreparationStepSnapshot].self, from: $0) } ?? []
+        timer?.invalidate(); timer = nil
+        state = PreparationState(techniqueId: cup.techniqueId, techniqueName: cup.techniqueNameSnapshot,
+            methodId: cup.methodId, methodName: cup.methodNameSnapshot, recipeId: cup.recipeId,
+            beanId: cup.beanId, grinderId: cup.grinderId, doseGrams: cup.executedDoseGrams,
+            waterMl: Int(cup.executedWaterMl), ratio: cup.executedRatio, temperatureC: Int(cup.executedTemperatureC),
+            grindDescription: cup.executedGrindSetting, preciseTemperatureC: cup.effectiveTemperatureC,
+            executionMode: "GUIDED", steps: steps)
+        state.beanNameSnapshot = cup.beanNameSnapshot
+        state.contextSource = "CUP"
+        if steps.isEmpty { state.techniqueId = nil; state.techniqueName = "Taza antigua: elige una técnica" }
+        return true
+    }
+
+    func preserveExperimentContext(_ previous: PreparationState) {
+        guard previous.contextSource != nil || previous.beanId != nil else { return }
+        state.beanId = previous.beanId; state.grinderId = previous.grinderId
+        state.beanNameSnapshot = previous.beanNameSnapshot
+        state.contextSource = previous.contextSource
+        state.temperatureC = previous.temperatureC; state.preciseTemperatureC = previous.preciseTemperatureC
+        state.grindDescription = previous.grindDescription
     }
 
     func selectBean(_ bean: CoffeeBeanRecord) {
@@ -286,28 +347,8 @@ final class PreparationModel: ObservableObject {
         timer?.invalidate(); timer = nil
     }
     private static func quickSteps(method: String, waterMl: Int) -> [PreparationStepSnapshot] {
-        if let template = PreparationTechniqueCatalog.techniques(for: method).first {
-            return PreparationTechniqueCatalog.steps(for: template, waterMl: waterMl)
-        }
-        let total = max(1, waterMl)
-        switch method {
-        case "Espresso":
-            return [.init(id: UUID(), number: 1, title: "Extracción de Presión", durationSeconds: 30, waterAddedMl: total, waterAccumulatedMl: total, gesture: "TAP", intensity: "alta", note: "Mantén la presión uniforme.")]
-        case "AeroPress":
-            let bloom = min(40, total); let remainder = total - bloom
-            return [
-                .init(id: UUID(), number: 1, title: "Preinfusión (Bloom)", durationSeconds: 30, waterAddedMl: bloom, waterAccumulatedMl: bloom, gesture: "TAP", intensity: "alta", note: "Remueve por 10 segundos."),
-                .init(id: UUID(), number: 2, title: "Vertido de volumen", durationSeconds: 40, waterAddedMl: remainder, waterAccumulatedMl: total, gesture: "TAP", intensity: "media", note: "Pon el émbolo para vacío."),
-                .init(id: UUID(), number: 3, title: "Presión continua", durationSeconds: 30, waterAddedMl: 0, waterAccumulatedMl: total, gesture: "TAP", intensity: "alta", note: "Presiona despacio.")
-            ]
-        default:
-            let bloom = min(50, total); let remainder = total - bloom; let firstPour = remainder / 2
-            return [
-                .init(id: UUID(), number: 1, title: "Preinfusión Bloom", durationSeconds: 35, waterAddedMl: bloom, waterAccumulatedMl: bloom, gesture: "TAP", intensity: "alta", note: "Moja todo el grano uniformemente."),
-                .init(id: UUID(), number: 2, title: "Primer Vertido", durationSeconds: 45, waterAddedMl: firstPour, waterAccumulatedMl: bloom + firstPour, gesture: "TAP", intensity: "media", note: "Vierte en círculos suaves."),
-                .init(id: UUID(), number: 3, title: "Segundo Vertido final", durationSeconds: 40, waterAddedMl: total - bloom - firstPour, waterAccumulatedMl: total, gesture: "TAP", intensity: "baja", note: "Completa la secuencia.")
-            ]
-        }
+        guard let template = PreparationTechniqueCatalog.techniques(for: method).first else { return [] }
+        return PreparationTechniqueCatalog.steps(for: template, waterMl: waterMl)
     }
     private static func scaled(_ steps: [PreparationStepSnapshot], sourceWater: Int, targetWater: Int) -> [PreparationStepSnapshot] {
         guard sourceWater > 0, sourceWater != targetWater else { return steps }

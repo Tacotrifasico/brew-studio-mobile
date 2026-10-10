@@ -260,6 +260,7 @@ private struct WorkshopMetric: View {
 }
 
 struct BrewView: View {
+    @Environment(\.managedObjectContext) private var context
     @ObservedObject var preparation: PreparationModel
     @ObservedObject var tasting: TastingModel
     @Binding var selection: CupaTab
@@ -271,7 +272,13 @@ struct BrewView: View {
                 VStack(spacing: 20) {
                     SectionHeader(eyebrow: "Secuencia de extracción", title: "Preparar café", subtitle: "Elige una técnica para los datos calculados y sigue cada paso.")
                     PreparationExecutionView(model: preparation) { brewSessionId in
-                        tasting.linkToPreparation(brewSessionId)
+                        tasting.newTasting(linkedBrewSessionId: brewSessionId)
+                        let request = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")
+                        request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "brewSessionId == %@", brewSessionId as CVarArg))
+                        if let cup = try? context.fetch(request).first {
+                            tasting.state.freeNotes = cup.comment
+                            if cup.rating > 0 { tasting.state.rating = cup.rating }
+                        }
                         selection = .tasting
                     }
                 }
@@ -466,7 +473,8 @@ private struct BaristaCalculatorCard: View {
                 .foregroundStyle(CupaTheme.onAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(LinearGradient(colors: [CupaTheme.forest, categorySurfaceColor], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .background(LinearGradient(colors: calculatorGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: calculator.ratio)
                 .clipShape(RoundedRectangle(cornerRadius: 22))
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Resultado: \(calculator.water) mililitros de agua, \(calculator.coffeeInput) gramos de café, proporción uno a \(calculator.ratioInput), método \(calculator.method)")
@@ -474,6 +482,7 @@ private struct BaristaCalculatorCard: View {
                 Text(calculator.category.label)
                     .font(.caption.bold())
                     .foregroundStyle(categoryTextColor)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: calculator.ratio)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                 calculatorInputs(axis: .horizontal)
@@ -634,6 +643,28 @@ private struct BaristaCalculatorCard: View {
         case .balance: CupaTheme.forest
         case .clarity: CupaTheme.clarity
         }
+    }
+
+    // Same continuous color stops as Android; category boundaries must not jump.
+    private var calculatorGradient: [Color] {
+        let stops: [(Double, UInt, UInt)] = [
+            (2, 0x3D2817, 0x7A3B2E), (6, 0x4A3728, 0xA85D3F),
+            (12, 0x2D4A3E, 0xB5714A), (15, 0x3D5E4F, 0x6B9080),
+            (18, 0x6B9080, 0xC9D6C4)
+        ]
+        let ratio = min(18, max(2, calculator.ratio))
+        let end = stops.firstIndex { $0.0 >= ratio } ?? stops.count - 1
+        let start = max(0, end - 1)
+        let a = stops[start], b = stops[end]
+        let fraction = a.0 == b.0 ? 0 : (ratio - a.0) / (b.0 - a.0)
+        func blend(_ x: UInt, _ y: UInt) -> Color {
+            func channel(_ shift: UInt) -> Double {
+                let from = Double((x >> shift) & 255), to = Double((y >> shift) & 255)
+                return (from + (to - from) * fraction) / 255
+            }
+            return Color(red: channel(16), green: channel(8), blue: channel(0))
+        }
+        return [blend(a.1, b.1), blend(a.2, b.2)]
     }
 
     private var categoryTextColor: Color {
@@ -1081,6 +1112,7 @@ struct LabView: View {
                                 ZStack(alignment: .bottom) {
                                     Rectangle().fill(CupaTheme.backgroundAlt)
                                     Rectangle().fill(color.gradient).frame(height: proxy.size.height * CGFloat(value) / 100)
+                                        .animation(.easeOut(duration: 0.2), value: value)
                                 }
                             }.frame(width: 12, height: 70)
                             Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center).frame(height: 26)
@@ -1092,8 +1124,8 @@ struct LabView: View {
                     }
                 }
                 HStack(spacing: 5) {
-                    Circle().fill(CupaTheme.forest).frame(width: 6, height: 6)
-                    Text(model.diagnostic.extraction).font(.caption2.bold()).foregroundStyle(CupaTheme.forestText).fixedSize(horizontal: false, vertical: true)
+                    Circle().fill(thermalGuide.warning ? CupaTheme.terracotta : CupaTheme.forest).frame(width: 6, height: 6)
+                    Text(model.diagnostic.extraction).font(.caption2.bold()).foregroundStyle(thermalGuide.warning ? CupaTheme.terracottaText : CupaTheme.forestText).fixedSize(horizontal: false, vertical: true)
                     Spacer()
                 }
         }
@@ -1106,12 +1138,13 @@ struct LabView: View {
                     HStack {
                         Stepper("Café \(model.state.coffeeGrams.formatted()) g", value: labCoffeeBinding, in: 1...100, step: 1)
                         Divider()
-                        Stepper("Agua \(model.state.waterMl) ml", value: labWaterBinding, in: 10...2000, step: 10)
+                        Stepper("Agua \(model.state.waterMl) ml", value: labWaterBinding, in: 10...2000, step: 1)
                     }
-                    labSlider("Proporción", value: labRatioBinding, range: 8...22, step: 0.5, display: "1:\(String(format: "%.1f", model.state.ratio))")
+                    labSlider("Proporción", value: labRatioBinding, range: 8...22, step: 1, display: "1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...2))))")
                     labSlider("Tiempo", value: bindingInt(\.timeSeconds), range: 60...360, step: 5, display: formattedTime)
                 case .extraction:
-                    labSlider("Temperatura", value: bindingInt(\.temperatureC), range: 80...98, step: 1, display: temperatureText)
+                    calibratedTemperatureSlider
+                    Stepper("De 1 en 1 \(model.state.temperatureUnit.symbol)", value: labTemperatureBinding, in: model.state.temperatureUnit == .fahrenheit ? 176...208 : 80...98, step: 1).font(.caption)
                     temperatureCalibrationBand
                     labSlider("Clics de molienda", value: bindingInt(\.grindClicks), range: 6...36, step: 1, display: "\(model.state.grindClicks) clics")
                 case .bean:
@@ -1149,13 +1182,9 @@ struct LabView: View {
 
     private var actionBar: some View {
         HStack {
-            Menu {
-                Button { saveExperiment() } label: { Label(isSavingExperiment ? "Guardando experimento…" : "Guardar experimento", systemImage: "flask") }
-                    .disabled(isSavingExperiment)
-                Button { saveTechniqueFromLab() } label: { Label(isSavingTechnique ? "Guardando técnica…" : "Guardar como técnica", systemImage: "list.bullet.clipboard") }
-                    .disabled(isSavingTechnique)
-            } label: { Label("Guardar", systemImage: "square.and.arrow.down") }
+            Button { saveExperiment() } label: { Label(isSavingExperiment ? "Guardando…" : "Guardar experimento", systemImage: "flask") }
                 .buttonStyle(.bordered)
+                .disabled(isSavingExperiment)
             Button {
                 if saveExperiment() {
                     preparation.load(lab: model.state)
@@ -1208,58 +1237,91 @@ struct LabView: View {
         catch { modelContext.rollback(); errorMessage = error.localizedDescription }
     }
 
-    private var isTemperatureCapped: Bool { Float(model.state.temperatureC) > model.boilingPointC }
+    private var isTemperatureCapped: Bool { Float(model.state.effectiveTemperatureC) > model.boilingPointC }
     private var boilingText: String {
         model.state.temperatureUnit == .celsius
             ? String(format: "%.1f °C", model.boilingPointC)
             : "\(Int(roundf(LabEngine.fahrenheit(fromCelsius: model.boilingPointC)))) °F"
     }
     private var temperatureText: String {
-        model.state.temperatureUnit == .celsius
-            ? "\(model.state.temperatureC) °C"
-            : "\(Int(roundf(LabEngine.fahrenheit(fromCelsius: Float(model.state.temperatureC))))) °F"
+        model.state.temperatureUnit.text(celsius: model.state.effectiveTemperatureC)
     }
     private func experimentTemperatureText(_ experiment: LabExperimentRecord) -> String {
-        model.state.temperatureUnit == .celsius
-            ? "\(experiment.temperatureC) °C"
-            : "\(Int(roundf(LabEngine.fahrenheit(fromCelsius: Float(experiment.temperatureC))))) °F"
+        model.state.temperatureUnit.text(celsius: experiment.effectiveTemperatureC)
     }
     private var formattedTime: String { String(format: "%d:%02d min", model.state.timeSeconds / 60, model.state.timeSeconds % 60) }
+    private var thermalGuide: LabTemperatureGuide {
+        LabTemperatureGuide(temperatureC: model.state.effectiveTemperatureC, altitudeMeters: model.state.altitudeMeters, unit: model.state.temperatureUnit)
+    }
+    private var calibratedTemperatureSlider: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text("Temperatura del Agua").font(.subheadline.bold())
+                if !thermalGuide.warning { Text("ZONA ÚTIL").font(.system(size: 8, weight: .bold)).padding(4).background(CupaTheme.backgroundAlt, in: RoundedRectangle(cornerRadius: 6)) }
+                Spacer(minLength: 4)
+                Text(temperatureText).font(.system(size: 16, weight: .bold, design: .serif)).foregroundStyle(CupaTheme.terracottaText)
+            }
+            Slider(value: Binding(get: { thermalGuide.fraction(labTemperatureBinding.wrappedValue) }, set: { fraction in
+                let next = thermalGuide.value(fraction)
+                if next != labTemperatureBinding.wrappedValue {
+                    labTemperatureBinding.wrappedValue = next
+                    UISelectionFeedbackGenerator().selectionChanged()
+                }
+            }), in: 0...1)
+            .tint(Color(hex: 0xC86D51))
+            .overlay {
+                GeometryReader { proxy in
+                    let width = max(0, proxy.size.width - 16)
+                    Capsule().fill(Color(hex: 0xC86D51).opacity(0.22))
+                        .overlay { Capsule().stroke(Color(hex: 0xC86D51).opacity(0.55), lineWidth: 1) }
+                        .overlay {
+                            Canvas { context, size in
+                                for index in 0...4 {
+                                    let x = size.width * Double(index) / 4
+                                    var tick = Path()
+                                    tick.move(to: CGPoint(x: x, y: -1))
+                                    tick.addLine(to: CGPoint(x: x, y: size.height + 1))
+                                    context.stroke(tick, with: .color(Color(hex: 0xC86D51).opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                                }
+                            }
+                        }
+                        .frame(width: width * 0.5, height: 14)
+                        .offset(x: 8 + width * thermalGuide.leftShare, y: (proxy.size.height - 14) / 2)
+                }.allowsHitTesting(false)
+            }
+            .accessibilityLabel("Temperatura del agua")
+            .accessibilityValue("\(temperatureText). \(thermalGuide.headline)")
+            .accessibilityAdjustableAction { direction in
+                let delta = direction == .increment ? 1.0 : -1.0
+                labTemperatureBinding.wrappedValue = min(thermalGuide.sliderRange.upperBound, max(thermalGuide.sliderRange.lowerBound, labTemperatureBinding.wrappedValue + delta))
+            }
+        }
+    }
     private var temperatureCalibrationBand: some View {
-        VStack(spacing: 3) {
-            GeometryReader { proxy in
-                let usableWidth = max(0, proxy.size.width - 4)
-                HStack(spacing: 2) {
-                    Capsule().fill(Color.blue.opacity(0.55)).frame(width: usableWidth * 10 / 18)
-                    Capsule().fill(CupaTheme.forest.opacity(0.82)).frame(width: usableWidth * 6 / 18)
-                    Capsule().fill(CupaTheme.terracotta.opacity(0.78)).frame(width: usableWidth * 2 / 18)
-                }
-                .overlay(alignment: .topLeading) {
-                    HStack(spacing: 0) {
-                        Color.clear.frame(width: proxy.size.width * 10 / 18)
-                        Rectangle().fill(CupaTheme.text.opacity(0.6)).frame(width: 1, height: 10)
-                        Color.clear.frame(width: proxy.size.width * 6 / 18)
-                        Rectangle().fill(CupaTheme.text.opacity(0.6)).frame(width: 1, height: 10)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 3) {
+            Text(thermalGuide.headline).font(.caption.bold())
+                .foregroundStyle(thermalGuide.warning ? CupaTheme.terracottaText : CupaTheme.text)
+            Text(thermalGuide.warning ? thermalGuide.detail : "Buen punto de partida, no garantía de sabor.")
+                .font(.caption2).foregroundStyle(CupaTheme.secondaryText).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Text("\(Int(thermalGuide.sliderRange.lowerBound))\(model.state.temperatureUnit.symbol)")
+                Spacer(minLength: 2)
+                Text("Zona útil: \(thermalGuide.rangeText)").bold()
+                Spacer(minLength: 2)
+                Text("\(Int(thermalGuide.sliderRange.upperBound))\(model.state.temperatureUnit.symbol)")
             }
-            .frame(height: 10)
-            HStack(alignment: .top) {
-                Text("80–89°\nMás acidez").frame(maxWidth: .infinity, alignment: .leading)
-                Text("90–96°\nZona útil").frame(maxWidth: .infinity)
-                Text("97–98°\nMás amargor").frame(maxWidth: .infinity, alignment: .trailing)
-            }
-            .font(.system(size: 9, weight: .semibold)).foregroundStyle(CupaTheme.secondaryText)
-            if isTemperatureCapped {
-                Text("En \(model.state.cityName), el límite físico es \(boilingText).")
-                    .font(.caption2.bold()).foregroundStyle(.orange).frame(maxWidth: .infinity, alignment: .leading)
+            .font(.system(size: 9)).foregroundStyle(CupaTheme.secondaryText)
+            if model.state.altitudeMeters > 0 {
+                Text("Hervor local: \(thermalGuide.degrees(thermalGuide.boilingC)) \(model.state.temperatureUnit.symbol) · rango ajustado por altura")
+                    .font(.system(size: 10)).foregroundStyle(CupaTheme.secondaryText)
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Guía de temperatura: de 80 a 89 grados favorece acidez; de 90 a 96 es la zona útil; de 97 a 98 aumenta el amargor")
+        .accessibilityLabel("\(thermalGuide.headline). \(thermalGuide.detail). Zona útil: \(thermalGuide.rangeText)")
     }
     private var primaryOutcome: String {
         let p = model.profile
+        if thermalGuide.warning { return thermalGuide.headline }
         if p.bitterness > 65 { return "Intensa y con cuerpo" }
         if p.body < 38 { return "Estilo té, alta claridad" }
         if p.sweetness > 68 && p.bitterness < 42 { return "Taza dorada y balanceada" }
@@ -1292,6 +1354,9 @@ struct LabView: View {
     }
     private var labRatioBinding: Binding<Double> {
         Binding(get: { Double(model.state.ratio) }, set: { model.setRatio(Float($0)) })
+    }
+    private var labTemperatureBinding: Binding<Double> {
+        Binding(get: { model.state.temperatureUnit.displayValue(celsius: model.state.effectiveTemperatureC).rounded() }, set: model.setDisplayedTemperature)
     }
 }
 
@@ -1332,7 +1397,7 @@ struct StorageView: View {
             case .equipment: EquipmentInventoryView()
             case .recipes: RecipeInventoryView()
             case .techniques: TechniqueInventoryView(selection: $selection, preparation: preparation, account: account)
-            case .cups: CupHistoryView()
+            case .cups: CupHistoryView(selection: $selection, preparation: preparation)
             }
         }
         .background(BrewOrganicCanvas(warmTop: true).ignoresSafeArea())
@@ -1341,6 +1406,8 @@ struct StorageView: View {
 }
 
 private struct CupHistoryView: View {
+    @Binding var selection: CupaTab
+    @ObservedObject var preparation: PreparationModel
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \CupSessionRecord.brewDate, ascending: false)],
@@ -1372,7 +1439,11 @@ private struct CupHistoryView: View {
         }
         .brewScrollableCanvas()
         .sheet(item: $selectedCup) { cup in
-            CupSessionDetailView(cup: cup, onDelete: { if delete(cup) { selectedCup = nil } })
+            CupSessionDetailView(cup: cup, onDelete: { if delete(cup) { selectedCup = nil } }, onReplicate: {
+                if preparation.replicate(cup: cup, brew: try? context.existingBrewSession(id: cup.brewSessionId)) {
+                    selectedCup = nil; selection = .brew
+                } else { errorMessage = "Esta taza antigua no conserva sus pasos. Elige una técnica para volver a prepararla." }
+            })
         }
         .alert("No se pudo eliminar la taza", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("Aceptar") {}
@@ -1387,7 +1458,7 @@ private struct CupHistoryView: View {
 
 private struct CupHistoryRow: View {
     @ObservedObject var cup: CupSessionRecord
-    private var rating: String { cup.rating.formatted(.number.precision(.fractionLength(0...1))) + " ★" }
+    private var rating: String { cup.rating > 0 ? cup.rating.formatted(.number.precision(.fractionLength(0...1))) + " ★" : "Sin calificar" }
     private var quantities: String {
         let dose = cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))
         return "\(cup.techniqueNameSnapshot) · \(dose) g → \(cup.executedWaterMl) ml"
@@ -1412,9 +1483,11 @@ private struct CupHistoryRow: View {
 }
 
 private struct CupSessionDetailView: View {
+    @AppStorage("settings.temperature") private var rawTemperatureUnit = TemperatureUnit.celsius.rawValue
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var cup: CupSessionRecord
     let onDelete: () -> Void
+    var onReplicate: (() -> Void)? = nil
     @State private var confirmingDelete = false
 
     var body: some View {
@@ -1424,7 +1497,7 @@ private struct CupSessionDetailView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Label(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot, systemImage: "cup.and.saucer.fill").font(.title3.bold())
-                            Spacer(); Text("\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★").font(.headline).foregroundStyle(CupaTheme.goldText)
+                            Spacer(); Text(cup.rating > 0 ? "\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★" : "Sin calificar").font(.caption.bold()).foregroundStyle(CupaTheme.goldText)
                         }
                         if let date = cup.brewDate { Text(date.formatted(date: .long, time: .shortened)).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
                     }.padding(.vertical, 4)
@@ -1432,8 +1505,8 @@ private struct CupSessionDetailView: View {
                 Section("Preparación ejecutada") {
                     cupDetailRow("Dosis", "\(cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))) g")
                     cupDetailRow("Agua", "\(cup.executedWaterMl) ml")
-                    cupDetailRow("Proporción", "1:\(cup.executedRatio.formatted(.number.precision(.fractionLength(0...1))))")
-                    cupDetailRow("Temperatura", "\(cup.executedTemperatureC) °C")
+                    cupDetailRow("Proporción", "1:\(cup.executedRatio.formatted(.number.precision(.fractionLength(0...2))))")
+                    cupDetailRow("Temperatura", (TemperatureUnit(rawValue: rawTemperatureUnit) ?? .celsius).text(celsius: cup.effectiveTemperatureC))
                     cupDetailRow("Duración", String(format: "%02d:%02d", Int(cup.executedDurationSeconds) / 60, Int(cup.executedDurationSeconds) % 60))
                     if !cup.executedGrindSetting.isEmpty { cupDetailRow("Molienda", cup.executedGrindSetting) }
                 }
@@ -1449,6 +1522,7 @@ private struct CupSessionDetailView: View {
                     if !cup.comment.isEmpty { Text(cup.comment) }
                 }
                 Section {
+                    if let onReplicate { Button(action: onReplicate) { Label("Replicar taza", systemImage: "arrow.clockwise") } }
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar taza y cata", systemImage: "trash") }
                 }
             }
@@ -1532,6 +1606,9 @@ private struct CoffeeInventoryView: View {
                 record: bean,
                 onPrepare: { preparation.selectBean(bean); selection = .brew },
                 onLab: { lab.load(bean: bean); selection = .lab },
+                onReplicate: { cup in
+                    if preparation.replicate(cup: cup, brew: try? modelContext.existingBrewSession(id: cup.brewSessionId)) { selectedBean = nil; selection = .brew }
+                },
                 onDelete: { delete(bean) }
             )
         }
@@ -1645,18 +1722,21 @@ private struct CoffeeBeanDetail: View {
     @ObservedObject private var record: CoffeeBeanRecord
     private let onPrepare: () -> Void
     private let onLab: () -> Void
+    private let onReplicate: (CupSessionRecord) -> Void
     private let onDelete: () -> String?
     @FetchRequest private var brews: FetchedResults<BrewSessionRecord>
     @FetchRequest private var cups: FetchedResults<CupSessionRecord>
     @State private var showEditor = false
+    @State private var selectedCupDetail: CupSessionRecord?
     @State private var actionError: String?
     @State private var confirmingFinished = false
     @State private var confirmingDelete = false
 
-    init(record: CoffeeBeanRecord, onPrepare: @escaping () -> Void, onLab: @escaping () -> Void, onDelete: @escaping () -> String?) {
+    init(record: CoffeeBeanRecord, onPrepare: @escaping () -> Void, onLab: @escaping () -> Void, onReplicate: @escaping (CupSessionRecord) -> Void = { _ in }, onDelete: @escaping () -> String?) {
         _record = ObservedObject(wrappedValue: record)
         self.onPrepare = onPrepare
         self.onLab = onLab
+        self.onReplicate = onReplicate
         self.onDelete = onDelete
         _brews = FetchRequest(
             sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)],
@@ -1749,6 +1829,7 @@ private struct CoffeeBeanDetail: View {
                             .foregroundStyle(CupaTheme.secondaryText)
                     } else {
                         ForEach(cups) { cup in
+                            Button { selectedCupDetail = cup } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
                                     Text(cup.techniqueNameSnapshot.isEmpty ? "Cata" : cup.techniqueNameSnapshot).font(.headline)
@@ -1763,6 +1844,7 @@ private struct CoffeeBeanDetail: View {
                                     .font(.caption).foregroundStyle(CupaTheme.secondaryText)
                             }
                             .padding(.vertical, 3)
+                            }.buttonStyle(.plain)
                         }
                     }
                 }
@@ -1775,6 +1857,12 @@ private struct CoffeeBeanDetail: View {
             }
             .brewScrollableCanvas()
             .navigationTitle("Historial del café")
+            .sheet(item: $selectedCupDetail) { cup in
+                CupSessionDetailView(cup: cup, onDelete: {
+                    do { try TastingRepository(context: modelContext).delete(cup); selectedCupDetail = nil }
+                    catch { actionError = error.localizedDescription }
+                }, onReplicate: { onReplicate(cup); selectedCupDetail = nil; dismiss() })
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } }

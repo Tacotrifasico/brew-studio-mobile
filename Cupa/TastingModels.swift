@@ -203,10 +203,12 @@ extension TastingObservationRecord: Identifiable {}
 
 @objc(CupSessionRecord)
 final class CupSessionRecord: NSManagedObject, SyncTrackedRecord {
-    @NSManaged var id: UUID; @NSManaged var ownerId: UUID?; @NSManaged var brewSessionId: UUID?; @NSManaged var tastingId: UUID
+    @NSManaged var id: UUID; @NSManaged var ownerId: UUID?; @NSManaged var brewSessionId: UUID?; @NSManaged var tastingId: UUID?
     @NSManaged var recipeId: UUID?; @NSManaged var beanId: UUID?; @NSManaged var techniqueId: UUID?; @NSManaged var methodId: UUID?; @NSManaged var grinderId: UUID?
     @NSManaged var executedDoseGrams: Double; @NSManaged var executedWaterMl: Int64; @NSManaged var executedRatio: Double
     @NSManaged var executedTemperatureC: Int64; @NSManaged var executedGrindSetting: String; @NSManaged var executedDurationSeconds: Int64
+    @NSManaged var preciseTemperatureC: NSNumber?
+    var effectiveTemperatureC: Double { preciseTemperatureC?.doubleValue ?? Double(executedTemperatureC) }
     @NSManaged var beanNameSnapshot: String; @NSManaged var recipeNameSnapshot: String; @NSManaged var techniqueNameSnapshot: String
     @NSManaged var methodNameSnapshot: String; @NSManaged var grinderNameSnapshot: String
     @NSManaged var cupLifeSeconds: Int64; @NSManaged var cupLifeState: String; @NSManaged var nps: Int64; @NSManaged var rating: Double
@@ -223,9 +225,40 @@ extension CupSessionRecord: Identifiable {
     }
 }
 
+extension NSManagedObjectContext {
+    func existingBrewSession(id: UUID?) throws -> BrewSessionRecord? {
+        guard let id else { return nil }
+        let request = NSFetchRequest<BrewSessionRecord>(entityName: "BrewSessionRecord")
+        request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: activeOwnerId, additional: NSPredicate(format: "id == %@", id as CVarArg))
+        return try fetch(request).first
+    }
+}
+
 @MainActor
 struct TastingRepository {
     let context: NSManagedObjectContext
+
+    /// Finish always creates a cup, without inventing a sensory evaluation.
+    @discardableResult func savePreparationCup(_ brew: BrewSessionRecord) throws -> CupSessionRecord {
+        let request = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")
+        request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId,
+            additional: NSPredicate(format: "brewSessionId == %@", brew.id as CVarArg))
+        if let existing = try context.fetch(request).first { return existing }
+        let cup = CupSessionRecord(context: context)
+        cup.id = UUID(); cup.tastingId = nil; cup.ownerId = context.activeOwnerId
+        cup.brewSessionId = brew.id; cup.recipeId = brew.recipeId; cup.beanId = brew.beanId
+        cup.techniqueId = brew.techniqueId; cup.methodId = brew.methodId; cup.grinderId = brew.grinderId
+        cup.executedDoseGrams = brew.doseGrams; cup.executedWaterMl = brew.waterMl
+        cup.executedRatio = brew.doseGrams > 0 ? Double(brew.waterMl) / brew.doseGrams : brew.ratio
+        cup.executedTemperatureC = brew.temperatureC; cup.preciseTemperatureC = NSNumber(value: brew.effectiveTemperatureC)
+        cup.executedGrindSetting = brew.grindDescription; cup.executedDurationSeconds = brew.elapsedSeconds
+        cup.beanNameSnapshot = brew.beanNameSnapshot; cup.recipeNameSnapshot = brew.recipeNameSnapshot
+        cup.techniqueNameSnapshot = brew.techniqueNameSnapshot; cup.methodNameSnapshot = brew.methodNameSnapshot
+        cup.grinderNameSnapshot = brew.grinderNameSnapshot; cup.techniqueSnapshotJSON = brew.stepsSnapshotJSON
+        cup.cupLifeState = "FRESH"; cup.brewDate = brew.completedAt
+        cup.createdAt = .now; cup.updatedAt = .now; cup.version = 1; cup.syncStatusRaw = SyncStatus.pendingCreate.rawValue
+        try context.save(); return cup
+    }
 
     func observations(tastingId: UUID) throws -> [TastingObservationRecord] {
         let request = NSFetchRequest<TastingObservationRecord>(entityName: "TastingObservationRecord")
@@ -252,20 +285,28 @@ struct TastingRepository {
         let retained = Set(state.observations.map(\.id)); existing.filter { !retained.contains($0.id) }.forEach { $0.markDeleted() }
 
         let cupRequest = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord"); cupRequest.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "tastingId == %@", state.id as CVarArg))
-        let cup = try context.fetch(cupRequest).first ?? CupSessionRecord(context: context)
+        var existingCup = try context.fetch(cupRequest).first
+        if existingCup == nil, let brew {
+            cupRequest.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId,
+                additional: NSPredicate(format: "brewSessionId == %@", brew.id as CVarArg))
+            existingCup = try context.fetch(cupRequest).first
+        }
+        let cup = existingCup ?? CupSessionRecord(context: context)
         if cup.value(forKey: "createdAt") == nil { cup.id = UUID(); cup.ownerId = context.activeOwnerId; cup.tastingId = state.id; cup.createdAt = .now; cup.version = 1; cup.syncStatusRaw = SyncStatus.pendingCreate.rawValue; cup.deletedAt = nil }
         else { cup.markUpdated() }
+        cup.tastingId = state.id
         cup.brewSessionId = state.brewSessionId; cup.recipeId = brew?.recipeId; cup.beanId = brew?.beanId; cup.techniqueId = brew?.techniqueId
         cup.methodId = brew?.methodId; cup.grinderId = brew?.grinderId
         cup.executedDoseGrams = brew?.doseGrams ?? 0; cup.executedWaterMl = brew?.waterMl ?? 0; cup.executedRatio = brew?.ratio ?? 0
         cup.executedTemperatureC = brew?.temperatureC ?? 0; cup.executedGrindSetting = brew?.grindDescription ?? ""
+        cup.preciseTemperatureC = brew.map { NSNumber(value: $0.effectiveTemperatureC) }
         cup.executedDurationSeconds = brew?.elapsedSeconds ?? 0
         cup.beanNameSnapshot = brew?.beanNameSnapshot ?? ""; cup.recipeNameSnapshot = brew?.recipeNameSnapshot ?? ""
         cup.techniqueNameSnapshot = brew?.techniqueNameSnapshot ?? "Cata independiente"; cup.methodNameSnapshot = brew?.methodNameSnapshot ?? ""
         cup.grinderNameSnapshot = brew?.grinderNameSnapshot ?? ""; cup.cupLifeSeconds = Int64(state.coolingElapsedSeconds)
         cup.cupLifeState = record.cupLifeState; cup.nps = Int64(state.nps); cup.rating = state.rating; cup.comment = state.freeNotes
         cup.brewDate = brew?.completedAt ?? state.evaluatedAt
-        cup.recipeSnapshotJSON = "{}"; cup.techniqueSnapshotJSON = "{}"; cup.beanSnapshotJSON = "{}"; cup.grinderSnapshotJSON = "{}"
+        cup.recipeSnapshotJSON = "{}"; cup.techniqueSnapshotJSON = brew?.stepsSnapshotJSON ?? "[]"; cup.beanSnapshotJSON = "{}"; cup.grinderSnapshotJSON = "{}"
         cup.updatedAt = .now
         try context.save(); return record
     }
@@ -280,8 +321,9 @@ struct TastingRepository {
 
     func delete(_ cup: CupSessionRecord) throws {
         cup.markDeleted()
+        guard let tastingId = cup.tastingId else { try context.save(); return }
         let tastingRequest = NSFetchRequest<TastingRecord>(entityName: "TastingRecord")
-        tastingRequest.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "id == %@", cup.tastingId as CVarArg))
+        tastingRequest.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "id == %@", tastingId as CVarArg))
         if let tasting = try context.fetch(tastingRequest).first { try delete(tasting) } else { try context.save() }
     }
 }

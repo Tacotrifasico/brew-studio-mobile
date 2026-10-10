@@ -14,6 +14,10 @@ struct PreparationExecutionView: View {
     @State private var showingTechniques = false
     @State private var showingSteps = false
     @State private var pour = "Original"
+    @State private var finishedCup: CupSessionRecord?
+    @State private var quickRating = 0
+    @State private var quickComment = ""
+    @AppStorage("settings.temperature") private var rawTemperatureUnit = TemperatureUnit.celsius.rawValue
 
     init(model: PreparationModel, onFinished: ((UUID) -> Void)? = nil) {
         self.model = model
@@ -31,6 +35,28 @@ struct PreparationExecutionView: View {
                     .navigationTitle("Técnica")
                     .toolbar { Button("Cerrar") { showingTechniques = false } }
             }
+        }
+        .sheet(item: $finishedCup) { cup in
+            NavigationStack {
+                Form {
+                    Section("Taza guardada") {
+                        Text("Tu preparación ya está en Almacén → Tazas.")
+                        HStack { ForEach(1...5, id: \.self) { star in
+                            Button { quickRating = star } label: { Image(systemName: star <= quickRating ? "star.fill" : "star").foregroundStyle(CupaTheme.goldText) }.buttonStyle(.plain).accessibilityLabel("\(star) estrellas")
+                        } }
+                        TextField("Notas para la siguiente taza", text: $quickComment, axis: .vertical).lineLimit(2...4)
+                    }
+                    Section {
+                        Button("Guardar taza") { saveQuickReview(cup, goToTasting: false) }
+                        Button("Ir a Cata y completar perfil") { saveQuickReview(cup, goToTasting: true) }
+                    }
+                }.navigationTitle("¿Cómo quedó?")
+            }
+        }
+        .onChange(of: model.state.status) { _, status in if status == .completed && model.state.savedAt == nil { finish() } }
+        .onAppear { if model.state.status == .completed && model.state.savedAt == nil { finish() } }
+        .onChange(of: model.state.savedAt) { _, date in
+            if date != nil { showSavedCup() }
         }
         .alert("Preparación guardada", isPresented: $savedConfirmation) { Button("Aceptar") {} } message: { Text("La sesión y sus snapshots quedaron disponibles offline.") }
         .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("Aceptar") {} } message: { Text(errorMessage ?? "") }
@@ -64,24 +90,7 @@ struct PreparationExecutionView: View {
     private var executionCard: some View {
         CupaCard {
             VStack(spacing: 14) {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("TÉCNICA ACTIVA").font(.caption2.bold()).tracking(1.1).opacity(0.82)
-                        Text(model.state.techniqueName).font(.title3.bold())
-                        Text("\(model.state.methodName) · \(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(model.state.waterMl) ml")
-                            .font(.caption).opacity(0.9)
-                        if let bean = beans.first(where: { $0.id == model.state.beanId }) {
-                            Label(bean.name, systemImage: "leaf.fill").font(.caption.bold())
-                        }
-                    }
-                    Spacer()
-                    Text("1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...1))))")
-                        .font(.title3.bold().monospacedDigit())
-                }
-                .foregroundStyle(CupaTheme.onAccent)
-                .padding(14)
-                .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                preparationIdentity
 
                 if model.state.status == .ready {
                     Button("Técnica") { showingTechniques = true }
@@ -108,6 +117,75 @@ struct PreparationExecutionView: View {
                 controls
             }.frame(maxWidth: .infinity)
         }
+    }
+
+    // Shared hierarchy with Android: technique → bean → settings → quantities.
+    // Keep historical bean names when replicating a cup whose bean was removed.
+    private var preparationIdentity: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "cup.and.saucer.fill").font(.system(size: 20))
+                    .frame(width: 38, height: 38)
+                    .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CONFIGURACIÓN ACTIVA · \(model.state.methodName)")
+                        .font(.system(size: 9, weight: .bold)).tracking(0.7).opacity(0.85)
+                    Text(model.state.techniqueName).font(.system(size: 18, weight: .bold))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "leaf.fill").font(.system(size: 18)).opacity(0.85)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("GRANO").font(.system(size: 9)).tracking(1).opacity(0.8)
+                        Text(beans.first(where: { $0.id == model.state.beanId })?.name ?? model.state.beanNameSnapshot ?? "Sin grano asignado")
+                            .font(.system(size: 19, weight: .bold, design: .serif))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+                if model.state.beanId != nil && !beans.contains(where: { $0.id == model.state.beanId }) {
+                    Text("Grano de la taza original · fuera de Almacén").font(.caption2).opacity(0.85)
+                }
+                Rectangle().fill(.white.opacity(0.15)).frame(height: 1)
+                HStack(alignment: .top, spacing: 12) {
+                    preparationValue("TEMPERATURA", (TemperatureUnit(rawValue: rawTemperatureUnit) ?? .celsius).text(celsius: model.state.effectiveTemperatureC))
+                    preparationValue("MOLIENDA", model.state.grindDescription.isEmpty ? "Sin molienda asignada" : model.state.grindDescription)
+                }
+            }
+            .padding(12)
+            .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
+            .overlay { RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.16), lineWidth: 1) }
+            HStack(spacing: 6) {
+                preparationValue("CAFÉ", "\(model.state.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g", centered: true)
+                Rectangle().fill(.white.opacity(0.3)).frame(width: 1, height: 20)
+                preparationValue("PROPORCIÓN", "1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...2))))", centered: true)
+                Rectangle().fill(.white.opacity(0.3)).frame(width: 1, height: 20)
+                preparationValue("AGUA", "\(model.state.waterMl) ml", centered: true)
+            }
+            .padding(12)
+            .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+            .overlay { RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.2), lineWidth: 1) }
+        }
+        .foregroundStyle(.white)
+        .padding(16)
+        .background {
+            let colors: [Color] = model.state.ratio <= 6 ? [Color(hex: 0x3D2817), Color(hex: 0x7A3B2E)] : model.state.ratio <= 12 ? [Color(hex: 0x4A3728), Color(hex: 0xA85D3F)] : model.state.ratio <= 15 ? [Color(hex: 0x2D4A3E), Color(hex: 0xB5714A)] : [Color(hex: 0x3D5E4F), Color(hex: 0x6B9080)]
+            LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                .overlay(alignment: .topTrailing) {
+                    Circle().fill(.white.opacity(0.10)).frame(width: 240, height: 240).offset(x: 90, y: -120)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    private func preparationValue(_ label: String, _ value: String, centered: Bool = false) -> some View {
+        VStack(alignment: centered ? .center : .leading, spacing: 2) {
+            Text(label).font(.system(size: 9, weight: .bold)).tracking(0.7).opacity(0.8)
+            Text(value).font(.system(size: centered ? 18 : 16, weight: .bold, design: centered ? .serif : .default))
+                .monospacedDigit().fixedSize(horizontal: false, vertical: true)
+        }.frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
     }
 
     private var completeTechniqueOverview: some View {
@@ -258,6 +336,10 @@ struct PreparationExecutionView: View {
 
     @ViewBuilder private var controls: some View {
         if model.state.status == .ready {
+            if model.state.steps.isEmpty {
+                Text("Este método no tiene técnica. Crea o importa una desde Almacén.")
+                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+            }
             Button(action: model.start) {
                 Label("Iniciar preparación", systemImage: "play.fill")
                     .font(.subheadline.bold())
@@ -287,8 +369,8 @@ struct PreparationExecutionView: View {
                 .disabled(model.state.steps.isEmpty)
                 .accessibilityIdentifier("preparation.reset")
         }
-        if model.state.elapsedSeconds > 0 && model.state.savedAt == nil {
-            Button(isSaving ? "Guardando…" : (model.state.status == .completed ? "Guardar sesión finalizada" : "Finalizar y guardar sesión"), action: finish)
+        if (model.state.elapsedSeconds > 0 || model.state.status == .completed) && model.state.savedAt == nil {
+            Button(isSaving ? "Guardando…" : "Finalizar y guardar taza", action: finish)
                 .buttonStyle(.bordered).tint(CupaTheme.forest).disabled(isSaving)
                 .accessibilityIdentifier("preparation.finish")
         }
@@ -300,9 +382,10 @@ struct PreparationExecutionView: View {
 
     private func loadTechnique() {
         guard let key = selectedTechniqueKey else { return }
-        if let template = builtInTechniques.first(where: { $0.id == key }) { model.load(template: template); pour = "Original"; showingTechniques = false; return }
+        let previous = model.state
+        if let template = builtInTechniques.first(where: { $0.id == key }) { model.load(template: template); model.preserveExperimentContext(previous); pour = "Original"; showingTechniques = false; return }
         guard key.hasPrefix("saved:"), let id = UUID(uuidString: String(key.dropFirst(6))), let technique = matchingSavedTechniques.first(where: { $0.id == id }) else { return }
-        do { model.load(technique: technique, steps: try RecipeTechniqueRepository(context: context).techniqueSteps(techniqueId: id)); pour = "Original"; showingTechniques = false }
+        do { model.load(technique: technique, steps: try RecipeTechniqueRepository(context: context).techniqueSteps(techniqueId: id)); model.preserveExperimentContext(previous); pour = "Original"; showingTechniques = false }
         catch { errorMessage = error.localizedDescription }
     }
     private var builtInTechniques: [PreparationTechniqueTemplate] { PreparationTechniqueCatalog.techniques(for: model.state.methodName) }
@@ -316,20 +399,29 @@ struct PreparationExecutionView: View {
         guard !isSaving, model.state.savedAt == nil else { return }
         isSaving = true
         if model.state.status == .running { model.pause() }
-        let recipeName = recipes.first(where: { $0.id == model.state.recipeId })?.name ?? ""
-        let beanName = beans.first(where: { $0.id == model.state.beanId })?.name ?? ""
-        let grinderName = grinders.first(where: { $0.id == model.state.grinderId })?.name ?? ""
-        let brew = BrewSessionRecord(context: context, state: model.state, recipeName: recipeName, beanName: beanName, grinderName: grinderName)
         do {
-            try context.save()
-            model.markSaved()
+            model.complete()
+            let cup = try model.saveCompletedCup(in: context)
             isSaving = false
-            if let onFinished { onFinished(brew.id) } else { savedConfirmation = true }
+            quickRating = Int(cup.rating); quickComment = cup.comment; finishedCup = cup
         } catch {
             context.rollback()
             isSaving = false
             errorMessage = error.localizedDescription
         }
+    }
+    private func showSavedCup() {
+        let request = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")
+        request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "brewSessionId == %@", model.state.sessionId as CVarArg))
+        if let cup = try? context.fetch(request).first { quickRating = Int(cup.rating); quickComment = cup.comment; finishedCup = cup }
+    }
+    private func saveQuickReview(_ cup: CupSessionRecord, goToTasting: Bool) {
+        do {
+            cup.rating = Double(quickRating); cup.comment = quickComment; cup.markUpdated()
+            try context.save(); finishedCup = nil
+            if goToTasting, let id = cup.brewSessionId { onFinished?(id) }
+            if !goToTasting { model.reset() }
+        } catch { errorMessage = error.localizedDescription }
     }
     private func timeString(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }
 }

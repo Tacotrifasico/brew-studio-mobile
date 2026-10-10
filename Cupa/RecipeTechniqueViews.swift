@@ -1,5 +1,14 @@
 import CoreData
 import SwiftUI
+import UniformTypeIdentifiers
+
+private struct TechniqueFileDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+    var data: Data
+    init(data: Data) { self.data = data }
+    init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
+}
 
 struct ScopedEditorDraftStore<Payload: Codable>: Codable {
     var drafts: [String: Payload] = [:]
@@ -205,6 +214,12 @@ private struct RecipeDetailView: View {
 }
 
 struct TechniqueInventoryView: View {
+    @State private var importingFile = false
+    @State private var importedFileDraft: TechniqueDraftModel?
+    @State private var exportFile: TechniqueFileDocument?
+    @State private var exportingFile = false
+    @State private var pendingFileExport = false
+    @AppStorage("settings.temperature") private var rawTemperatureUnit = TemperatureUnit.celsius.rawValue
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate(), animation: .default)
     private var techniques: FetchedResults<TechniqueRecord>
@@ -236,7 +251,7 @@ struct TechniqueInventoryView: View {
                             HStack { Text(technique.name).font(.headline); Spacer(); if technique.syncStatus != .synced { syncStatusBadge(technique.syncStatus) } }
                             Text("\(technique.methodName) · 1:\(technique.ratio.formatted(.number.precision(.fractionLength(0...1)))) · \(formatDuration(Int(technique.totalTimeSeconds)))")
                                 .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
-                            Text("\(technique.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(technique.waterMl) ml · \(technique.temperatureC)°C · \(executionModeLabel(technique.executionMode))")
+                            Text("\(technique.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g · \(technique.waterMl) ml · \((TemperatureUnit(rawValue: rawTemperatureUnit) ?? .celsius).text(celsius: Double(technique.temperatureC))) · \(executionModeLabel(technique.executionMode))")
                                 .font(.caption).foregroundStyle(CupaTheme.forestText)
                         }.padding(.vertical, 4)
                     }.buttonStyle(.plain)
@@ -245,11 +260,27 @@ struct TechniqueInventoryView: View {
         }
         .searchable(text: $search, prompt: "Buscar técnica o método")
         .brewScrollableCanvas()
-        .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar técnica").accessibilityIdentifier("techniques.add") }
-        .sheet(isPresented: $adding) { TechniqueEditorView(technique: nil) }
+        .toolbar {
+            Button { importingFile = true } label: { Image(systemName: "square.and.arrow.down") }.accessibilityLabel("Importar archivo de técnica")
+            Button { importedFileDraft = nil; adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Agregar técnica").accessibilityIdentifier("techniques.add")
+        }
+        .fileImporter(isPresented: $importingFile, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
+            do {
+                guard let url = try result.get().first else { return }
+                let accessible = url.startAccessingSecurityScopedResource(); defer { if accessible { url.stopAccessingSecurityScopedResource() } }
+                let handle = try FileHandle(forReadingFrom: url); defer { try? handle.close() }
+                let data = try handle.read(upToCount: TechniqueFiles.maxBytes + 1) ?? Data()
+                importedFileDraft = try TechniqueFiles.decode(data); adding = true
+            } catch { errorMessage = error.localizedDescription }
+        }
+        .fileExporter(isPresented: $exportingFile, document: exportFile, contentType: .json, defaultFilename: "BrewStudio-tecnica") { result in
+            if case .failure(let error) = result { errorMessage = error.localizedDescription }
+        }
+        .sheet(isPresented: $adding) { TechniqueEditorView(technique: nil, initialDraft: importedFileDraft) }
         .sheet(item: $editing) { TechniqueEditorView(technique: $0) }
         .sheet(item: $selectedTechnique, onDismiss: {
             if let pendingEdit { editing = pendingEdit; self.pendingEdit = nil }
+            else if pendingFileExport { pendingFileExport = false; exportingFile = true }
             else if pendingHub { pendingHub = false; showHub = true }
         }) { technique in
             TechniqueDetailView(
@@ -262,6 +293,10 @@ struct TechniqueInventoryView: View {
                 onEdit: { pendingEdit = technique; selectedTechnique = nil },
                 onDuplicate: { duplicate(technique); selectedTechnique = nil },
                 onShare: { share(technique) },
+                onExport: {
+                    do { exportFile = TechniqueFileDocument(data: try TechniqueFiles.encode(RecipeTechniqueRepository(context: context).techniqueDraft(for: technique))); pendingFileExport = true; selectedTechnique = nil }
+                    catch { errorMessage = error.localizedDescription }
+                },
                 onDelete: { delete(technique); selectedTechnique = nil }
             )
         }
@@ -290,6 +325,7 @@ struct TechniqueInventoryView: View {
 }
 
 private struct TechniqueDetailView: View {
+    @AppStorage("settings.temperature") private var rawTemperatureUnit = TemperatureUnit.celsius.rawValue
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var technique: TechniqueRecord
     let steps: [TechniqueStepRecord]
@@ -300,6 +336,7 @@ private struct TechniqueDetailView: View {
     let onEdit: () -> Void
     let onDuplicate: () -> Void
     let onShare: () -> Void
+    let onExport: () -> Void
     let onDelete: () -> Void
     @State private var confirmingDelete = false
 
@@ -324,7 +361,7 @@ private struct TechniqueDetailView: View {
                     detailRow("Café", "\(technique.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g")
                     detailRow("Agua", "\(technique.waterMl) ml")
                     detailRow("Proporción", "1:\(technique.ratio.formatted(.number.precision(.fractionLength(0...1))))")
-                    detailRow("Temperatura", "\(technique.temperatureC) °C")
+                    detailRow("Temperatura", (TemperatureUnit(rawValue: rawTemperatureUnit) ?? .celsius).text(celsius: Double(technique.temperatureC)))
                     detailRow("Duración", formatDuration(Int(technique.totalTimeSeconds)))
                     detailRow("Molienda", technique.grindDescription.isEmpty ? "\(technique.grindValue.formatted(.number.precision(.fractionLength(0...1)))) \(technique.grindUnit.lowercased())" : technique.grindDescription)
                 }
@@ -373,6 +410,7 @@ private struct TechniqueDetailView: View {
                     Button(action: onDuplicate) { Label("Duplicar técnica", systemImage: "plus.square.on.square") }
                         .accessibilityIdentifier("techniques.detail.duplicate")
                     Button(action: onShare) { Label("Compartir desde el Hub", systemImage: "square.and.arrow.up") }
+                    Button(action: onExport) { Label("Exportar archivo de técnica", systemImage: "doc.badge.arrow.up") }
                         .accessibilityIdentifier("techniques.detail.share")
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar técnica", systemImage: "trash") }
                 }
@@ -545,12 +583,14 @@ private struct RecipeImporterView: View {
 }
 
 struct TechniqueEditorView: View {
+    @AppStorage("settings.temperature") private var rawTemperatureUnit = TemperatureUnit.celsius.rawValue
     @Environment(\.dismiss) private var dismiss; @Environment(\.managedObjectContext) private var context
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "equipmentType == 'BREWER_METHOD'"))) private var methods: FetchedResults<EquipmentRecord>
     let technique: TechniqueRecord?
+    var initialDraft: TechniqueDraftModel? = nil
     @State private var draft = TechniqueDraftModel(); @State private var loaded = false; @State private var errorMessage: String?; @State private var isSaving = false
     @SceneStorage("cupa.techniqueEditorDraft.v1") private var storedDraft: Data?
 
@@ -559,18 +599,27 @@ struct TechniqueEditorView: View {
             Form {
                 Section("Técnica") {
                     TextField("Nombre", text: $draft.name)
-                    Picker("Método", selection: $draft.methodId) { Text("V60 / genérico").tag(Optional<UUID>.none); ForEach(methods) { Text($0.name).tag(Optional($0.id)) } }
+                    Picker("Método", selection: $draft.methodId) { Text(draft.methodName).tag(Optional<UUID>.none); ForEach(methods) { Text($0.name).tag(Optional($0.id)) } }
                     Picker("Partir de receta", selection: $draft.recipeId) { Text("Desde cero").tag(Optional<UUID>.none); ForEach(recipes) { Text($0.name).tag(Optional($0.id)) } }
                     if draft.recipeId != nil { Button("Cargar cantidades de la receta", action: importRecipeQuantities) }
                     Picker("Modo", selection: $draft.executionMode) { ForEach(executionModes, id: \.0) { Text($0.1).tag($0.0) } }
                     TextField("Descripción", text: $draft.techniqueDescription, axis: .vertical).lineLimit(2...4)
                 }
                 Section("Preparación") {
-                    HStack { TextField("Café (g)", value: $draft.doseGrams, format: .number).keyboardType(.decimalPad); TextField("Agua (ml)", value: $draft.waterMl, format: .number).keyboardType(.numberPad) }
-                    HStack { TextField("Proporción", value: $draft.ratio, format: .number).keyboardType(.decimalPad); TextField("Temperatura °C", value: $draft.temperatureC, format: .number).keyboardType(.numberPad) }
+                    HStack {
+                        TechniqueNumberField("Café · g") { TextField("Café", value: $draft.doseGrams, format: .number).keyboardType(.decimalPad) }
+                        TechniqueNumberField("Agua · ml") { TextField("Agua", value: $draft.waterMl, format: .number).keyboardType(.numberPad) }
+                    }
+                    HStack {
+                        TechniqueNumberField("Proporción · 1:") { TextField("Proporción", value: $draft.ratio, format: .number).keyboardType(.decimalPad) }
+                        TechniqueNumberField("Temperatura · \(temperatureUnit.symbol)") { TextField("Temperatura", value: displayedTemperature, format: .number).keyboardType(.decimalPad) }
+                    }
                     Picker("Café", selection: $draft.beanId) { Text("Sin café seleccionado").tag(Optional<UUID>.none); ForEach(beans) { Text($0.name).tag(Optional($0.id)) } }
                     Picker("Molino", selection: $draft.grinderId) { Text("Sin molino seleccionado").tag(Optional<UUID>.none); ForEach(grinders) { Text($0.name).tag(Optional($0.id)) } }
-                    HStack { TextField("Valor de molienda", value: $draft.grindValue, format: .number).keyboardType(.decimalPad); Picker("Unidad", selection: $draft.grindUnit) { ForEach(grindUnits, id: \.self) { Text(grindUnitLabel($0)).tag($0) } } }
+                    HStack {
+                        TechniqueNumberField("Molienda") { TextField("Valor de molienda", value: $draft.grindValue, format: .number).keyboardType(.decimalPad) }
+                        Picker("Unidad", selection: $draft.grindUnit) { ForEach(grindUnits, id: \.self) { Text(grindUnitLabel($0)).tag($0) } }
+                    }
                     TextField("Descripción de molienda", text: $draft.grindDescription)
                     TextField("Notas", text: $draft.notes, axis: .vertical).lineLimit(2...5)
                 }
@@ -598,9 +647,15 @@ struct TechniqueEditorView: View {
     }
 
     private var validationMessage: String? { TechniqueDraftValidator.message(for: draft) }
+    private var temperatureUnit: TemperatureUnit { TemperatureUnit(rawValue: rawTemperatureUnit) ?? .celsius }
+    private var displayedTemperature: Binding<Double> {
+        Binding(get: { temperatureUnit.displayValue(celsius: Double(draft.temperatureC)) },
+                set: { draft.temperatureC = Int(temperatureUnit.celsius(displayValue: $0).rounded()) })
+    }
     private var canSave: Bool { validationMessage == nil }
     private func load() {
         guard !loaded else { return }; loaded = true
+        if let initialDraft { draft = initialDraft; return }
         if let restored: TechniqueDraftModel = scopedEditorDraft(from: storedDraft, ownerId: context.activeOwnerId), technique == nil || restored.id == technique?.id { draft = restored; return }
         if let technique { do { draft = try RecipeTechniqueRepository(context: context).techniqueDraft(for: technique) } catch { errorMessage = error.localizedDescription } }
     }
@@ -608,7 +663,12 @@ struct TechniqueEditorView: View {
         guard !isSaving else { return }
         isSaving = true
         if let method = methods.first(where: { $0.id == draft.methodId }) { draft.methodName = method.name }
-        do { _ = try RecipeTechniqueRepository(context: context).saveTechnique(draft); clearStoredDraft(); dismiss() } catch { isSaving = false; errorMessage = error.localizedDescription }
+        do {
+            let repository = RecipeTechniqueRepository(context: context)
+            if initialDraft != nil || (draft.methodId == nil && PreparationTechniqueCatalog.techniques(for: draft.methodName).isEmpty) { _ = try repository.saveImportedTechnique(draft) }
+            else { _ = try repository.saveTechnique(draft) }
+            clearStoredDraft(); dismiss()
+        } catch { isSaving = false; errorMessage = error.localizedDescription }
     }
     private func clearStoredDraft() { storedDraft = removingEditorDraft(ownerId: context.activeOwnerId, from: storedDraft, as: TechniqueDraftModel.self) }
     private func importRecipeQuantities() {
@@ -627,7 +687,10 @@ private struct TechniqueStepDraftEditor: View {
     var body: some View {
         DisclosureGroup(step.title.isEmpty ? "Nuevo paso" : step.title) {
             TextField("Título", text: $step.title)
-            HStack { TextField("Duración (s)", value: $step.durationSeconds, format: .number).keyboardType(.numberPad); TextField("Agua agregada (ml)", value: $step.waterAddedMl, format: .number).keyboardType(.numberPad) }
+            HStack {
+                TechniqueNumberField("Duración · s") { TextField("Duración", value: $step.durationSeconds, format: .number).keyboardType(.numberPad) }
+                TechniqueNumberField("Agregar agua · ml") { TextField("Agua agregada", value: $step.waterAddedMl, format: .number).keyboardType(.numberPad) }
+            }
             Picker("Gesto", selection: $step.gesture) { ForEach(gestures, id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0) } }
             Picker("Intensidad", selection: $step.intensity) { Text("Baja").tag("LOW"); Text("Media").tag("MEDIUM"); Text("Alta").tag("HIGH") }
             HStack { OptionalDoubleField(title: "Cobertura %", value: $step.coverage); OptionalDoubleField(title: "Flujo ml/s", value: $step.flow) }
@@ -643,7 +706,24 @@ private struct OptionalDurationField: View {
 }
 private struct OptionalDoubleField: View {
     let title: String; @Binding var value: Double?
-    var body: some View { TextField(title, text: Binding(get: { value.map { String(format: "%.1f", $0) } ?? "" }, set: { value = Double($0.replacingOccurrences(of: ",", with: ".")) })).keyboardType(.decimalPad) }
+    var body: some View {
+        TechniqueNumberField(title) {
+            TextField(title, text: Binding(get: { value.map { String(format: "%.1f", $0) } ?? "" }, set: { value = Double($0.replacingOccurrences(of: ",", with: ".")) })).keyboardType(.decimalPad)
+        }
+    }
+}
+
+// Persistent labels, like Android's outlined fields: values never replace their meaning.
+private struct TechniqueNumberField<Content: View>: View {
+    let title: String
+    let content: Content
+    init(_ title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(CupaTheme.secondaryText)
+            content.monospacedDigit()
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 
 private struct CodeLabel: Identifiable { let code: String; let label: String; var id: String { code } }

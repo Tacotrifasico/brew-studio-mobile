@@ -1,6 +1,60 @@
 import CoreData
 import Foundation
 
+// Shared Android/iOS v1 file format. Public content, fresh IDs, no account or local inventory links.
+enum TechniqueFiles {
+    static let maxBytes = 1_048_576
+    struct Envelope: Codable { var format = "brew-studio"; var version = 1; var kind = "technique"; let technique: Payload }
+    struct Payload: Codable {
+        let name: String; let methodName: String; let doseGrams: Double; let waterMl: Int; let temperatureC: Int
+        let executionMode: String; let grindValue: Double; let grindUnit: String; let grindDescription: String
+        let notes: String; let description: String; let steps: [Step]
+    }
+    struct Step: Codable {
+        let title: String; let durationSeconds: Int; let waterAddedMl: Int; let gesture: String; let intensity: String
+        let note: String; let coverage: Double?; let flow: Double?; let secondaryAction: String?
+    }
+    enum FileError: LocalizedError {
+        case incompatible, tooLarge, invalid
+        var errorDescription: String? { switch self {
+        case .incompatible: "Archivo de técnica no compatible."
+        case .tooLarge: "El archivo supera 1 MB."
+        case .invalid: "Revisa el método, cantidades y pasos del archivo."
+        } }
+    }
+    static func encode(_ draft: TechniqueDraftModel) throws -> Data {
+        try TechniqueDraftValidator.validate(draft)
+        let payload = Payload(name: draft.name, methodName: draft.methodName, doseGrams: draft.doseGrams, waterMl: draft.waterMl,
+            temperatureC: draft.temperatureC, executionMode: draft.executionMode, grindValue: draft.grindValue, grindUnit: draft.grindUnit,
+            grindDescription: draft.grindDescription, notes: draft.notes, description: draft.techniqueDescription,
+            steps: draft.steps.map { Step(title: $0.title, durationSeconds: $0.durationSeconds, waterAddedMl: $0.waterAddedMl,
+                gesture: $0.gesture, intensity: $0.intensity, note: $0.note, coverage: $0.coverage, flow: $0.flow, secondaryAction: $0.secondaryAction) })
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(Envelope(technique: payload))
+    }
+    static func decode(_ data: Data) throws -> TechniqueDraftModel {
+        guard data.count <= maxBytes else { throw FileError.tooLarge }
+        let file = try JSONDecoder().decode(Envelope.self, from: data)
+        guard file.format == "brew-studio", file.version == 1, file.kind == "technique" else { throw FileError.incompatible }
+        let p = file.technique
+        guard !p.methodName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, p.name.count <= 200, p.methodName.count <= 200,
+              (1...128).contains(p.steps.count), p.steps.allSatisfy({ (1...172800).contains($0.durationSeconds) && (0...2000).contains($0.waterAddedMl) }),
+              p.doseGrams.isFinite, p.grindValue.isFinite, (0...50000).contains(p.grindValue),
+              p.steps.allSatisfy({ step in
+                  (step.coverage.map { $0.isFinite && (0...100).contains($0) } ?? true) &&
+                  (step.flow.map { $0.isFinite && (0...200).contains($0) } ?? true)
+              }) else { throw FileError.invalid }
+        let draft = TechniqueDraftModel(name: p.name, methodName: p.methodName, doseGrams: p.doseGrams, waterMl: p.waterMl,
+            ratio: p.doseGrams > 0 ? Double(p.waterMl) / p.doseGrams : 0, temperatureC: p.temperatureC,
+            executionMode: p.executionMode, grindValue: p.grindValue, grindDescription: p.grindDescription, grindUnit: p.grindUnit,
+            notes: p.notes, techniqueDescription: p.description,
+            steps: p.steps.map { TechniqueStepDraft(title: $0.title, durationSeconds: $0.durationSeconds, waterAddedMl: $0.waterAddedMl,
+                intensity: $0.intensity, gesture: $0.gesture, note: $0.note, coverage: $0.coverage, flow: $0.flow, secondaryAction: $0.secondaryAction) })
+        try TechniqueDraftValidator.validate(draft)
+        return draft
+    }
+}
+
 struct RecipeIngredientDraft: Identifiable, Equatable, Codable {
     var id = UUID(); var name = ""; var amount = 0.0; var unit = "GRAMS"
 }
@@ -216,7 +270,7 @@ enum TechniqueDraftValidationError: LocalizedError, Equatable {
         case .emptyName: "Escribe un nombre para la técnica."
         case .invalidCoffee: "El café debe estar entre 1 y 100 g."
         case .invalidWater: "El agua total debe estar entre 10 y 2000 ml."
-        case .invalidTemperature: "La temperatura debe estar entre 60 y 100 °C."
+        case .invalidTemperature: "La temperatura debe estar entre 0 y 100 °C."
         case .missingStepTitle: "Todos los pasos necesitan un título."
         case .invalidStepDuration: "Cada paso necesita una duración mayor a 0 segundos."
         case .invalidStepWater: "El agua de cada paso debe ser 0 ml o más."
@@ -231,7 +285,7 @@ enum TechniqueDraftValidator {
         if draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw TechniqueDraftValidationError.emptyName }
         if !(1...100).contains(draft.doseGrams) { throw TechniqueDraftValidationError.invalidCoffee }
         if !(10...2_000).contains(draft.waterMl) { throw TechniqueDraftValidationError.invalidWater }
-        if !(60...100).contains(draft.temperatureC) { throw TechniqueDraftValidationError.invalidTemperature }
+        if !(0...100).contains(draft.temperatureC) { throw TechniqueDraftValidationError.invalidTemperature }
         if draft.steps.isEmpty || draft.steps.contains(where: { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) { throw TechniqueDraftValidationError.missingStepTitle }
         if draft.steps.contains(where: { $0.durationSeconds <= 0 }) { throw TechniqueDraftValidationError.invalidStepDuration }
         if draft.steps.contains(where: { $0.waterAddedMl < 0 }) { throw TechniqueDraftValidationError.invalidStepWater }
@@ -322,7 +376,7 @@ final class RecipeTechniqueRepository {
         )
     }
 
-    @discardableResult func saveTechnique(_ draft: TechniqueDraftModel) throws -> TechniqueRecord {
+    @discardableResult func saveTechnique(_ draft: TechniqueDraftModel, copyMode: String? = nil) throws -> TechniqueRecord {
         try TechniqueDraftValidator.validate(draft)
         var draft = draft
         draft.ratio = Double(draft.waterMl) / draft.doseGrams
@@ -343,8 +397,24 @@ final class RecipeTechniqueRepository {
             technique.notes = draft.notes; technique.techniqueDescription = draft.techniqueDescription; technique.totalTimeSeconds = Int64(totalTime)
             technique.markUpdated()
         }
+        if let copyMode { technique.copyMode = copyMode }
         try reconcileTechniqueSteps(draft.steps, techniqueId: technique.id)
         try saveContext(); return technique
+    }
+
+    @discardableResult func saveImportedTechnique(_ imported: TechniqueDraftModel) throws -> TechniqueRecord {
+        try TechniqueDraftValidator.validate(imported)
+        var draft = imported
+        let request = NSFetchRequest<EquipmentRecord>(entityName: "EquipmentRecord")
+        request.predicate = LocalDataScope.visiblePredicate()
+        let existing = try context.fetch(request).first { $0.isBrewingMethod && $0.name.caseInsensitiveCompare(draft.methodName) == .orderedSame }
+        if let existing { draft.methodId = existing.id }
+        else if PreparationTechniqueCatalog.techniques(for: draft.methodName).isEmpty {
+            let method = EquipmentRecord(context: context, name: draft.methodName, equipmentType: "BREWER_METHOD", brand: "", model: "", capacityMl: nil,
+                configuration: "", notes: "Método de técnica importada", isFavorite: true, isActive: true)
+            draft.methodId = method.id
+        }
+        do { return try saveTechnique(draft, copyMode: "IMPORT") } catch { context.rollback(); throw error }
     }
 
     @discardableResult func duplicateTechnique(_ technique: TechniqueRecord) throws -> TechniqueRecord {

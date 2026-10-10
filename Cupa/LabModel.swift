@@ -5,6 +5,18 @@ enum TemperatureUnit: String, Codable, CaseIterable {
     case fahrenheit
 
     var symbol: String { self == .celsius ? "°C" : "°F" }
+
+    func displayValue(celsius: Double) -> Double {
+        self == .fahrenheit ? celsius * 9 / 5 + 32 : celsius
+    }
+
+    func celsius(displayValue: Double) -> Double {
+        self == .fahrenheit ? (displayValue - 32) * 5 / 9 : displayValue
+    }
+
+    func text(celsius: Double) -> String {
+        "\(displayValue(celsius: celsius).rounded().formatted(.number.precision(.fractionLength(0)))) \(symbol)"
+    }
 }
 
 struct CoffeeCity: Identifiable, Equatable {
@@ -43,6 +55,9 @@ struct LabState: Codable, Equatable {
     var waterMl = 240
     var ratio: Float = 16
     var temperatureC = 92
+    // Optional keeps old saved drafts readable; Celsius is the canonical value.
+    var preciseTemperatureC: Double?
+    var effectiveTemperatureC: Double { preciseTemperatureC ?? Double(temperatureC) }
     var grindClicks = 24
     var freshness = "en ventana"
     var timeSeconds = 180
@@ -50,6 +65,53 @@ struct LabState: Codable, Equatable {
     var altitudeMeters = 0
     var cityName = "Nivel del mar (0m)"
     var temperatureUnit = TemperatureUnit.celsius
+}
+
+// Mirror of Android LabTemperatureGuide: whole display degrees, canonical Celsius,
+// altitude-aware useful window and risk language rather than promised flavors.
+struct LabTemperatureGuide {
+    let temperatureC: Double
+    let altitudeMeters: Int
+    var unit: TemperatureUnit = .celsius
+    var boilingC: Double { 100 - Double(min(5000, max(0, altitudeMeters))) * 0.0034 }
+    var upperC: Double { min(96, boilingC) }
+    var lowerC: Double { max(80, min(90, upperC - 6)) }
+    func degrees(_ celsius: Double) -> Int { Int(unit.displayValue(celsius: celsius).rounded()) }
+    var recommendedRange: ClosedRange<Double> { Double(degrees(lowerC))...Double(degrees(upperC)) }
+    var rangeText: String { "\(degrees(lowerC))–\(degrees(upperC)) \(unit.symbol)" }
+    var sliderRange: ClosedRange<Double> { unit == .fahrenheit ? 176...208 : 80...98 }
+    var leftShare: Double { recommendedRange.lowerBound <= sliderRange.lowerBound ? 0 : recommendedRange.upperBound >= sliderRange.upperBound ? 0.5 : 0.25 }
+    // Same 25% / 50% / 25% magnification as Android's calibrated slider.
+    func fraction(_ value: Double) -> Double {
+        let low = recommendedRange.lowerBound, high = recommendedRange.upperBound
+        let value = min(sliderRange.upperBound, max(sliderRange.lowerBound, value))
+        if value <= low { return low > sliderRange.lowerBound ? (value - sliderRange.lowerBound) / (low - sliderRange.lowerBound) * leftShare : leftShare }
+        if value >= high { return leftShare + 0.5 + (value - high) / (sliderRange.upperBound - high) * (0.5 - leftShare) }
+        return leftShare + (value - low) / (high - low) * 0.5
+    }
+    func value(_ fraction: Double) -> Double {
+        let f = min(1, max(0, fraction)), low = recommendedRange.lowerBound, high = recommendedRange.upperBound
+        if f <= leftShare { return leftShare > 0 ? (sliderRange.lowerBound + f / leftShare * (low - sliderRange.lowerBound)).rounded() : low }
+        if f >= leftShare + 0.5 { return (high + (f - leftShare - 0.5) / (0.5 - leftShare) * (sliderRange.upperBound - high)).rounded() }
+        return (low + (f - leftShare) / 0.5 * (high - low)).rounded()
+    }
+    var warning: Bool { temperatureC > boilingC || !(degrees(lowerC)...degrees(upperC)).contains(degrees(temperatureC)) }
+    var headline: String {
+        if temperatureC > boilingC { return "Supera el hervor local" }
+        if degrees(temperatureC) < degrees(lowerC - 3) { return "Agua demasiado fría" }
+        if degrees(temperatureC) < degrees(lowerC) { return "Agua por debajo de la zona útil" }
+        if degrees(temperatureC) > degrees(upperC) { return "Calor alto: vigila el amargor" }
+        return "En zona útil"
+    }
+    var detail: String {
+        switch headline {
+        case "Supera el hervor local": return "A tu altura, el agua hierve antes de alcanzar esa temperatura. Ajusta molienda o tiempo."
+        case "Agua demasiado fría": return "Riesgo de subextracción: taza agria o débil. Sube la temperatura hacia la zona útil; valida el resultado en Cata."
+        case "Agua por debajo de la zona útil": return "Puede faltar extracción y dulzor. Sube hacia la zona útil o compensa con molienda y tiempo."
+        case "Calor alto: vigila el amargor": return "Puede aumentar el amargor o la sequedad. Prueba bajar hacia la zona útil, especialmente con tueste oscuro."
+        default: return "Buen punto de partida; molienda, tiempo y grano también definen el sabor."
+        }
+    }
 }
 
 enum LabEngine {
@@ -65,11 +127,12 @@ enum LabEngine {
             coffeeGrams: state.coffeeGrams,
             waterMl: state.waterMl,
             ratio: state.ratio,
-            temperature: state.temperatureC,
+            temperature: state.effectiveTemperatureC,
             grindClicks: state.grindClicks,
             freshnessState: state.freshness,
             altitudeMeters: state.altitudeMeters,
-            timeSeconds: state.timeSeconds
+            timeSeconds: state.timeSeconds,
+            temperatureUnit: state.temperatureUnit
         )
     }
 
@@ -78,11 +141,12 @@ enum LabEngine {
         coffeeGrams: Float,
         waterMl: Int,
         ratio: Float,
-        temperature: Int,
+        temperature: Double,
         grindClicks: Int,
         freshnessState: String,
         altitudeMeters: Int = 0,
-        timeSeconds: Int = 180
+        timeSeconds: Int = 180,
+        temperatureUnit: TemperatureUnit = .celsius
     ) -> LabFlavorProfile {
         let effectiveRatio = min(30, max(5, ratio > 0 ? ratio : 16))
         let tBoil = boilingPointC(altitudeMeters: altitudeMeters)
@@ -119,6 +183,8 @@ enum LabEngine {
         else if timeSeconds > 270 { labels.append("Contacto Prolongado") }
         if Float(temperature) > tBoil { labels.append("Hervor \(oneDecimal(tBoil))°C") }
         else if altitudeMeters >= 1800 { labels.append("Altitud \(altitudeMeters)m") }
+        let thermal = LabTemperatureGuide(temperatureC: temperature, altitudeMeters: altitudeMeters, unit: temperatureUnit)
+        if thermal.warning { labels.insert(thermal.headline, at: 0); labels.removeAll { $0 == "Ventana Óptima" || $0 == "Acidez Brillante" } }
         switch freshnessState {
         case "muy fresco": labels.append("Bloom Largo")
         case "en ventana", "punto ideal": labels.append("Grano en Punto")
@@ -127,8 +193,8 @@ enum LabEngine {
         }
 
         let summary: String
-        if Float(temperature) > tBoil {
-            summary = "A \(altitudeMeters) msnm el agua hierve a \(oneDecimal(tBoil))°C. La temperatura está acotada al hervor; muele más fino para potenciar extracción."
+        if thermal.warning {
+            summary = thermal.detail
         } else if bitterness >= 60 {
             summary = "Extracción intensa con perfil seco/amargo pronunciado; disminuye temperatura o engruesa la molienda."
         } else if acidity >= 68 && sweetness < 50 {
@@ -155,9 +221,12 @@ enum LabEngine {
 
     static func diagnostic(for state: LabState) -> (extraction: String, recommendation: String, risks: [String]) {
         let tBoil = boilingPointC(altitudeMeters: state.altitudeMeters)
-        let effectiveTemp = min(Float(state.temperatureC), tBoil)
+        let effectiveTemp = min(Float(state.effectiveTemperatureC), tBoil)
+        let thermal = LabTemperatureGuide(temperatureC: state.effectiveTemperatureC, altitudeMeters: state.altitudeMeters, unit: state.temperatureUnit)
         let extraction: String
-        if (effectiveTemp >= 96 && state.grindClicks <= 12) || (state.timeSeconds > 270 && state.grindClicks <= 15) {
+        if thermal.warning {
+            extraction = thermal.headline
+        } else if (effectiveTemp >= 96 && state.grindClicks <= 12) || (state.timeSeconds > 270 && state.grindClicks <= 15) {
             extraction = "Sobre-extracción Extrema (Riesgo amargo/seco)"
         } else if (effectiveTemp < 86 && state.ratio <= 12) || (state.timeSeconds < 100 && state.grindClicks >= 24) {
             extraction = "Sub-extracción (Agria y salada)"
@@ -168,9 +237,9 @@ enum LabEngine {
         }
 
         var risks: [String] = []
-        if Float(state.temperatureC) > tBoil { risks.append("A \(state.altitudeMeters)m el agua hierve a \(oneDecimal(tBoil))°C; la temperatura real queda limitada.") }
+        if Float(state.effectiveTemperatureC) > tBoil { risks.append("A \(state.altitudeMeters)m el agua hierve a \(oneDecimal(tBoil))°C; la temperatura real queda limitada.") }
         if effectiveTemp > 95 { risks.append("La temperatura alta puede evaporar notas florales y dejar amargor.") }
-        if effectiveTemp < 87 { risks.append("La temperatura baja puede acentuar una acidez frágil.") }
+        if thermal.warning { risks.insert(thermal.detail, at: 0) }
         if state.grindClicks < 13 { risks.append("La molienda fina puede obstruir el paso y causar astringencia.") }
         if state.grindClicks > 28 { risks.append("La molienda gruesa puede dar canalización y una taza aguada.") }
         if state.timeSeconds > 270 { risks.append("Un tiempo mayor a 4:30 puede saturar amargor y taninos.") }
@@ -179,7 +248,7 @@ enum LabEngine {
         if state.freshness == "viejo" { risks.append("El grano desgasificado puede requerir más temperatura y molienda fina.") }
 
         let recommendation: String
-        if Float(state.temperatureC) > tBoil { recommendation = "Muele 1 click más fino para compensar la menor energía térmica." }
+        if thermal.warning { recommendation = thermal.detail }
         else if state.altitudeMeters >= 2000 { recommendation = "Ajusta la molienda fina para retener dulzor en altitud elevada." }
         else if state.ratio <= 3 { recommendation = "Esta hipótesis corta produce alta concentración de aceites." }
         else if state.freshness == "muy fresco" { recommendation = "Aumenta el bloom para drenar dióxido de carbono." }
@@ -247,8 +316,8 @@ final class LabModel: ObservableObject {
     func update(_ change: (inout LabState) -> Void) { change(&state) }
     func setCoffeeGrams(_ grams: Float) {
         update {
-            $0.coffeeGrams = grams
-            $0.waterMl = Int((grams * $0.ratio).rounded())
+            $0.coffeeGrams = grams.rounded()
+            $0.waterMl = Int(($0.coffeeGrams * $0.ratio).rounded())
             Self.normalizeQuantities(&$0)
         }
     }
@@ -260,9 +329,13 @@ final class LabModel: ObservableObject {
     }
     func setRatio(_ ratio: Float) {
         update {
-            $0.waterMl = Int(($0.coffeeGrams * ratio).rounded())
+            $0.waterMl = Int(($0.coffeeGrams * ratio.rounded()).rounded())
             Self.normalizeQuantities(&$0)
         }
+    }
+    func setDisplayedTemperature(_ degrees: Double) {
+        let celsius = state.temperatureUnit.celsius(displayValue: degrees.rounded())
+        update { $0.preciseTemperatureC = celsius; $0.temperatureC = Int(celsius.rounded()) }
     }
     func setTemperatureUnit(_ unit: TemperatureUnit) {
         defaults.set(unit.rawValue, forKey: temperaturePreferenceKey)
@@ -283,6 +356,7 @@ final class LabModel: ObservableObject {
             $0.method = calculator.method
             $0.beanId = calculator.selectedBeanId
             $0.temperatureC = calculator.selectedBeanProfile?.displayDegrees(fahrenheit: false) ?? 93
+            $0.preciseTemperatureC = calculator.selectedBeanProfile?.temperatureC ?? 93
             $0.grindClicks = calculator.selectedBeanProfile?.clicks ?? 18
             $0.coffeeGrams = Float(calculator.coffee)
             $0.waterMl = calculator.water
@@ -331,6 +405,7 @@ final class LabModel: ObservableObject {
             $0.method = technique.methodName; $0.coffeeGrams = Float(technique.doseGrams)
             $0.waterMl = Int(technique.waterMl); Self.normalizeQuantities(&$0)
             $0.temperatureC = Int(technique.temperatureC)
+            $0.preciseTemperatureC = Double(technique.temperatureC)
             if technique.grindUnit == "CLICKS" { $0.grindClicks = min(50, max(4, Int(technique.grindValue.rounded()))) }
             if technique.totalTimeSeconds > 0 { $0.timeSeconds = Int(technique.totalTimeSeconds) }
         }
@@ -345,6 +420,7 @@ final class LabModel: ObservableObject {
             $0.beanId = experiment.beanId; $0.grinderId = experiment.grinderId; $0.recipeName = nil; $0.techniqueName = nil
             $0.method = experiment.method; $0.coffeeGrams = Float(experiment.coffeeGrams); $0.waterMl = Int(experiment.waterMl)
             Self.normalizeQuantities(&$0); $0.temperatureC = Int(experiment.temperatureC); $0.grindClicks = Int(experiment.grindClicks)
+            $0.preciseTemperatureC = experiment.effectiveTemperatureC
             $0.freshness = experiment.freshness; $0.timeSeconds = Int(experiment.timeSeconds); $0.notes = experiment.notes
             // Historical altitude stays in the experiment; live preparation uses Settings.
         }
@@ -358,6 +434,7 @@ final class LabModel: ObservableObject {
                 $0.techniqueName = brew.techniqueNameSnapshot.isEmpty ? nil : brew.techniqueNameSnapshot
                 $0.method = brew.methodNameSnapshot; $0.coffeeGrams = Float(brew.doseGrams); $0.waterMl = Int(brew.waterMl)
                 Self.normalizeQuantities(&$0); $0.temperatureC = Int(brew.temperatureC)
+                $0.preciseTemperatureC = brew.effectiveTemperatureC
                 if let clicks = Self.firstInteger(in: brew.grindDescription) { $0.grindClicks = min(50, max(4, clicks)) }
                 if brew.elapsedSeconds > 0 { $0.timeSeconds = Int(brew.elapsedSeconds) }
             }

@@ -3,7 +3,147 @@ import CoreData
 
 @main
 struct LabGoldenVerifier {
+    static func verifyThermalGuidance() {
+        let low = (177.0 - 32) / 1.8
+        for clicks in [12, 18, 24, 30] { for seconds in [120, 180, 240, 300] {
+            let state = LabState(temperatureC: 81, preciseTemperatureC: low, grindClicks: clicks, timeSeconds: seconds, temperatureUnit: .fahrenheit)
+            let profile = LabEngine.calculate(state)
+            precondition(profile.summary.contains("Riesgo de subextracción"))
+            precondition(profile.labels.first == "Agua demasiado fría" && !profile.labels.contains("Ventana Óptima"))
+            precondition(LabEngine.diagnostic(for: state).extraction == "Agua demasiado fría")
+        } }
+        let c = LabTemperatureGuide(temperatureC: 92, altitudeMeters: 0)
+        let f = LabTemperatureGuide(temperatureC: (195.0 - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit)
+        precondition(c.rangeText == "90–96 °C" && f.rangeText == "194–205 °F")
+        for degree in 194...205 { precondition(!LabTemperatureGuide(temperatureC: (Double(degree) - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit).warning) }
+        precondition(LabTemperatureGuide(temperatureC: (193.0 - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit).warning)
+        precondition(LabTemperatureGuide(temperatureC: (206.0 - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit).warning)
+        let altitude = LabTemperatureGuide(temperatureC: 98, altitudeMeters: 2240, unit: .fahrenheit)
+        precondition(altitude.headline == "Supera el hervor local" && altitude.upperC <= altitude.boilingC && altitude.rangeText == "187–198 °F")
+        let high = LabTemperatureGuide(temperatureC: 90, altitudeMeters: 5000)
+        precondition(high.rangeText == "80–83 °C")
+        for guide in [c, f, altitude, high] {
+            for degree in Int(guide.sliderRange.lowerBound)...Int(guide.sliderRange.upperBound) {
+                precondition(guide.value(guide.fraction(Double(degree))) == Double(degree), "Calibrated scale must round trip every degree")
+            }
+        }
+        precondition(abs(f.fraction(194) - 0.25) < 0.000001 && abs(f.fraction(205) - 0.75) < 0.000001)
+        print("PASS: thermal guidance parity, 177°F warning, selectable zone boundaries, altitude ceiling, calibrated scale round trips")
+    }
+
+    @MainActor static func verifyCupLifecycleAndIntegerLab() {
+        let suite = "cup-lifecycle.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let lab = LabModel(defaults: defaults); lab.setTemperatureUnit(.fahrenheit)
+        lab.setDisplayedTemperature(195); precondition(lab.state.temperatureC == 91)
+        precondition(TemperatureUnit.fahrenheit.text(celsius: lab.state.effectiveTemperatureC) == "195 °F")
+        lab.setDisplayedTemperature(194); precondition(TemperatureUnit.fahrenheit.text(celsius: lab.state.effectiveTemperatureC) == "194 °F")
+        lab.setDisplayedTemperature(195); lab.setCoffeeGrams(15); lab.setRatio(16); lab.setWaterMl(241)
+        precondition(abs(lab.state.ratio - 241.0 / 15) < 0.0001)
+        precondition(abs(LabModel(defaults: defaults).state.effectiveTemperatureC - (195.0 - 32) / 1.8) < 0.000001)
+        let prep = PreparationModel(defaults: defaults); prep.load(lab: lab.state)
+        precondition(prep.state.steps.isEmpty); prep.start(); precondition(prep.state.status == .ready)
+        let calculator = CalculatorModel(defaults: defaults); prep.loadCalculatorIfPristine(calculator)
+        precondition(prep.state.waterMl == 241 && prep.state.contextSource == "LAB")
+        let before = prep.state
+        prep.load(template: PreparationTechniqueCatalog.techniques(for: "V60")[0]); prep.preserveExperimentContext(before)
+        precondition(prep.state.waterMl == 241 && prep.state.steps.reduce(0) { $0 + $1.waterAddedMl } == 241)
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        let brew = BrewSessionRecord(context: context, state: prep.state, beanName: "Ronpotrero", grinderName: "Molino muestra")
+        let repo = TastingRepository(context: context)
+        let cup = try! repo.savePreparationCup(brew)
+        precondition(cup.rating == 0 && cup.executedWaterMl == 241)
+        precondition(TemperatureUnit.fahrenheit.text(celsius: cup.effectiveTemperatureC) == "195 °F")
+        precondition(try! repo.savePreparationCup(brew).id == cup.id)
+        let tasting = try! repo.save(TastingState(brewSessionId: brew.id, freeNotes: "Dulce", rating: 5), brew: brew)
+        let request = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")
+        let cups = try! context.fetch(request); precondition(cups.count == 1 && cups[0].tastingId == tasting.id)
+        precondition(prep.replicate(cup: cup, brew: brew))
+        precondition(prep.state.sessionId != brew.id && prep.state.status == .ready && prep.state.waterMl == 241)
+        precondition(prep.state.steps.count == 3 && prep.state.beanNameSnapshot == "Ronpotrero")
+        precondition(TemperatureUnit.fahrenheit.text(celsius: prep.state.effectiveTemperatureC) == "195 °F")
+        let second = BrewSessionRecord(context: context, state: prep.state, beanName: "Ronpotrero", grinderName: "")
+        let secondCup = try! repo.savePreparationCup(second); precondition(secondCup.tastingId == nil)
+        var thirdState = prep.state; thirdState.sessionId = UUID()
+        let third = BrewSessionRecord(context: context, state: thirdState, beanName: "Ronpotrero", grinderName: "")
+        let thirdCup = try! repo.savePreparationCup(third); precondition(thirdCup.id != secondCup.id)
+        precondition(try! context.count(for: request) == 3, "Tazas sin cata no deben fusionarse")
+        print("PASS: integer laboratory, exact Fahrenheit, automatic cup, tasting deduplication, immutable replication")
+    }
+
+    @MainActor static func verifyTemperatureMigration() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cup-precision-\(UUID().uuidString)")
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("Cupa.sqlite"); let cupId = UUID()
+        do {
+            let legacy = NSPersistentContainer(name: "Cupa", managedObjectModel: PersistenceController.makeModel(includeExactTemperature: false))
+            let description = NSPersistentStoreDescription(url: url)
+            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            legacy.persistentStoreDescriptions = [description]; legacy.loadPersistentStores { _, error in precondition(error == nil) }
+            let cup = NSEntityDescription.insertNewObject(forEntityName: "CupSessionRecord", into: legacy.viewContext)
+            cup.setValue(cupId, forKey: "id"); cup.setValue(UUID(), forKey: "tastingId")
+            cup.setValue("Mi taza anterior", forKey: "beanNameSnapshot"); cup.setValue(93, forKey: "executedTemperatureC")
+            cup.setValue(Date(), forKey: "createdAt"); cup.setValue(Date(), forKey: "updatedAt")
+            try! legacy.viewContext.save()
+            for store in legacy.persistentStoreCoordinator.persistentStores { try! legacy.persistentStoreCoordinator.remove(store) }
+        }
+        do {
+            let migrated = PersistenceController(storeURL: url, enablePersistentHistory: true)
+            precondition(migrated.storageRecoveryMessage == nil)
+            let context = migrated.container.viewContext
+            let cup = try! context.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")).first!
+            precondition(cup.id == cupId && cup.beanNameSnapshot == "Mi taza anterior" && cup.effectiveTemperatureC == 93)
+            cup.preciseTemperatureC = NSNumber(value: (195.0 - 32) / 1.8); try! context.save()
+            for store in migrated.container.persistentStoreCoordinator.persistentStores { try! migrated.container.persistentStoreCoordinator.remove(store) }
+        }
+        let reopened = PersistenceController(storeURL: url, enablePersistentHistory: true)
+        precondition(reopened.storageRecoveryMessage == nil)
+        let cup = try! reopened.container.viewContext.fetch(NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")).first!
+        precondition(cup.id == cupId && TemperatureUnit.fahrenheit.text(celsius: cup.effectiveTemperatureC) == "195 °F")
+        for store in reopened.container.persistentStoreCoordinator.persistentStores { try! reopened.container.persistentStoreCoordinator.remove(store) }
+        print("PASS: SQLite precision migration preserves existing cup and survives reopening with persistent history")
+    }
+    @MainActor static func verifyPortableTechniqueFiles() {
+        let android = try! Data(contentsOf: URL(fileURLWithPath: "/private/tmp/brew-android-technique.json"))
+        let draft = try! TechniqueFiles.decode(android)
+        precondition(draft.methodName == "Método improvisado" && draft.waterMl == 240 && draft.steps[0].durationSeconds == 180)
+        precondition(draft.beanId == nil && draft.grinderId == nil)
+        let output = try! TechniqueFiles.encode(draft)
+        try! output.write(to: URL(fileURLWithPath: "/private/tmp/brew-ios-technique.json"))
+        precondition(try! TechniqueFiles.decode(output).id != draft.id)
+        let persistence = PersistenceController(inMemory: true)
+        let repo = RecipeTechniqueRepository(context: persistence.container.viewContext)
+        let imported = try! repo.saveImportedTechnique(draft)
+        precondition(imported.methodName == draft.methodName && imported.methodId != nil)
+        precondition(try! repo.techniqueSteps(techniqueId: imported.id).count == 1)
+        let suite = "portable-techniques.\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let calculator = CalculatorModel(defaults: defaults); calculator.method = draft.methodName
+        let prep = PreparationModel(defaults: defaults); prep.load(calculator: calculator)
+        precondition(PreparationTechniqueCatalog.techniques(for: draft.methodName).isEmpty && prep.state.steps.isEmpty)
+        prep.start(); precondition(prep.state.status == .ready)
+        prep.load(technique: imported, steps: try! repo.techniqueSteps(techniqueId: imported.id)); precondition(prep.state.steps.count == 1)
+        var malformed = try! JSONSerialization.jsonObject(with: output) as! [String: Any]
+        malformed["version"] = 2
+        do { _ = try TechniqueFiles.decode(try JSONSerialization.data(withJSONObject: malformed)); preconditionFailure("Invalid version accepted") } catch {}
+        print("PASS: Android → iOS technique files, new method without invented steps, validated import and iOS export")
+    }
     @MainActor static func main() async {
+        verifyThermalGuidance()
+        verifyCupLifecycleAndIntegerLab()
+        verifyTemperatureMigration()
+        verifyPortableTechniqueFiles()
+        precondition(abs(TemperatureUnit.fahrenheit.displayValue(celsius: 93) - 199.4) < 0.001)
+        precondition(TemperatureUnit.fahrenheit.text(celsius: 93).hasSuffix("°F"))
+        precondition(abs(TemperatureUnit.fahrenheit.celsius(displayValue: 199.4) - 93) < 0.001)
+        let cool = LabEngine.calculate(LabState(temperatureC: 80))
+        let hot = LabEngine.calculate(LabState(temperatureC: 98))
+        precondition(cool.aroma != hot.aroma && cool.acidity != hot.acidity && cool.sweetness != hot.sweetness && cool.bitterness != hot.bitterness)
+        let capped = LabEngine.calculate(LabState(temperatureC: 94, altitudeMeters: 2240))
+        let above = LabEngine.calculate(LabState(temperatureC: 98, altitudeMeters: 2240))
+        precondition(capped.extractionIndex == above.extractionIndex && capped.aroma == above.aroma)
+        print("PASS: selected temperature unit and thermal equalizer / boiling cap")
         verify(
             name: "nivel-del-mar",
             input: LabState(),
@@ -153,7 +293,7 @@ struct LabGoldenVerifier {
         let preparation = PreparationModel(defaults: defaults)
         preparation.load(lab: restored.state)
         precondition(preparation.state.waterMl == 234 && abs(preparation.state.ratio - 13) < 0.0001)
-        precondition(preparation.state.steps.reduce(0) { $0 + $1.waterAddedMl } == 234)
+        precondition(preparation.state.steps.isEmpty)
 
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
@@ -437,8 +577,9 @@ struct LabGoldenVerifier {
         precondition(reopenedLab.state.techniqueId == technique.id && reopenedLab.state.recipeName == recipe.name)
 
         let preparation = PreparationModel(defaults: defaults); preparation.load(lab: reopenedLab.state)
-        precondition(preparation.state.techniqueId == technique.id && preparation.state.methodId == method.id)
+        precondition(preparation.state.techniqueId == nil && preparation.state.steps.isEmpty && preparation.state.methodId == method.id)
         precondition(preparation.state.doseGrams == 18 && preparation.state.waterMl == 270 && preparation.state.temperatureC == 94)
+        preparation.load(technique: technique, steps: [])
         let experiment = LabExperimentRecord(context: context, state: reopenedLab.state, profile: reopenedLab.profile)
         let brew = BrewSessionRecord(context: context, state: preparation.state, recipeName: recipe.name, beanName: bean.name, grinderName: grinder.name)
         try! context.save()
@@ -474,7 +615,7 @@ struct LabGoldenVerifier {
         let url = directory.appendingPathComponent("Cupa.sqlite")
         let beanId: UUID
         do {
-            let legacy = NSPersistentContainer(name: "Cupa", managedObjectModel: PersistenceController.makeModel(includeBeanProfiles: false))
+            let legacy = NSPersistentContainer(name: "Cupa", managedObjectModel: PersistenceController.makeModel(includeBeanProfiles: false, includeExactTemperature: false))
             let description = NSPersistentStoreDescription(url: url)
             if enableHistory { description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey) }
             legacy.persistentStoreDescriptions = [description]

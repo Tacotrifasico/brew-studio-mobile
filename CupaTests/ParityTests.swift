@@ -3,6 +3,46 @@ import XCTest
 @testable import Cupa
 
 final class LabEngineParityTests: XCTestCase {
+    @MainActor func testIntegerLabAndExactFahrenheitSurviveCompletionAndTasting() throws {
+        let suite = "cup-lifecycle.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let lab = LabModel(defaults: defaults); lab.setTemperatureUnit(.fahrenheit); lab.setDisplayedTemperature(195)
+        XCTAssertEqual(TemperatureUnit.fahrenheit.text(celsius: lab.state.effectiveTemperatureC), "195 °F")
+        lab.setCoffeeGrams(15); lab.setRatio(16); lab.setWaterMl(241)
+        XCTAssertEqual(lab.state.ratio, Float(241) / 15, accuracy: 0.0001)
+        let prep = PreparationModel(defaults: defaults); prep.load(lab: lab.state)
+        XCTAssertTrue(prep.state.steps.isEmpty)
+        prep.loadCalculatorIfPristine(CalculatorModel(defaults: defaults)); XCTAssertEqual(prep.state.waterMl, 241)
+        let previous = prep.state
+        prep.load(template: PreparationTechniqueCatalog.techniques(for: "V60")[0]); prep.preserveExperimentContext(previous)
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext
+        prep.complete(); let cup = try prep.saveCompletedCup(in: context)
+        XCTAssertNil(cup.tastingId); XCTAssertNotNil(prep.state.savedAt)
+        XCTAssertEqual(TemperatureUnit.fahrenheit.text(celsius: cup.effectiveTemperatureC), "195 °F")
+        let brew = try context.existingBrewSession(id: cup.brewSessionId)
+        _ = try TastingRepository(context: context).save(TastingState(brewSessionId: cup.brewSessionId, rating: 5), brew: brew)
+        XCTAssertEqual(try context.count(for: NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")), 1)
+        XCTAssertTrue(prep.replicate(cup: cup, brew: brew)); XCTAssertEqual(prep.state.steps.reduce(0) { $0 + $1.waterAddedMl }, 241)
+    }
+    func testSavedTemperatureUsesChosenUnitWithoutChangingCelsius() {
+        XCTAssertEqual(TemperatureUnit.fahrenheit.displayValue(celsius: 93), 199.4, accuracy: 0.001)
+        XCTAssertTrue(TemperatureUnit.fahrenheit.text(celsius: 93).hasSuffix("°F"))
+        XCTAssertTrue(TemperatureUnit.celsius.text(celsius: 93).hasSuffix("°C"))
+        XCTAssertEqual(TemperatureUnit.fahrenheit.celsius(displayValue: 199.4), 93, accuracy: 0.001)
+    }
+
+    func testHeatMovesFlavorUntilAltitudeBoilingLimit() {
+        let cool = LabEngine.calculate(LabState(temperatureC: 80))
+        let hot = LabEngine.calculate(LabState(temperatureC: 98))
+        XCTAssertNotEqual(cool.aroma, hot.aroma)
+        XCTAssertNotEqual(cool.acidity, hot.acidity)
+        XCTAssertNotEqual(cool.sweetness, hot.sweetness)
+        XCTAssertNotEqual(cool.bitterness, hot.bitterness)
+        let capped = LabEngine.calculate(LabState(temperatureC: 94, altitudeMeters: 2240))
+        let above = LabEngine.calculate(LabState(temperatureC: 98, altitudeMeters: 2240))
+        XCTAssertEqual(capped.extractionIndex, above.extractionIndex)
+        XCTAssertEqual(capped.aroma, above.aroma)
+    }
     func testSeaLevelGoldenProfileMatchesAndroid() {
         let profile = LabEngine.calculate(
             coffeeGrams: 15, waterMl: 240, ratio: 16, temperature: 92,

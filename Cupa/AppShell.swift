@@ -128,6 +128,12 @@ struct AppShell: View {
             if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
             if phase == .active { Task { await refreshAndSync() } }
         }
+        .onChange(of: preparation.state.status) { _, status in
+            if status == .completed && preparation.state.savedAt == nil {
+                do { try preparation.saveCompletedCup(in: context) }
+                catch { NSLog("Cupa: preparación pendiente de guardar. %@", error.localizedDescription) }
+            }
+        }
         .task {
             context.activeOwnerId = account.tokens?.userId
             do { try SampleCoffee.ensure(in: context) }
@@ -135,6 +141,7 @@ struct AppShell: View {
             lab.setTemperatureUnit(settings.temperatureUnit)
             lab.setManualAltitude(settings.altitudeMeters)
             preparation.loadCalculatorIfPristine(calculator)
+            if preparation.state.status == .completed && preparation.state.savedAt == nil { try? preparation.saveCompletedCup(in: context) }
             await refreshAndSync()
         }
         .onChange(of: account.localScopeKey) { _, _ in

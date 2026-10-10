@@ -163,7 +163,7 @@ fun BrewSetupView(
     val pourOptions = listOf("CIRCULAR_POUR" to "Circular", "CENTER_POUR" to "Al centro", "PULSE_POUR" to "En pulsos")
     val activePour = state.activePrepSteps.firstOrNull { it.waterAddedMl > 0 && it.stepNumber > 1 }?.gesture
     val activeMethodId = viewModel.methodIdForName(state.activePrepMethod)
-    val matchingTechniques = state.techniquesList.filter { it.methodId == activeMethodId }
+    val matchingTechniques = state.techniquesList.filter { it.methodId == activeMethodId && !it.id.contains("-starter-") }
 
     if (showAddMethodDialog) {
         AlertDialog(
@@ -171,7 +171,7 @@ fun BrewSetupView(
             title = { Text("Agregar método", fontWeight = FontWeight.Bold, color = TextPrincipal) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("El método aparecerá en la calculadora y en Preparar café con tres técnicas iniciales.", fontSize = 12.sp, color = TextSecundario)
+                    Text("El método aparecerá sin técnicas. Crea o importa las tuyas desde Almacén.", fontSize = 12.sp, color = TextSecundario)
                     StyledOutlinedTextField(value = newMethodName, onValueChange = { newMethodName = it }, label = "Nombre", placeholder = "Ej. Kalita Wave")
                     StyledOutlinedTextField(value = newMethodRatio, onValueChange = { newMethodRatio = it }, label = "Proporción inicial 1:", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 }
@@ -208,6 +208,8 @@ fun BrewSetupView(
             .padding(bottom = 60.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        val temperatureC = state.activePrepPreciseTemp ?: state.activePrepTemp.toDouble()
+        val displayedDegrees = if (state.useFahrenheit) temperatureC * 1.8 + 32 else temperatureC
         // Active profile configuration card (Hero level 3)
         Box(
             modifier = Modifier
@@ -221,7 +223,7 @@ fun BrewSetupView(
                 .clip(RoundedCornerShape(28.dp))
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(Color.White.copy(alpha = 0.12f), c1, c2),
+                        colors = listOf(c1, c2),
                         start = Offset(0f, 0f),
                         end = Offset(700f, 700f)
                     )
@@ -243,40 +245,40 @@ fun BrewSetupView(
             }
 
             Column(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = V60Icon,
-                        contentDescription = "Timer",
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp)
-                    )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.size(38.dp).background(Color.White.copy(alpha = 0.14f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        Icon(V60Icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("CONFIGURACIÓN ACTIVA · ${state.activePrepMethod}", fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.7.sp, color = Color.White.copy(alpha = 0.85f))
+                        Text(state.activePrepTechniqueName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
-
-                Text(
-                    text = "CONFIGURACIÓN ACTIVA",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.5.sp,
-                    color = Color.White.copy(alpha = 0.85f)
-                )
-
-                Text(
-                    text = state.activePrepTechniqueName,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
-                    textAlign = TextAlign.Center
-                )
+                // One integrated identity block: bean first, then the two preparation settings.
+                Column(Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(16.dp)).border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(16.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Eco, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(18.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("GRANO", fontSize = 9.sp, letterSpacing = 1.sp, color = Color.White.copy(alpha = 0.8f))
+                            Text(state.activePrepBean.ifBlank { "Sin grano asignado" }, fontFamily = androidx.compose.ui.text.font.FontFamily.Serif, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("TEMPERATURA", fontSize = 9.sp, letterSpacing = 0.7.sp, color = Color.White.copy(alpha = 0.8f))
+                            Text("${String.format(Locale.getDefault(), "%.0f", displayedDegrees)} ${if (state.useFahrenheit) "°F" else "°C"}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("MOLIENDA", fontSize = 9.sp, letterSpacing = 0.7.sp, color = Color.White.copy(alpha = 0.8f))
+                            Text("${state.activePrepClicks} clics", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
 
                 // Parameters summary row
                 Row(
@@ -292,7 +294,7 @@ fun BrewSetupView(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("CAFÉ", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
                         Text(
-                            text = "${state.activePrepCoffee} g",
+                            text = "${java.text.DecimalFormat("0.#").format(state.activePrepCoffee)} g",
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Black,
@@ -303,7 +305,7 @@ fun BrewSetupView(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("PROPORCIÓN", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
                         Text(
-                            text = "1:${state.activePrepRatio}",
+                            text = "1:${java.text.DecimalFormat("0.##").format(state.activePrepRatio)}",
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Black,
@@ -689,6 +691,30 @@ fun ActiveBrewTimerView(
     val steps = state.activePrepSteps
     var showSequence by rememberSaveable { mutableStateOf(false) }
     var confirmCancellation by rememberSaveable { mutableStateOf(false) }
+    var stars by rememberSaveable(state.activePreparationSessionId) { mutableIntStateOf(0) }
+    var comment by rememberSaveable(state.activePreparationSessionId) { mutableStateOf("") }
+    var savingReview by remember { mutableStateOf(false) }
+    if (state.preparationCompleted) {
+        Card(Modifier.fillMaxWidth().border(1.dp, BordeSuave, RoundedCornerShape(24.dp)),
+            colors = CardDefaults.cardColors(containerColor = SurfaceCard), shape = RoundedCornerShape(24.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(if (state.preparationCupSaved) "Taza guardada en Almacén" else "Guardando taza…", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                Text(state.activePrepBean.ifBlank { "Sin grano asignado" }, fontWeight = FontWeight.Bold, color = TextPrincipal)
+                Text("${state.activePrepMethod} · ${state.activePrepTechniqueName}", fontSize = 12.sp, color = TextSecundario)
+                val celsius = state.activePrepPreciseTemp ?: state.activePrepTemp.toDouble()
+                val degrees = if (state.useFahrenheit) celsius * 1.8 + 32 else celsius
+                Text("${state.activePrepCoffee} g → ${state.activePrepWater} ml · ${String.format(Locale.getDefault(), "%.0f", degrees)} ${if (state.useFahrenheit) "°F" else "°C"} · ${state.activePrepClicks} clics", fontSize = 12.sp, color = TextPrincipal)
+                Text("¿Cómo quedó?", fontWeight = FontWeight.SemiBold, color = TextPrincipal)
+                Row { (1..5).forEach { star -> IconButton(onClick = { stars = star }) {
+                    Icon(if (star <= stars) Icons.Default.Star else Icons.Default.StarBorder, "$star estrellas", tint = AcentoPrincipal)
+                } } }
+                OutlinedTextField(value = comment, onValueChange = { comment = it }, label = { Text("Notas para la siguiente taza") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
+                Button(onClick = { savingReview = true; viewModel.reviewPreparationCup(stars, comment) { success -> savingReview = false; if (success) viewModel.stopTimer() } }, enabled = !savingReview, modifier = Modifier.fillMaxWidth()) { Text("Guardar taza") }
+                OutlinedButton(onClick = { savingReview = true; viewModel.reviewPreparationCup(stars, comment) { success -> savingReview = false; if (success) onNavigateToCata() } }, enabled = !savingReview, modifier = Modifier.fillMaxWidth()) { Text("Ir a Cata y completar perfil") }
+            }
+        }
+        return
+    }
     if (confirmCancellation) {
         AlertDialog(
             onDismissRequest = { confirmCancellation = false },
@@ -908,23 +934,8 @@ fun ActiveBrewTimerView(
             }
         }
 
-        // Finish action button
         item {
-            Button(
-                onClick = {
-                    viewModel.finishPreparationForTasting()
-                    onNavigateToCata()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Advertencia),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Completado")
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(if (state.preparationCompleted) "Continuar a Cata" else "Completar extracción e ir a Cata", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            }
+            Button(onClick = { viewModel.finishPreparationForTasting() }, modifier = Modifier.fillMaxWidth()) { Text("Finalizar y guardar taza") }
         }
     }
 }

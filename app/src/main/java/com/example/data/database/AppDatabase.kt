@@ -9,6 +9,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import java.time.Instant
 import java.util.UUID
 
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE cups ADD COLUMN preciseTemperatureC REAL")
+        db.execSQL("ALTER TABLE lab_experiments ADD COLUMN preciseTemperatureC REAL")
+    }
+}
+
 val MIGRATION_9_10 = object : Migration(9, 10) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE beans ADD COLUMN brewProfilesJSON TEXT NOT NULL DEFAULT '{}'")
@@ -937,7 +944,7 @@ private fun String?.isNull_or_Empty(): Boolean {
         CataFlavorNote::class,
         LabExperiment::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -971,7 +978,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "brew_studio_database_v2"
                 )
-                .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 .build()
                 INSTANCE = instance
                 instance

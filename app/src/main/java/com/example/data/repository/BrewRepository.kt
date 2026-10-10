@@ -183,6 +183,7 @@ class BrewRepository(
 
     // Cups
     suspend fun insertCup(cup: Cup) = cupDao.insertCup(cup)
+    suspend fun getCupById(id: String) = cupDao.getCupById(id)
     suspend fun insertCupWithCata(cup: Cup, cata: Cata) = cupDao.insertCupWithCata(cup, cata)
     suspend fun deleteCup(cup: Cup) = cupDao.deleteCup(cup)
 

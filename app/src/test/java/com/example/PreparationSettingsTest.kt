@@ -13,6 +13,18 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class PreparationSettingsTest {
+    @Test fun heatMovesFlavorUntilAltitudeBoilingLimit() {
+        val cool = calculateLabProfile(15f, 240, 16f, 80, 24, "en ventana", 0)
+        val hot = calculateLabProfile(15f, 240, 16f, 98, 24, "en ventana", 0)
+        assertNotEquals(cool.aroma, hot.aroma)
+        assertNotEquals(cool.acidity, hot.acidity)
+        assertNotEquals(cool.sweetness, hot.sweetness)
+        assertNotEquals(cool.bitterness, hot.bitterness)
+        val capped = calculateLabProfile(15f, 240, 16f, 94, 24, "en ventana", 2240)
+        val above = calculateLabProfile(15f, 240, 16f, 98, 24, "en ventana", 2240)
+        assertEquals(capped.extractionIndex, above.extractionIndex)
+        assertEquals(capped.aroma, above.aroma)
+    }
     @Test fun settingsPersistAndSurviveLabResetWithoutConvertingActualTemperature() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val model = BaristaCalcViewModel(app)

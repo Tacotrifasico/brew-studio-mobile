@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import kotlin.math.roundToInt
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -67,7 +68,9 @@ fun calculateLabProfile(
     grindClicks: Int,
     freshnessState: String,
     altitudeMeters: Int = 0,
-    timeSeconds: Int = 180
+    timeSeconds: Int = 180,
+    preciseTemperatureC: Double? = null,
+    useFahrenheit: Boolean = false
 ): LabFlavorProfile {
     // Effective ratio (water / coffee) fallback to ratio parameter if safe
     val effectiveRatio = if (ratio > 0f) {
@@ -80,7 +83,7 @@ fun calculateLabProfile(
     val tBoil = (100.0f - (altitudeMeters.coerceIn(0, 5000) * 0.0034f)).coerceIn(80.0f, 100.0f)
 
     // Effective water temperature cannot exceed boiling point at atmospheric pressure
-    val tempEffective = minOf(temperature.toFloat(), tBoil)
+    val tempEffective = minOf((preciseTemperatureC ?: temperature.toDouble()).toFloat(), tBoil)
 
     // Altitude efficiency factor for extraction
     val altitudeFactor = kotlin.math.sqrt(tBoil / 100.0f)
@@ -136,7 +139,7 @@ fun calculateLabProfile(
     if (timeSeconds < 105) activeLabels.add("Paso Rápido")
     else if (timeSeconds > 270) activeLabels.add("Contacto Prolongado")
 
-    if (temperature > tBoil) {
+    if ((preciseTemperatureC ?: temperature.toDouble()) > tBoil) {
         activeLabels.add("Hervor ${String.format(java.util.Locale.US, "%.1f", tBoil)}°C")
     } else if (altitudeMeters >= 1800) {
         activeLabels.add("Altitud ${altitudeMeters}m")
@@ -148,8 +151,13 @@ fun calculateLabProfile(
         "viejo" -> activeLabels.add("Desgasificado")
     }
 
+    val thermal = com.example.data.engine.LabTemperatureGuide(preciseTemperatureC ?: temperature.toDouble(), altitudeMeters, useFahrenheit)
+    if (thermal.warning) {
+        activeLabels.add(0, thermal.headline)
+        activeLabels.removeAll { it == "Ventana Óptima" || it == "Acidez Brillante" }
+    }
     val summary = when {
-        temperature > tBoil -> "A ${altitudeMeters} msnm el agua hierve a ${String.format(java.util.Locale.US, "%.1f", tBoil)}°C. La temperatura está acotada al hervor; muele más fino para potenciar extracción."
+        thermal.warning -> thermal.detail
         finalBitterness >= 60 -> "Extracción intensa con perfil seco/amargo pronunciado; disminuye temperatura o engruesa la molienda."
         finalAcidity >= 68 && finalSweetness < 50 -> "Acidez dominante con sub-extracción; aumenta temperatura o afina la molienda."
         finalSweetness >= 65 && finalBitterness < 45 -> "Taza balanceada con dulzor redondo y acidez perfectamente integrada."
@@ -204,6 +212,8 @@ fun LabScreen(
         state.labWater,
         state.labRatio,
         state.labTemp,
+        state.labPreciseTemp,
+        state.useFahrenheit,
         state.labClicks,
         state.labBeanFreshness,
         state.labAltitudeMeters,
@@ -214,10 +224,12 @@ fun LabScreen(
             waterMl = state.labWater,
             ratio = state.labRatio,
             temperature = state.labTemp,
+            preciseTemperatureC = state.labPreciseTemp,
             grindClicks = state.labClicks,
             freshnessState = state.labBeanFreshness,
             altitudeMeters = state.labAltitudeMeters,
-            timeSeconds = state.labEstTimeSeconds
+            timeSeconds = state.labEstTimeSeconds,
+            useFahrenheit = state.useFahrenheit
         )
     }
 
@@ -475,12 +487,6 @@ fun LabScreen(
             },
             onSaveExperimentClick = {
                 viewModel.saveLabExperiment()
-            },
-            onSaveRecipeClick = {
-                showRecipeDialog = true
-            },
-            onSaveTechniqueClick = {
-                showTechniqueDialog = true
             }
         )
     }
@@ -578,6 +584,7 @@ fun LabHypothesisCard(
                     )
 
                     val primaryOutcomeLabel = when {
+                        com.example.data.engine.LabTemperatureGuide(state.labPreciseTemp ?: state.labTemp.toDouble(), state.labAltitudeMeters, state.useFahrenheit).warning -> com.example.data.engine.LabTemperatureGuide(state.labPreciseTemp ?: state.labTemp.toDouble(), state.labAltitudeMeters, state.useFahrenheit).headline
                         profile.bitterness > 65 -> "Intensa y con cuerpo"
                         profile.body < 38 -> "Estilo té, alta claridad"
                         profile.sweetness > 68 && profile.bitterness < 42 -> "Taza dorada y balanceada"
@@ -921,8 +928,8 @@ fun LabCalibratedSlider(
 
         // Give 50% of the visual track width to the recommended range
         val recTrackShare = 0.50f
-        val leftTrackShare = 0.25f
-        val rightTrackShare = 0.25f
+        val leftTrackShare = if (rStart <= range.start) 0f else if (rEnd >= range.endInclusive) 0.5f else 0.25f
+        val rightTrackShare = 0.5f - leftTrackShare
 
         return when {
             clamped <= rStart -> {
@@ -949,16 +956,16 @@ fun LabCalibratedSlider(
         val rStart = recommendedRange.start
         val rEnd = recommendedRange.endInclusive
         val recTrackShare = 0.50f
-        val leftTrackShare = 0.25f
-        val rightTrackShare = 0.25f
+        val leftTrackShare = if (rStart <= range.start) 0f else if (rEnd >= range.endInclusive) 0.5f else 0.25f
+        val rightTrackShare = 0.5f - leftTrackShare
 
         val raw = when {
             clampedF <= leftTrackShare -> {
-                val p = clampedF / leftTrackShare
+                val p = if (leftTrackShare > 0f) clampedF / leftTrackShare else 0f
                 range.start + p * (rStart - range.start)
             }
             clampedF >= (leftTrackShare + recTrackShare) -> {
-                val p = (clampedF - (leftTrackShare + recTrackShare)) / rightTrackShare
+                val p = if (rightTrackShare > 0f) (clampedF - (leftTrackShare + recTrackShare)) / rightTrackShare else 0f
                 rEnd + p * (range.endInclusive - rEnd)
             }
             else -> {
@@ -1145,6 +1152,14 @@ fun LabVariableDock(
         ) {
             when (category) {
                 LabCategory.Proporcion -> {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${state.labCoffee.toInt()} g", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        IconButton(modifier = Modifier.size(32.dp), onClick = { viewModel.updateLabVariables(coffee = (state.labCoffee - 1).coerceAtLeast(1f)) }) { Icon(Icons.Default.Remove, "Menos 1 g") }
+                        IconButton(modifier = Modifier.size(32.dp), onClick = { viewModel.updateLabVariables(coffee = (state.labCoffee + 1).coerceAtMost(100f)) }) { Icon(Icons.Default.Add, "Más 1 g") }
+                        Text("${state.labWater} ml", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        IconButton(modifier = Modifier.size(32.dp), onClick = { viewModel.updateLabVariables(water = (state.labWater - 1).coerceAtLeast(10)) }) { Icon(Icons.Default.Remove, "Menos 1 ml") }
+                        IconButton(modifier = Modifier.size(32.dp), onClick = { viewModel.updateLabVariables(water = (state.labWater + 1).coerceAtMost(2000)) }) { Icon(Icons.Default.Add, "Más 1 ml") }
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1180,7 +1195,7 @@ fun LabVariableDock(
                             onValueChange = { viewModel.updateLabVariables(ratio = it) },
                             range = 8f..22f,
                             recommendedRange = 15f..17f,
-                            step = 0.5f,
+                            step = 1f,
                             activeColor = AcentoPrincipal,
                             accessibilityLabel = "Proporción de café y agua",
                             accessibilityValue = "Uno a ${String.format(java.util.Locale.US, "%.1f", state.labRatio)}"
@@ -1248,14 +1263,15 @@ fun LabVariableDock(
                     }
 
                     // Slider 1: Temperatura del Agua
-                    val isTempInOptimum = state.labTemp in 90..96
+                    val thermal = com.example.data.engine.LabTemperatureGuide(state.labPreciseTemp ?: state.labTemp.toDouble(), state.labAltitudeMeters, isFahrenheit)
+                    val isTempInOptimum = !thermal.warning
                     val displayTemp = if (isFahrenheit) {
-                        val fVal = Math.round(state.labTemp * 9f / 5f + 32f)
+                        val fVal = Math.round((state.labPreciseTemp ?: state.labTemp.toDouble()) * 1.8 + 32)
                         "$fVal °F"
                     } else {
                         "${state.labTemp} °C"
                     }
-                    val recRangeTempText = if (isFahrenheit) "194°F - 205°F" else "90°C - 96°C"
+                    val recRangeTempText = thermal.rangeText
 
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(
@@ -1272,7 +1288,7 @@ fun LabVariableDock(
                                             .background(AcentoSuave)
                                             .padding(horizontal = 5.dp, vertical = 2.dp)
                                     ) {
-                                        Text("ZONA ÓPTIMA", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
+                                        Text("ZONA ÚTIL", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = AcentoPrincipal)
                                     }
                                 }
                             }
@@ -1286,21 +1302,31 @@ fun LabVariableDock(
                         }
 
                         LabCalibratedSlider(
-                            value = state.labTemp.toFloat(),
-                            onValueChange = { viewModel.updateLabVariables(temperature = it.toInt()) },
-                            range = 80f..98f,
-                            recommendedRange = 90f..96f,
+                            value = (if (isFahrenheit) (state.labPreciseTemp ?: state.labTemp.toDouble()) * 1.8 + 32 else state.labPreciseTemp ?: state.labTemp.toDouble()).toFloat(),
+                            onValueChange = { viewModel.updateLabVariables(preciseTemperature = if (isFahrenheit) (it.roundToInt() - 32) / 1.8 else it.roundToInt().toDouble()) },
+                            range = if (isFahrenheit) 176f..208f else 80f..98f,
+                            recommendedRange = thermal.recommendedRange,
                             step = 1f,
                             activeColor = CafeCalidoClaro,
                             accessibilityLabel = "Temperatura del agua",
                             accessibilityValue = displayTemp
                         )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("De 1 en 1 ${if (isFahrenheit) "°F" else "°C"}", Modifier.weight(1f), fontSize = 11.sp)
+                            val degrees = if (isFahrenheit) ((state.labPreciseTemp ?: state.labTemp.toDouble()) * 1.8 + 32).roundToInt() else state.labTemp
+                            fun change(delta: Int) { val next = (degrees + delta).coerceIn(if (isFahrenheit) 176 else 80, if (isFahrenheit) 208 else 98); viewModel.updateLabVariables(preciseTemperature = if (isFahrenheit) (next - 32) / 1.8 else next.toDouble()) }
+                            IconButton(onClick = { change(-1) }) { Icon(Icons.Default.Remove, "Menos 1 grado") }
+                            IconButton(onClick = { change(1) }) { Icon(Icons.Default.Add, "Más 1 grado") }
+                        }
+                        Text(thermal.headline, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (thermal.warning) Color(0xFFA94F28) else CafeCalidoOscuro)
+                        Text(if (thermal.warning) thermal.detail else "Buen punto de partida, no garantía de sabor.", fontSize = 11.sp, color = TextSecundario)
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(if (isFahrenheit) "176°F" else "80°C", fontSize = 10.sp, color = TextSecundario)
-                            Text("Recomendado: $recRangeTempText", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CafeCalidoOscuro)
+                            Text("Zona útil: $recRangeTempText", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CafeCalidoOscuro)
                             Text(if (isFahrenheit) "208°F" else "98°C", fontSize = 10.sp, color = TextSecundario)
                         }
+                        if (state.labAltitudeMeters > 0) Text("Hervor local: ${thermal.degrees(thermal.boilingC)} ${if (isFahrenheit) "°F" else "°C"} · rango ajustado por altura", fontSize = 10.sp, color = TextSecundario)
                     }
 
                     // Slider 2: Clicks de Molienda
@@ -1352,7 +1378,7 @@ fun LabVariableDock(
                     }
 
                     // Live Educational Recommendation banner (connecting state.labRecommendationText)
-                    if (state.labRecommendationText.isNotBlank()) {
+                    if (state.labRecommendationText.isNotBlank() && !thermal.warning) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1418,9 +1444,7 @@ fun LabVariableDock(
 fun LabActionBar(
     modifier: Modifier = Modifier,
     onPrepareClick: () -> Unit,
-    onSaveExperimentClick: () -> Unit,
-    onSaveRecipeClick: () -> Unit,
-    onSaveTechniqueClick: () -> Unit
+    onSaveExperimentClick: () -> Unit
 ) {
     var expandedMenu by remember { mutableStateOf(false) }
 
@@ -1454,7 +1478,7 @@ fun LabActionBar(
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Archivar", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text("Experimento", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
             }
 
             Button(
@@ -1482,42 +1506,6 @@ fun LabActionBar(
                 )
             }
 
-            Box {
-                IconButton(
-                    onClick = { expandedMenu = true },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MainBackgroundAlt.copy(alpha = 0.5f))
-                        .border(1.dp, BordeSuave, RoundedCornerShape(16.dp))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Más",
-                        tint = TextPrincipal
-                    )
-                }
-
-                DropdownMenu(
-                    expanded = expandedMenu,
-                    onDismissRequest = { expandedMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Guardar como Receta") },
-                        onClick = {
-                            expandedMenu = false
-                            onSaveRecipeClick()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Guardar como Técnica") },
-                        onClick = {
-                            expandedMenu = false
-                            onSaveTechniqueClick()
-                        }
-                    )
-                }
-            }
         }
     }
 }

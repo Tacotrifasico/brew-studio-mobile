@@ -72,6 +72,10 @@ import com.example.ui.viewmodel.calculateBeanFreshness
 import java.text.SimpleDateFormat
 import java.io.Serializable
 import java.util.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import com.example.data.engine.TechniqueFiles
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,6 +117,7 @@ private fun OwnerScopedStorageScreen(
     
     // Bottom Sheet Triggers
     var activeBeanDetailId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeCupDetailId by rememberSaveable { mutableStateOf<String?>(null) }
     var activeBeanEditId by rememberSaveable { mutableStateOf<String?>(null) }
     var isAddingNewBean by rememberSaveable { mutableStateOf(false) }
     val activeBeanDetail = state.beansList.firstOrNull { it.id == activeBeanDetailId }
@@ -135,6 +140,35 @@ private fun OwnerScopedStorageScreen(
     val selectedTechnique = state.techniquesList.firstOrNull { it.id == selectedTechniqueId }
     val editingTechnique = state.techniquesList.firstOrNull { it.id == editingTechniqueId }
     var showShareExplanation by rememberSaveable { mutableStateOf(false) }
+    val fileContext = LocalContext.current
+    var importedFile by remember { mutableStateOf<TechniqueFiles.Draft?>(null) }
+    var fileError by remember { mutableStateOf<String?>(null) }
+    var pendingFileText by remember { mutableStateOf<String?>(null) }
+    var importingFileBusy by remember { mutableStateOf(false) }
+    val exportTechniqueFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) try {
+            val text = pendingFileText ?: error("No hay técnica para exportar.")
+            fileContext.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) } ?: error("No se pudo abrir el archivo.")
+        } catch (_: Exception) { fileError = "No se pudo exportar la técnica." }
+        pendingFileText = null
+    }
+    val importTechniqueFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) try {
+            val text = fileContext.contentResolver.openInputStream(uri)?.use { TechniqueFiles.readLimited(it) } ?: error("Archivo no disponible.")
+            importedFile = TechniqueFiles.decode(text)
+        } catch (_: Exception) { fileError = "Archivo no compatible o cantidades inválidas. Usa un JSON de técnica exportado por Brew Studio." }
+    }
+    if (fileError != null) AlertDialog(onDismissRequest = { fileError = null }, title = { Text("Archivo de técnica") },
+        text = { Text(fileError ?: "") }, confirmButton = { TextButton(onClick = { fileError = null }) { Text("Aceptar") } })
+    importedFile?.let { draft ->
+        AlertDialog(onDismissRequest = { if (!importingFileBusy) importedFile = null }, title = { Text("Importar técnica") },
+            text = { Text("${draft.technique.name}\nMétodo: ${draft.methodName}\n${draft.technique.doseG} g · ${draft.technique.waterMl} ml · ${draft.steps.size} pasos\nSe guardará una copia nueva en tu Almacén; no reemplaza tus técnicas.") },
+            confirmButton = { TextButton(enabled = !importingFileBusy, onClick = {
+                importingFileBusy = true
+                viewModel.importTechniqueFile(draft) { success -> importingFileBusy = false; if (success) importedFile = null else fileError = "No se pudo guardar la técnica." }
+            }) { Text(if (importingFileBusy) "Guardando…" else "Importar") } },
+            dismissButton = { TextButton(enabled = !importingFileBusy, onClick = { importedFile = null }) { Text("Cancelar") } })
+    }
     val pendingBreakdown = storagePendingBreakdown(
         beans = state.beansList.count { it.syncStatus != "SYNCED" },
         recipes = state.recipesList.count { it.syncStatus != "SYNCED" },
@@ -583,6 +617,9 @@ private fun OwnerScopedStorageScreen(
                     }
                 }
                 "Técnicas" -> {
+                    item { OutlinedButton(onClick = { importTechniqueFile.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }) {
+                        Icon(Icons.Default.FileDownload, null); Text("Importar archivo de técnica")
+                    } }
                     if (state.techniquesList.isEmpty()) {
                         item {
                             EmptyStateLayout(
@@ -626,7 +663,7 @@ private fun OwnerScopedStorageScreen(
                         }
                     } else {
                         items(state.cupsList) { cup ->
-                            CupItemCard(cup = cup, onDelete = {
+                            CupItemCard(cup = cup, fahrenheit = state.useFahrenheit, onOpen = { activeCupDetailId = cup.id }, onDelete = {
                                 pendingDeletion = StorageDeletionRequest(
                                     title = "¿Eliminar esta taza?",
                                     message = "Se eliminará el registro histórico de esta taza catada."
@@ -663,6 +700,13 @@ private fun OwnerScopedStorageScreen(
     // --- BOTTOM SHEETS TRIGGER HANDLING ---
 
     // Detail Sheet
+    state.cupsList.firstOrNull { it.id == activeCupDetailId }?.let { cup ->
+        CupDetailSheet(cup, state.useFahrenheit, onDismiss = { activeCupDetailId = null }, onReplicate = {
+            if (viewModel.replicateCup(cup)) { activeCupDetailId = null; onNavigateToPreparation() }
+        }, onDelete = {
+            pendingDeletion = StorageDeletionRequest(title = "Eliminar taza", message = "Se eliminará el registro histórico de esta taza catada.") { viewModel.deleteCup(cup); activeCupDetailId = null }
+        })
+    }
     if (activeBeanDetail != null) {
         BeanDetailSheet(
             bean = activeBeanDetail,
@@ -671,7 +715,8 @@ private fun OwnerScopedStorageScreen(
             onEdit = {
                 activeBeanDetailId = null
                 activeBeanEditId = activeBeanDetail.id
-            }
+            },
+            onCupOpen = { activeBeanDetailId = null; activeCupDetailId = it.id }
         )
     }
 
@@ -754,6 +799,7 @@ private fun OwnerScopedStorageScreen(
     selectedTechnique?.let { technique ->
         TechniqueStorageDetailDialog(
             technique = technique,
+            fahrenheit = state.useFahrenheit,
             steps = selectedTechniqueSteps,
             methodName = state.userMethods.firstOrNull { it.methodId == technique.methodId }?.name
                 ?: technique.legacyMethodName ?: "Método guardado",
@@ -773,6 +819,13 @@ private fun OwnerScopedStorageScreen(
                 selectedTechniqueId = null
             },
             onShare = { showShareExplanation = true },
+            onExport = {
+                try {
+                    val method = state.allBrewMethods.firstOrNull { it.id == technique.methodId }?.nameKey ?: technique.legacyMethodName ?: "Método guardado"
+                    pendingFileText = TechniqueFiles.encode(technique, method, selectedTechniqueSteps)
+                    exportTechniqueFile.launch("BrewStudio-tecnica.json")
+                } catch (_: Exception) { fileError = "No se pudo preparar el archivo." }
+            },
             onDelete = {
                 viewModel.deleteTechnique(technique.id)
                 selectedTechniqueId = null
@@ -783,6 +836,7 @@ private fun OwnerScopedStorageScreen(
     editingTechnique?.let { technique ->
         TechniqueStorageEditorDialog(
             technique = technique,
+            fahrenheit = state.useFahrenheit,
             initialSteps = selectedTechniqueSteps,
             onDismiss = { editingTechniqueId = null },
             onSave = { updated, steps, onCompleted ->
@@ -923,6 +977,7 @@ private fun TechniqueStorageItemCard(
 @Composable
 private fun TechniqueStorageDetailDialog(
     technique: Technique,
+    fahrenheit: Boolean,
     steps: List<TechniqueStep>,
     methodName: String,
     isBuiltIn: Boolean,
@@ -931,6 +986,7 @@ private fun TechniqueStorageDetailDialog(
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
     onShare: () -> Unit,
+    onExport: () -> Unit,
     onDelete: () -> Unit
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
@@ -956,7 +1012,8 @@ private fun TechniqueStorageDetailDialog(
                             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("PARÁMETROS", fontSize = 10.sp, fontWeight = FontWeight.Black, color = TextSecundario, letterSpacing = 1.sp)
                                 Text("${technique.doseG} g de café · ${technique.waterMl} ml de agua", fontWeight = FontWeight.Bold, color = TextPrincipal)
-                                Text("Proporción 1:${technique.ratio} · ${technique.temperatureC} °C", color = TextSecundario)
+                                val degrees = if (fahrenheit) kotlin.math.round(technique.temperatureC * 1.8 + 32).toInt() else technique.temperatureC
+                                Text("Proporción 1:${technique.ratio} · $degrees ${if (fahrenheit) "°F" else "°C"}", color = TextSecundario)
                                 Text("Molienda: ${technique.grindDescription ?: technique.grindValue ?: "Sin especificar"}", color = TextSecundario)
                                 if (technique.notes.isNotBlank()) Text(technique.notes, fontSize = 12.sp, color = TextSecundario)
                             }
@@ -994,6 +1051,7 @@ private fun TechniqueStorageDetailDialog(
                         OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) { Text("Compartir") }
                         if (!isBuiltIn) OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) { Text("Editar") }
                     }
+                    OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Exportar archivo de técnica") }
                     if (!isBuiltIn) {
                         TextButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.textButtonColors(contentColor = Advertencia)) {
                             Text("Eliminar técnica")
@@ -1044,6 +1102,7 @@ private val RecipeStepDraftListSaver = listSaver<SnapshotStateList<RecipeStepInp
 @Composable
 private fun TechniqueStorageEditorDialog(
     technique: Technique,
+    fahrenheit: Boolean,
     initialSteps: List<TechniqueStep>,
     onDismiss: () -> Unit,
     onSave: (Technique, List<TechniqueStep>, (Boolean) -> Unit) -> Unit
@@ -1052,14 +1111,14 @@ private fun TechniqueStorageEditorDialog(
     var name by rememberSaveable(technique.id) { mutableStateOf(technique.name) }
     var coffee by rememberSaveable(technique.id) { mutableStateOf(technique.doseG.toString()) }
     var water by rememberSaveable(technique.id) { mutableStateOf(technique.waterMl.toString()) }
-    var temperature by rememberSaveable(technique.id) { mutableStateOf(technique.temperatureC.toString()) }
+    var temperature by rememberSaveable(technique.id, fahrenheit) { mutableStateOf((if (fahrenheit) technique.temperatureC * 1.8 + 32 else technique.temperatureC.toDouble()).toString()) }
     var notes by rememberSaveable(technique.id) { mutableStateOf(technique.notes) }
     var drafts by rememberSaveable(technique.id, initialSteps, stateSaver = TechniqueStepEditDraftListSaver) {
         mutableStateOf(initialSteps.map { TechniqueStepEditDraft(it.id, it.remoteId, it.title, it.durationSeconds.toString(), it.waterAddedMl.toString(), it.gesture, it.intensity, it.stepNote) })
     }
     val coffeeValue = coffee.replace(',', '.').toFloatOrNull()
     val waterValue = water.toIntOrNull()
-    val temperatureValue = temperature.toIntOrNull()
+    val temperatureValue = temperature.toDoubleOrNull()?.let { kotlin.math.round(if (fahrenheit) (it - 32) / 1.8 else it).toInt() }
     val stepWater = drafts.sumOf { it.water.toIntOrNull() ?: 0 }
     val validationError = BrewInputRules.techniqueError(
         name = name,
@@ -1086,7 +1145,7 @@ private fun TechniqueStorageEditorDialog(
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     StyledOutlinedTextField(value = coffee, onValueChange = { coffee = it }, label = "Café (g)", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
                                     StyledOutlinedTextField(value = water, onValueChange = { water = it }, label = "Agua (ml)", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
-                                    StyledOutlinedTextField(value = temperature, onValueChange = { temperature = it }, label = "°C", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(0.8f))
+                                    StyledOutlinedTextField(value = temperature, onValueChange = { temperature = it }, label = "Temperatura (${if (fahrenheit) "°F" else "°C"})", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(0.8f))
                                 }
                                 StyledOutlinedTextField(value = notes, onValueChange = { notes = it }, label = "Notas")
                             }
@@ -1460,8 +1519,12 @@ fun BeanDetailSheet(
     bean: Bean,
     viewModel: BaristaCalcViewModel,
     onDismiss: () -> Unit,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    onCupOpen: (Cup) -> Unit = {}
 ) {
+    val inventoryState by viewModel.state.collectAsState()
+    val linkedCups = inventoryState.cupsList.filter { it.beanId == bean.id }.sortedByDescending { it.brewDate }
+    val accent = coffeeAccent(bean.id)
     val freshnessResult = remember(bean) { calculateBeanFreshness(bean.roastDate, bean.firstUseDate) }
     var detailsExpanded by rememberSaveable(bean.id) { mutableStateOf(false) }
     
@@ -1481,7 +1544,7 @@ fun BeanDetailSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Header: Name and Roaster
-            Column {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(accent.copy(alpha = 0.07f)).padding(14.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1491,7 +1554,7 @@ fun BeanDetailSheet(
                         text = bean.name,
                         modifier = Modifier.weight(1f),
                         fontSize = 20.sp,
-                        fontWeight = FontWeight.Black,
+                        fontWeight = FontWeight.SemiBold,
                         color = TextPrincipal,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -1733,6 +1796,17 @@ fun BeanDetailSheet(
                     Icon(imageVector = Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(13.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Editar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            CupDetailSection("Tazas y catas · ${linkedCups.size}", accent) {
+                if (linkedCups.isEmpty()) Text("Todavía no hay tazas catadas con este café.", fontSize = 13.sp, color = TextSecundario)
+                else linkedCups.forEach { cup ->
+                    Column(Modifier.fillMaxWidth().clickable { onCupOpen(cup) }.padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Row { Text(cup.techniqueNameSnapshot.ifBlank { "Cata independiente" }, modifier = Modifier.weight(1f), color = TextPrincipal, fontWeight = FontWeight.SemiBold)
+                            Text("${cup.rating ?: 5.0} ★", color = accent) }
+                        Text("${cup.executedDoseG} g → ${cup.executedWaterMl} ml · ${cup.brewDate.take(10)}", fontSize = 12.sp, color = TextSecundario)
+                        if (cup.comment.isNotBlank()) Text(cup.comment, fontSize = 12.sp, color = TextSecundario, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -2642,9 +2716,9 @@ fun RecipeImporterDialog(
 }
 
 @Composable
-fun CupItemCard(cup: Cup, onDelete: () -> Unit) {
+fun CupItemCard(cup: Cup, fahrenheit: Boolean = false, onOpen: () -> Unit = {}, onDelete: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().border(1.dp, BordeSuave, RoundedCornerShape(18.dp)),
+        modifier = Modifier.fillMaxWidth().border(1.dp, BordeSuave, RoundedCornerShape(18.dp)).clickable(onClick = onOpen),
         colors = CardDefaults.cardColors(containerColor = SurfaceCard),
         shape = RoundedCornerShape(18.dp)
     ) {
@@ -2659,7 +2733,10 @@ fun CupItemCard(cup: Cup, onDelete: () -> Unit) {
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(cup.beanNameSnapshot, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrincipal)
-                    Text("Taza • ${cup.executedDoseG} g ➔ ${cup.executedWaterMl} ml • Puntuación: ${cup.rating ?: 5.0} ★", fontSize = 11.sp, color = TextSecundario)
+                    Text("Taza • ${cup.executedDoseG} g ➔ ${cup.executedWaterMl} ml • ${cup.rating?.let { "$it ★" } ?: "Sin calificar"}", fontSize = 11.sp, color = TextSecundario)
+                    val celsius = cup.preciseTemperatureC ?: cup.executedTemperatureC.toDouble()
+                    val degrees = String.format(Locale.getDefault(), "%.0f", if (fahrenheit) celsius * 1.8 + 32 else celsius)
+                    Text("Temperatura: $degrees ${if (fahrenheit) "°F" else "°C"}", fontSize = 11.sp, color = TextSecundario)
                     if (cup.syncStatus != "SYNCED") {
                         LocalSyncStatusLabel(cup.syncStatus, retrySupported = false)
                     }
@@ -2672,7 +2749,7 @@ fun CupItemCard(cup: Cup, onDelete: () -> Unit) {
             HorizontalDivider(color = BordeSuave.copy(alpha = 0.3f), thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
             
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                AttributeTag(text = cup.cupLifeState, color = AcentoPrincipal)
+                AttributeTag(text = cupLifeLabel(cup.cupLifeState), color = AcentoPrincipal)
                 AttributeTag(text = "Molienda: ${cup.executedGrindSetting}", color = CafeCalidoClaro)
             }
 
@@ -2682,6 +2759,67 @@ fun CupItemCard(cup: Cup, onDelete: () -> Unit) {
                 Text(cup.comment, fontSize = 10.sp, color = TextSecundario)
             }
         }
+    }
+}
+
+private fun cupLifeLabel(value: String) = when (value.uppercase()) {
+    "FRESH", "HOT" -> "Fresca"
+    "PEAK", "IDEAL" -> "En su punto"
+    "DECLINING", "LATE" -> "En descenso"
+    "EXHAUSTED", "COLD" -> "Agotada"
+    else -> value
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CupDetailSheet(cup: Cup, fahrenheit: Boolean, onDismiss: () -> Unit, onDelete: () -> Unit, onReplicate: (() -> Unit)? = null) {
+    val accent = coffeeAccent(cup.beanId ?: cup.id)
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SurfaceCard,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(cup.beanNameSnapshot.ifBlank { "Café sin registrar" }, fontFamily = FontFamily.Serif,
+                        fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = TextPrincipal)
+                    Text(cup.brewDate.take(10), fontSize = 12.sp, color = TextSecundario)
+                }
+                Text(cup.rating?.let { "$it ★" } ?: "Sin calificar", color = accent, fontWeight = FontWeight.Bold)
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Cerrar") }
+            }
+            CupDetailSection("Preparación ejecutada", accent) {
+                SpecRow("Dosis", "${cup.executedDoseG} g")
+                SpecRow("Agua", "${cup.executedWaterMl} ml")
+                SpecRow("Proporción", "1:${java.text.DecimalFormat("0.##").format(cup.executedRatio)}")
+                val celsius = cup.preciseTemperatureC ?: cup.executedTemperatureC.toDouble()
+                val degrees = String.format(Locale.getDefault(), "%.0f %s", if (fahrenheit) celsius * 1.8 + 32 else celsius, if (fahrenheit) "°F" else "°C")
+                SpecRow("Temperatura", degrees)
+                SpecRow("Duración", String.format(Locale.getDefault(), "%02d:%02d", cup.executedDurationSeconds / 60, cup.executedDurationSeconds % 60))
+                if (cup.executedGrindSetting.isNotBlank()) SpecRow("Molienda", cup.executedGrindSetting)
+            }
+            CupDetailSection("Referencias históricas", accent) {
+                if (cup.recipeNameSnapshot.isNotBlank()) SpecRow("Receta", cup.recipeNameSnapshot)
+                SpecRow("Técnica", cup.techniqueNameSnapshot.ifBlank { "Cata independiente" })
+                if (cup.methodNameSnapshot.isNotBlank()) SpecRow("Método", cup.methodNameSnapshot)
+                if (cup.grinderNameSnapshot.isNotBlank()) SpecRow("Molino", cup.grinderNameSnapshot)
+            }
+            CupDetailSection("Resultado de cata", accent) {
+                SpecRow("Vida de taza", cupLifeLabel(cup.cupLifeState))
+                cup.nps?.let { SpecRow("Recomendación", "$it/10") }
+                if (cup.comment.isNotBlank()) Text(cup.comment, fontSize = 14.sp, color = TextPrincipal)
+            }
+            onReplicate?.let { action -> Button(onClick = action, modifier = Modifier.fillMaxWidth()) { Text("Replicar taza") } }
+            TextButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = Advertencia); Text("Eliminar taza", color = Advertencia) }
+        }
+    }
+}
+
+@Composable
+private fun CupDetailSection(title: String, accent: Color, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(accent.copy(alpha = 0.06f))
+        .border(1.dp, BordeSuave, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = accent)
+        content()
     }
 }
 

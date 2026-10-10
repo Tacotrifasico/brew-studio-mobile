@@ -84,8 +84,8 @@ fun HomeScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 90.dp, top = 16.dp, start = 16.dp, end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            contentPadding = PaddingValues(bottom = 90.dp, top = 10.dp, start = 16.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
         // --- HEADER CÁLIDO ---
         item {
@@ -94,7 +94,7 @@ fun HomeScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 12.dp),
+                        .padding(bottom = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -264,7 +264,7 @@ fun HomeScreen(
                 Text(
                     text = "¡Buen día, Brewther!",
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                    fontSize = 28.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Black,
                     color = TextPrincipal,
                     letterSpacing = (-0.5).sp

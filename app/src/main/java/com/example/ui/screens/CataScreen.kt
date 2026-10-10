@@ -43,10 +43,12 @@ fun CataScreen(
     val state by viewModel.state.collectAsState()
     val scrollState = rememberScrollState()
 
-    var rating by rememberSaveable { mutableStateOf(4.0f) }
+    var rating by rememberSaveable(state.activeCataId) { mutableStateOf(state.cataRating) }
     var notesFoundInput by rememberSaveable { mutableStateOf("") }
     var expectedNotesInput by rememberSaveable { mutableStateOf("Frutas rojas, chocolate, panela") }
-    var commentsInput by rememberSaveable { mutableStateOf("") }
+    var commentsInput by rememberSaveable(state.activeCataId) { mutableStateOf(state.cataFreeNotes) }
+    LaunchedEffect(state.cataFreeNotes) { commentsInput = state.cataFreeNotes }
+    LaunchedEffect(state.cataRating) { rating = state.cataRating }
     var isSaving by rememberSaveable { mutableStateOf(false) }
 
     // Start simulated cup cooling timer when screen loads

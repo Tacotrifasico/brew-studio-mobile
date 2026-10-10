@@ -41,7 +41,7 @@ object BrewInputRules {
     ): String? {
         if (name.isBlank()) return "Escribe un nombre para la técnica."
         if (coffee == null || !validCoffee(coffee)) return "El café debe estar entre 1 y 100 g."
-        if (temperature == null || !validTemperature(temperature)) return "La temperatura debe estar entre 60 y 100 °C."
+        if (temperature == null || temperature !in 0..100) return "La temperatura debe estar entre 0 y 100 °C."
         if (stepTitles.isEmpty() || stepTitles.any { it.isBlank() }) return "Todos los pasos necesitan un título."
         if (stepDurations.size != stepTitles.size || stepDurations.any { it == null || it <= 0 }) return "Cada paso necesita una duración mayor a 0 segundos."
         if (stepWaters.size != stepTitles.size || stepWaters.any { it == null || it < 0 }) return "El agua de cada paso debe ser 0 ml o más."

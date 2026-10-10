@@ -171,7 +171,7 @@ fun BaristaCalcCard(
         Column(
             modifier = Modifier
                 .graphicsLayer { rotationY = if (showBack) 180f else 0f }
-                .padding(20.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
                 .fillMaxWidth()
         ) {
             if (showBack && backContent != null) {
@@ -189,7 +189,7 @@ fun BaristaCalcCard(
             }
             CalculatorFlipHeader(back = false, enabled = backContent != null, detail = preview) { focusManager.clearFocus(); flipped = true }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // --- ZONA PRINCIPAL: RESULTADO GRANDE (DINÁMICO & ORGÁNICO) ---
             val ratio = state.ratio.coerceIn(2f, 25f)
@@ -242,9 +242,9 @@ fun BaristaCalcCard(
                     .clip(RoundedCornerShape(26.dp))
                     .background(
                         Brush.linearGradient(
-                            colors = listOf(Color.White.copy(alpha = 0.09f), animColor1, animColor2),
+                            colors = listOf(animColor1, animColor2),
                             start = Offset(0f, 0f),
-                            end = Offset(700f, 700f) // ~135° diagonal flow with top-left highlight stop
+                            end = Offset(700f, 700f) // Organic highlight is drawn by the wash below, not a translucent first stop.
                         )
                     )
                     .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(26.dp)),
@@ -270,7 +270,7 @@ fun BaristaCalcCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(22.dp),
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -288,14 +288,14 @@ fun BaristaCalcCard(
                         Text(
                             text = "${state.water} ml",
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                            fontSize = 42.sp,
+                            fontSize = 34.sp,
                             fontWeight = FontWeight.Black,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "${state.coffeeInput} g • 1:${state.ratioInput} • ${state.method}",
-                            fontSize = 14.sp,
+                            fontSize = 12.sp,
                             color = Color.White.copy(alpha = 0.95f),
                             fontWeight = FontWeight.Medium
                         )
@@ -303,7 +303,7 @@ fun BaristaCalcCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // --- DIAL O MEDIDOR VISUAL ---
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -313,19 +313,14 @@ fun BaristaCalcCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Sensación esperada",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecundario
-                    )
-                    Text(
                         text = sensorTheme.label,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = sensorTheme.labelColor
+                        color = sensorTheme.labelColor,
+                        maxLines = 1
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 
                 // Continuous sensory bar with selection tick
                 RatioGaugeBar(
@@ -334,7 +329,7 @@ fun BaristaCalcCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // --- INPUTS EDITABLES CÓMODOS ---
             Row(
@@ -379,7 +374,7 @@ fun BaristaCalcCard(
                                     }
                                 )
                             }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                            .padding(vertical = 6.dp, horizontal = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -480,7 +475,7 @@ fun BaristaCalcCard(
                                     }
                                 )
                             }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                            .padding(vertical = 6.dp, horizontal = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -577,7 +572,7 @@ fun BaristaCalcCard(
                                     }
                                 )
                             }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                            .padding(vertical = 6.dp, horizontal = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -639,7 +634,7 @@ fun BaristaCalcCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // --- CHIPS DE PRESTATS (LazyRow) ---
             LazyRow(
@@ -664,7 +659,7 @@ fun BaristaCalcCard(
                             .clickable {
                                 onPresetSelected(preset)
                             }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -689,7 +684,7 @@ fun BaristaCalcCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // --- SELECCIÓN DE MÉTODO DIRECTO ---
             Row(
@@ -701,15 +696,9 @@ fun BaristaCalcCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Text(
-                        text = "Métodos rápidos:",
-                        fontSize = 12.sp,
-                        color = TextSecundario,
-                        fontWeight = FontWeight.Medium
-                    )
                     IconButton(
                         onClick = { showManageMethodsDialog = true },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
@@ -764,16 +753,13 @@ fun BaristaCalcCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // --- MICROCOPY STATUS BOARD ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(sensorTheme.accentColor.copy(alpha = 0.05f))
-                    .border(1.dp, BordeSuave, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -788,11 +774,13 @@ fun BaristaCalcCard(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = TextSecundario,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // --- BOTTOM BUTTON PANEL ---
             Row(

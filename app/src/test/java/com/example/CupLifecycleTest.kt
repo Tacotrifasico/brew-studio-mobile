@@ -2,6 +2,10 @@ package com.example
 
 import android.app.Application
 import android.os.Looper
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
@@ -34,11 +38,82 @@ class CupLifecycleTest {
         } }
         compose.runOnIdle { model.setPreparationSettings(0, true); model.updateLabVariables(preciseTemperature = (177.0 - 32) / 1.8) }
         compose.onNodeWithText("177 °F").assertIsDisplayed()
-        compose.onNodeWithText("Agua demasiado fría").assertIsDisplayed()
-        compose.onNodeWithText("Riesgo de subextracción", substring = true).assertIsDisplayed()
-        assertEquals("Agua demasiado fría", model.state.value.labPreviewExtraction)
-        assertTrue(model.state.value.labRecommendationText.contains("Riesgo de subextracción"))
+        compose.onNodeWithText("Calor fuera de zona · consulta ⓘ").assertIsDisplayed()
+        compose.onNodeWithText("puede ralentizar", substring = true).assertDoesNotExist()
+        assertEquals("Calor bajo para V60", model.state.value.labPreviewExtraction)
+        assertTrue(model.state.value.labRecommendationText.contains("puede ralentizar"))
+        compose.onNodeWithText("Ref. 24").assertIsDisplayed()
+        compose.onNodeWithText("← Menos gruesa").assertIsDisplayed()
+        compose.onNodeWithText("Más gruesa →").assertIsDisplayed()
+        compose.onNodeWithText("Hario · receta V60 ↗").assertDoesNotExist()
+        compose.onNodeWithText("Clics de molienda").assertDoesNotExist()
         compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-177f.png")
+    }
+
+    @Test fun equalizerAndBothSlidersFitCompactViewportAndInfoOwnsLongCopy() {
+        val model = BaristaCalcViewModel(ApplicationProvider.getApplicationContext<Application>())
+        compose.setContent { MyApplicationTheme {
+            Box(Modifier.width(360.dp).height(640.dp)) { LabScreen(model, {}) }
+        } }
+        compose.runOnIdle { model.setPreparationSettings(0, true); model.updateLabVariables(preciseTemperature = (195.0 - 32) / 1.8) }
+        compose.onNodeWithContentDescription("Calor").performClick()
+        // Exercise drag inside the real vertically-scrollable workspace, not just an isolated slider.
+        compose.onNodeWithContentDescription("Temperatura del agua").performTouchInput {
+            swipe(Offset(width * .15f, center.y), Offset(width * .94f, center.y), 600)
+        }
+        compose.runOnIdle { assertTrue(model.state.value.labPreciseTemp!! > (205.0 - 32) / 1.8) }
+        compose.onNodeWithContentDescription("Temperatura del agua").performTouchInput {
+            swipe(Offset(width * .94f, center.y), Offset(width * .15f, center.y), 600)
+        }
+        compose.runOnIdle {
+            assertTrue(model.state.value.labPreciseTemp!! < (180.0 - 32) / 1.8)
+            model.updateLabVariables(preciseTemperature = (195.0 - 32) / 1.8)
+        }
+        compose.mainClock.advanceTimeBy(1000)
+        compose.waitForIdle()
+        compose.onNodeWithText("Aroma").assertIsDisplayed()
+        compose.onNodeWithText("Amargor").assertIsDisplayed()
+        val s = model.state.value
+        val estimated = calculateLabProfile(s.labCoffee, s.labWater, s.labRatio, s.labTemp, s.labClicks, s.labBeanFreshness, preciseTemperatureC = s.labPreciseTemp, useFahrenheit = true)
+        compose.onAllNodesWithText(estimated.aroma.toString()).onFirst().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Temperatura del agua").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Ajuste de molienda").assertIsDisplayed()
+        compose.onNodeWithText("Más gruesa →").assertIsDisplayed()
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-compact.png")
+        assertTrue("Molienda ${compose.onNodeWithText("Más gruesa →").fetchSemanticsNode().boundsInRoot} debe quedar por encima de las acciones ${compose.onNodeWithTag("lab_actions").fetchSemanticsNode().boundsInRoot}, sin desplazarse",
+            compose.onNodeWithText("Más gruesa →").fetchSemanticsNode().boundsInRoot.bottom <=
+                compose.onNodeWithTag("lab_actions").fetchSemanticsNode().boundsInRoot.top)
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-compact.png")
+        compose.onNodeWithContentDescription("Proporción").performClick()
+        compose.onNodeWithContentDescription("Proporción de café y agua").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Tiempo de extracción").assertIsDisplayed()
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-compact-ratio.png")
+        assertTrue("Tiempo ${compose.onNodeWithText("Más contacto").fetchSemanticsNode().boundsInRoot} debe quedar por encima de las acciones ${compose.onNodeWithTag("lab_actions").fetchSemanticsNode().boundsInRoot}, sin desplazarse",
+            compose.onNodeWithText("Más contacto").fetchSemanticsNode().boundsInRoot.bottom <=
+                compose.onNodeWithTag("lab_actions").fetchSemanticsNode().boundsInRoot.top)
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-compact-ratio.png")
+        compose.onNodeWithText("Ilustración orientativa", substring = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Acerca del ecualizador").performClick()
+        compose.onNodeWithText("Cómo leer la estimación").assertIsDisplayed()
+        compose.onNodeWithText("no porcentajes", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Listo").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1000)
+        compose.waitForIdle()
+    }
+
+    @Test fun nativeSliderKeepsRespondingAcrossZoneAndRepeatedDrags() {
+        var selected by mutableFloatStateOf(190f)
+        val changes = mutableListOf<Float>()
+        compose.setContent { MyApplicationTheme {
+            LabCalibratedSlider(selected, { selected = it; changes += it }, 158f..212f, 198f..205f, activeColor = androidx.compose.ui.graphics.Color(0xFFC26638), accessibilityLabel = "Prueba de calor", accessibilityValue = "$selected °F")
+        } }
+        val slider = compose.onNodeWithContentDescription("Prueba de calor")
+        slider.performTouchInput { swipe(Offset(width * .15f, center.y), Offset(width * .94f, center.y), 600) }
+        compose.runOnIdle { assertTrue(selected > 205); assertTrue(changes.size > 5); assertTrue(changes.all { it == it.toInt().toFloat() }) }
+        slider.performTouchInput { swipe(Offset(width * .94f, center.y), Offset(width * .15f, center.y), 600) }
+        compose.runOnIdle { assertTrue(selected < 180) }
+        slider.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(195f) }
+        compose.runOnIdle { assertEquals(195f, selected) }
     }
 
     @Test fun preparationIdentityIsCompactAndClearlyLabeled() {

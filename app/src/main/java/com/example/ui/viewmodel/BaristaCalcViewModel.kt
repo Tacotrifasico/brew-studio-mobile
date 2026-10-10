@@ -1647,10 +1647,19 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun selectMethodForLab(methodId: String?, methodName: String) {
         _state.update {
+            val guide = com.example.data.engine.LabTemperatureGuide(it.labPreciseTemp ?: it.labTemp.toDouble(), it.labAltitudeMeters, method = methodName)
+            val nextTemp = if (guide.temperatureC.toFloat() !in guide.sliderRange) (if (guide.kind == "cold") 20.0 else 92.0) else guide.temperatureC
+            val time = when (guide.kind) {
+                "cold" -> if (it.labEstTimeSeconds in 3600..86400) it.labEstTimeSeconds else 43200
+                "espresso" -> if (it.labEstTimeSeconds in 5..90) it.labEstTimeSeconds else 25
+                else -> if (it.labEstTimeSeconds in 30..600) it.labEstTimeSeconds else 180
+            }
             it.copy(
                 labMethod = methodName,
                 labMethodId = methodId ?: methodIdForName(methodName),
-                labTechniqueId = null
+                labTechniqueId = null,
+                labTemp = nextTemp.roundToInt(), labPreciseTemp = nextTemp,
+                labEstTimeSeconds = time
             )
         }
         calculateOfflineLabHypothesis()
@@ -1740,80 +1749,14 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun calculateOfflineLabHypothesis() {
         val s = _state.value
-        val ratio = s.labRatio
-        val temp = s.labTemp
-        val clicks = s.labClicks
-        val freshness = s.labBeanFreshness
-        val alt = s.labAltitudeMeters
-        val timeSec = s.labEstTimeSeconds
-        val tBoil = (100.0f - (alt.coerceIn(0, 5000) * 0.0034f)).coerceIn(80.0f, 100.0f)
-        val effectiveTemp = minOf((s.labPreciseTemp ?: temp.toDouble()).toFloat(), tBoil)
-        val thermal = com.example.data.engine.LabTemperatureGuide(s.labPreciseTemp ?: temp.toDouble(), alt, s.useFahrenheit)
-
-        // 1. Intensity calculation
-        val intensity = when {
-            ratio <= 10.0f -> "Extradensa (Fuerte & Expresiva)"
-            ratio <= 13.5f -> "Marcada e Intensa"
-            ratio <= 16.5f -> "Equilibrada (Punto Dulce)"
-            else -> "Ligera / Estilo Té"
-        }
-
-        // 2. Body calculation
-        val body = when {
-            ratio <= 11.0f -> "Alto y viscoso"
-            clicks < 15 -> "Espeso y denso"
-            clicks > 25 -> "Ligero y cristalino"
-            else -> "Sedoso & Redondo"
-        }
-
-        // 3. Clarity calculation
-        val clarity = when {
-            clicks > 25 -> "Nítida (Excelente separación)"
-            ratio >= 16f -> "Alta claridad sensorial"
-            else -> "Baja, prima la intensidad sobre notas individuales"
-        }
-
-        // 4. Extraction estimation with altitude & time awareness
-        val extraction = when {
-            thermal.warning -> thermal.headline
-            (effectiveTemp >= 96 && clicks <= 12) || (timeSec > 270 && clicks <= 15) -> "Sobre-extracción Extrema (Riesgo amargo/seco)"
-            (effectiveTemp < 86 && ratio <= 12) || (timeSec < 100 && clicks >= 24) -> "Sub-extracción (Agria y salada)"
-            effectiveTemp in 88f..94.5f && clicks in 14..26 && timeSec in 120..240 -> "Extracción Ideal del Barista"
-            else -> "Hipótesis aceptable. Verifique molienda, tiempo y temperatura."
-        }
-
-        // 5. Risks and diagnostic
-        val risks = StringBuilder()
-        if (temp > tBoil) {
-            risks.append("• ¡Alerta de Altitud!: A ${alt}m el agua hierve a ${String.format(java.util.Locale.US, "%.1f", tBoil)}°C. La temperatura real del agua no superará el punto de ebullición local.\n")
-        }
-        if (effectiveTemp > 95f) risks.append("• Alta temperatura puede evaporar notas florales y dejar amargor.\n")
-        if (thermal.warning) risks.insert(0, "• ${thermal.detail}\n")
-        if (clicks < 13) risks.append("• Molienda fina obstruirá paso, causando taza turbia y astringencia.\n")
-        if (clicks > 28) risks.append("• Molienda gruesa puede dar canalización y taza aguada.\n")
-        if (timeSec > 270) risks.append("• Tiempo prolongado (>4:30 min) puede saturar de amargor y taninos.\n")
-        if (timeSec < 100) risks.append("• Tiempo muy rápido (<1:40 min) puede dejar el café sub-extraído y ácido.\n")
-        if (freshness == "muy fresco") risks.append("• Grano joven (turbulencia de CO2). Necesitas preinfusión larga de 50s.\n")
-        if (freshness == "viejo") risks.append("• Grano antiguo (perdió gas). Sube temperatura y muele más fino.\n")
-        if (risks.isEmpty()) risks.append("Sin alertas evidentes; valida el sabor en Cata.")
-
-        val rec = when {
-            thermal.warning -> thermal.detail
-            temp > tBoil -> "En tu ciudad el hervor ocurre a ${String.format(java.util.Locale.US, "%.1f", tBoil)}°C. Muele 1 click más fino para compensar la menor energía térmica."
-            alt >= 2000 -> "Altitud elevada (${alt}m): La menor presión facilita acidez brillante; ajusta molienda fina para retener dulzor."
-            ratio <= 3.0f -> "Hipótesis Corto Espresso: Produce alta concentración de aceites."
-            freshness == "muy fresco" -> "Aumenta el tiempo del bloom para drenar dióxido de carbono."
-            effectiveTemp >= 94f -> "Vierte suave para no agitar de más y evitar sabores astringentes."
-            else -> "Mantenimiento ideal del ciclo brew -> taste -> diagnose -> adjust."
-        }
-
+        val thermal = com.example.data.engine.LabTemperatureGuide(s.labPreciseTemp ?: s.labTemp.toDouble(), s.labAltitudeMeters, s.useFahrenheit, s.labMethod)
         _state.update { it.copy(
-            labPreviewIntensity = intensity,
-            labPreviewBody = body,
-            labPreviewClarity = clarity,
-            labPreviewExtraction = extraction,
-            labPreviewRiesgos = risks.toString().trim(),
-            labRecommendationText = rec
+            labPreviewIntensity = "Depende de la concentración real",
+            labPreviewBody = "Confirma en Cata",
+            labPreviewClarity = "Confirma en Cata",
+            labPreviewExtraction = thermal.headline,
+            labPreviewRiesgos = if (thermal.warning) thermal.detail else "Sin alertas de referencia; confirma en Cata.",
+            labRecommendationText = thermal.detail
         ) }
     }
 

@@ -13,6 +13,18 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class PreparationSettingsTest {
+    @Test fun switchingMethodsKeepsGrinderReferenceAndUsesHoursForColdBrew() {
+        val model = BaristaCalcViewModel(ApplicationProvider.getApplicationContext<Application>())
+        model.updateLabVariables(clicks = 27, temperature = 92, estTimeSeconds = 180)
+        model.selectMethodForLab(null, "Cold Brew")
+        assertEquals(20, model.state.value.labTemp)
+        assertEquals(43200, model.state.value.labEstTimeSeconds)
+        assertEquals(27, model.state.value.labClicks)
+        model.selectMethodForLab(null, "Espresso")
+        assertEquals(92, model.state.value.labTemp)
+        assertEquals(25, model.state.value.labEstTimeSeconds)
+        assertEquals(27, model.state.value.labClicks)
+    }
     @Test fun heatMovesFlavorUntilAltitudeBoilingLimit() {
         val cool = calculateLabProfile(15f, 240, 16f, 80, 24, "en ventana", 0)
         val hot = calculateLabProfile(15f, 240, 16f, 98, 24, "en ventana", 0)

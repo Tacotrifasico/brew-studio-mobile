@@ -894,6 +894,8 @@ struct LabView: View {
     @State private var isSavingExperiment = false
     @State private var isSavingTechnique = false
     @State private var profileExpanded = false
+    @State private var showEqualizerInfo = false
+    @State private var lastThermalHaptic: TimeInterval = 0
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -919,6 +921,26 @@ struct LabView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { actionBar }
         .navigationBarHidden(true)
+        .sheet(isPresented: $showEqualizerInfo) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Cómo leer la estimación").font(.title2.bold())
+                        Text("Los números de 0 a 100 son puntuaciones orientativas, no porcentajes ni mediciones del sabor. Sirven para comparar ajustes; no garantizan el resultado de tu taza.")
+                        Text("El modelo es una hipótesis local, no una fórmula científicamente calibrada. Grano, tueste, molino, agua y técnica cambian el resultado. Registra el sabor real en Cata. Para métodos sin modelo disponible verás —.")
+                        Text(thermalGuide.headline).font(.headline)
+                        Text(thermalGuide.detail)
+                        Text("Puntos orientativos del método: " + thermalGuide.rangeText)
+                        if thermalGuide.openHotWater { Text("Hervor estimado: " + model.state.temperatureUnit.text(celsius: thermalGuide.boilingC) + ". La presión atmosférica real puede variar.") }
+                        if let url = URL(string: thermalGuide.sourceURL), !thermalGuide.sourceURL.isEmpty {
+                            Link(thermalGuide.sourceName + " ↗", destination: url)
+                        }
+                    }.font(.subheadline).foregroundStyle(CupaTheme.text).padding(20)
+                }.background(CupaTheme.background)
+                .navigationTitle("Ecualizador didáctico").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { showEqualizerInfo = false } } }
+            }
+        }
         .sheet(isPresented: $showLabDetails) {
             NavigationStack {
                 ScrollView {
@@ -999,11 +1021,11 @@ struct LabView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading) {
-                    Text("PERFIL ESTIMADO").font(.caption2.bold()).tracking(1)
+                    Text("GUÍA DEL MÉTODO").font(.caption2.bold()).tracking(1)
                     Text(primaryOutcome).font(.title3.bold())
                 }
                 Spacer()
-                Text(String(format: "%.2fx", profile.extractionIndex)).font(.title2.bold())
+
             }
             Text(profile.summary).font(.subheadline)
             HStack { ForEach(profile.labels, id: \.self) { Text($0).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 4).background(.white.opacity(0.18)).clipShape(Capsule()) } }
@@ -1014,7 +1036,7 @@ struct LabView: View {
         .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityElement(children: .combine)
-        .accessibilityHint("El índice 1 punto 00 es la referencia; un valor menor indica subextracción y uno mayor indica más extracción")
+        .accessibilityHint("Orientación por método; confirma el sabor en Cata")
     }
 
     private var calibrationWorkspaceCard: some View {
@@ -1025,7 +1047,7 @@ struct LabView: View {
                     Spacer()
                     Menu {
                         ForEach(["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"], id: \.self) { method in
-                            Button(method) { model.update { $0.method = method } }
+                            Button(method) { model.selectMethod(method) }
                         }
                     } label: {
                         HStack(spacing: 4) { Text(model.state.method); Image(systemName: "chevron.down") }
@@ -1036,10 +1058,7 @@ struct LabView: View {
                     sensoryContent
                     variableTabs
                 }
-                Text("AJUSTES · \(category.rawValue.uppercased())")
-                    .font(.caption2.bold()).tracking(0.8).foregroundStyle(CupaTheme.secondaryText)
                 controlsContent
-                compactHypothesis
             }
         }
         .accessibilityElement(children: .contain)
@@ -1074,16 +1093,16 @@ struct LabView: View {
         DisclosureGroup(isExpanded: $profileExpanded) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(model.profile.summary).font(.caption)
-                Text("1.00× es la referencia: menos = menor extracción; más = mayor extracción.")
+                Text("Ilustración orientativa, no medición de extracción. El sabor real se registra en Cata.")
                     .font(.caption2)
             }.padding(.top, 4)
         } label: {
             VStack(alignment: .leading, spacing: 3) {
-            Text("PERFIL ESTIMADO").font(.caption2.bold()).tracking(0.8)
+            Text("GUÍA DEL MÉTODO").font(.caption2.bold()).tracking(0.8)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(primaryOutcome).font(.caption.bold()).fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                Text(String(format: "%.2f×", model.profile.extractionIndex)).font(.headline.monospacedDigit())
+
             }
             }
         }
@@ -1093,7 +1112,7 @@ struct LabView: View {
         .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .leading, endPoint: .trailing))
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .accessibilityElement(children: .combine)
-        .accessibilityHint("El índice 1 punto 00 es la referencia; un valor menor indica subextracción y uno mayor indica más extracción")
+        .accessibilityHint("Orientación por método; confirma el sabor en Cata")
     }
 
     private var sensoryContent: some View {
@@ -1103,11 +1122,16 @@ struct LabView: View {
             ("Amargor", model.profile.bitterness, Color(hex: 0x5C5641)), ("Final", model.profile.finish, Color(hex: 0x74BFE0))
         ]
         return VStack(alignment: .leading, spacing: 5) {
-                Text("SABOR ESTIMADO").font(.caption2.bold()).tracking(0.8).foregroundStyle(CupaTheme.secondaryText)
+                HStack {
+                    Text("ECUALIZADOR · 0–100").font(.caption2.bold()).tracking(0.8).foregroundStyle(CupaTheme.secondaryText)
+                    Spacer()
+                    Button { showEqualizerInfo = true } label: { Image(systemName: "info.circle").font(.system(size: 18)).frame(width: 36, height: 32) }
+                        .foregroundStyle(CupaTheme.terracottaText).accessibilityLabel("Acerca del ecualizador")
+                }
                 HStack(alignment: .bottom, spacing: 8) {
                     ForEach(values, id: \.0) { label, value, color in
                         VStack(spacing: 2) {
-                            Text("\(value)").font(.system(size: 9, weight: .bold)).foregroundStyle(color).frame(height: 16)
+                            Text(value == 0 ? "—" : "\(value)").font(.system(size: 10, weight: .bold)).foregroundStyle(color).frame(height: 16)
                             GeometryReader { proxy in
                                 ZStack(alignment: .bottom) {
                                     Rectangle().fill(CupaTheme.backgroundAlt)
@@ -1120,14 +1144,10 @@ struct LabView: View {
                         .frame(maxWidth: .infinity)
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(label)
-                        .accessibilityValue("\(value) de 100")
+                        .accessibilityValue(value == 0 ? "Sin estimación disponible" : "Estimación \(value) de 100")
                     }
                 }
-                HStack(spacing: 5) {
-                    Circle().fill(thermalGuide.warning ? CupaTheme.terracotta : CupaTheme.forest).frame(width: 6, height: 6)
-                    Text(model.diagnostic.extraction).font(.caption2.bold()).foregroundStyle(thermalGuide.warning ? CupaTheme.terracottaText : CupaTheme.forestText).fixedSize(horizontal: false, vertical: true)
-                    Spacer()
-                }
+
         }
     }
 
@@ -1140,13 +1160,13 @@ struct LabView: View {
                         Divider()
                         Stepper("Agua \(model.state.waterMl) ml", value: labWaterBinding, in: 10...2000, step: 1)
                     }
-                    labSlider("Proporción", value: labRatioBinding, range: 8...22, step: 1, display: "1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...2))))")
-                    labSlider("Tiempo", value: bindingInt(\.timeSeconds), range: 60...360, step: 5, display: formattedTime)
+                    labSlider("Proporción", value: labRatioBinding, range: 1...40, step: 1, display: "1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...2))))")
+                    labSlider("Tiempo", value: bindingInt(\.timeSeconds), range: labTimeRange, step: thermalGuide.kind == "cold" ? 3600 : 1, display: formattedTime)
                 case .extraction:
                     calibratedTemperatureSlider
-                    Stepper("De 1 en 1 \(model.state.temperatureUnit.symbol)", value: labTemperatureBinding, in: model.state.temperatureUnit == .fahrenheit ? 176...208 : 80...98, step: 1).font(.caption)
                     temperatureCalibrationBand
-                    labSlider("Clics de molienda", value: bindingInt(\.grindClicks), range: 6...36, step: 1, display: "\(model.state.grindClicks) clics")
+                    labSlider("Molienda", value: bindingInt(\.grindClicks), range: 6...36, step: 1, display: "Ref. \(model.state.grindClicks)")
+                    HStack { Text("← Menos gruesa"); Spacer(); Text("Más gruesa →") }.font(.system(size: 9)).foregroundStyle(CupaTheme.secondaryText)
                 case .bean:
                     Picker("Frescura", selection: binding(\.freshness)) {
                         ForEach(["muy fresco", "en ventana", "punto ideal", "bajando", "viejo"], id: \.self) { Text($0.capitalized) }
@@ -1249,45 +1269,50 @@ struct LabView: View {
     private func experimentTemperatureText(_ experiment: LabExperimentRecord) -> String {
         model.state.temperatureUnit.text(celsius: experiment.effectiveTemperatureC)
     }
-    private var formattedTime: String { String(format: "%d:%02d min", model.state.timeSeconds / 60, model.state.timeSeconds % 60) }
+    private var formattedTime: String { thermalGuide.kind == "cold" ? "\(model.state.timeSeconds / 3600) h" : String(format: "%d:%02d min", model.state.timeSeconds / 60, model.state.timeSeconds % 60) }
     private var thermalGuide: LabTemperatureGuide {
-        LabTemperatureGuide(temperatureC: model.state.effectiveTemperatureC, altitudeMeters: model.state.altitudeMeters, unit: model.state.temperatureUnit)
+        LabTemperatureGuide(temperatureC: model.state.effectiveTemperatureC, altitudeMeters: model.state.altitudeMeters, unit: model.state.temperatureUnit, method: model.state.method)
     }
     private var calibratedTemperatureSlider: some View {
         VStack(spacing: 4) {
             HStack {
-                Text("Temperatura del Agua").font(.subheadline.bold())
-                if !thermalGuide.warning { Text("ZONA ÚTIL").font(.system(size: 8, weight: .bold)).padding(4).background(CupaTheme.backgroundAlt, in: RoundedRectangle(cornerRadius: 6)) }
+                Text("Temperatura").font(.subheadline.bold())
                 Spacer(minLength: 4)
                 Text(temperatureText).font(.system(size: 16, weight: .bold, design: .serif)).foregroundStyle(CupaTheme.terracottaText)
+                Button { labTemperatureBinding.wrappedValue = max(thermalGuide.sliderRange.lowerBound, labTemperatureBinding.wrappedValue - 1) } label: { Image(systemName: "minus").frame(width: 32, height: 32) }
+                    .buttonStyle(.plain).accessibilityLabel("Menos 1 grado")
+                Button { labTemperatureBinding.wrappedValue = min(thermalGuide.sliderRange.upperBound, labTemperatureBinding.wrappedValue + 1) } label: { Image(systemName: "plus").frame(width: 32, height: 32) }
+                    .buttonStyle(.plain).accessibilityLabel("Más 1 grado")
             }
-            Slider(value: Binding(get: { thermalGuide.fraction(labTemperatureBinding.wrappedValue) }, set: { fraction in
-                let next = thermalGuide.value(fraction)
-                if next != labTemperatureBinding.wrappedValue {
-                    labTemperatureBinding.wrappedValue = next
-                    UISelectionFeedbackGenerator().selectionChanged()
+            Slider(value: Binding(get: { labTemperatureBinding.wrappedValue }, set: { next in
+                if next.rounded() != labTemperatureBinding.wrappedValue {
+                    labTemperatureBinding.wrappedValue = next.rounded()
+                    let now = Date().timeIntervalSinceReferenceDate
+                    if now - lastThermalHaptic >= 0.045 { lastThermalHaptic = now; UISelectionFeedbackGenerator().selectionChanged() }
                 }
-            }), in: 0...1)
+            }), in: thermalGuide.sliderRange, step: 1)
             .tint(Color(hex: 0xC86D51))
             .overlay {
-                GeometryReader { proxy in
-                    let width = max(0, proxy.size.width - 16)
-                    Capsule().fill(Color(hex: 0xC86D51).opacity(0.22))
-                        .overlay { Capsule().stroke(Color(hex: 0xC86D51).opacity(0.55), lineWidth: 1) }
-                        .overlay {
-                            Canvas { context, size in
-                                for index in 0...4 {
-                                    let x = size.width * Double(index) / 4
-                                    var tick = Path()
-                                    tick.move(to: CGPoint(x: x, y: -1))
-                                    tick.addLine(to: CGPoint(x: x, y: size.height + 1))
-                                    context.stroke(tick, with: .color(Color(hex: 0xC86D51).opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                                }
+                if thermalGuide.hasReachableBand {
+                    GeometryReader { proxy in
+                        let width = max(0, proxy.size.width - 28)
+                        Canvas { context, size in
+                            let mid = size.height / 2
+                            let low = thermalGuide.sliderRange.lowerBound
+                            let span = thermalGuide.sliderRange.upperBound - low
+                            let left = 14 + width * (thermalGuide.recommendedRange.lowerBound - low) / span
+                            let right = 14 + width * (thermalGuide.recommendedRange.upperBound - low) / span
+                            if !["aero", "chemex"].contains(thermalGuide.kind) {
+                                var band = Path(); band.move(to: CGPoint(x: left, y: mid)); band.addLine(to: CGPoint(x: right, y: mid))
+                                context.stroke(band, with: .color(Color(hex: 0xC86D51).opacity(0.18)), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                            }
+                            for x in Set([left, right]) {
+                                var tick = Path(); tick.move(to: CGPoint(x: x, y: mid - 6)); tick.addLine(to: CGPoint(x: x, y: mid + 6))
+                                context.stroke(tick, with: .color(Color(hex: 0xC86D51).opacity(0.65)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                             }
                         }
-                        .frame(width: width * 0.5, height: 14)
-                        .offset(x: 8 + width * thermalGuide.leftShare, y: (proxy.size.height - 14) / 2)
-                }.allowsHitTesting(false)
+                    }.allowsHitTesting(false)
+                }
             }
             .accessibilityLabel("Temperatura del agua")
             .accessibilityValue("\(temperatureText). \(thermalGuide.headline)")
@@ -1298,35 +1323,23 @@ struct LabView: View {
         }
     }
     private var temperatureCalibrationBand: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(thermalGuide.headline).font(.caption.bold())
-                .foregroundStyle(thermalGuide.warning ? CupaTheme.terracottaText : CupaTheme.text)
-            Text(thermalGuide.warning ? thermalGuide.detail : "Buen punto de partida, no garantía de sabor.")
-                .font(.caption2).foregroundStyle(CupaTheme.secondaryText).fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 3) {
             HStack {
                 Text("\(Int(thermalGuide.sliderRange.lowerBound))\(model.state.temperatureUnit.symbol)")
                 Spacer(minLength: 2)
-                Text("Zona útil: \(thermalGuide.rangeText)").bold()
+                Text(thermalGuide.workingRangeText)
                 Spacer(minLength: 2)
                 Text("\(Int(thermalGuide.sliderRange.upperBound))\(model.state.temperatureUnit.symbol)")
-            }
-            .font(.system(size: 9)).foregroundStyle(CupaTheme.secondaryText)
-            if model.state.altitudeMeters > 0 {
-                Text("Hervor local: \(thermalGuide.degrees(thermalGuide.boilingC)) \(model.state.temperatureUnit.symbol) · rango ajustado por altura")
-                    .font(.system(size: 10)).foregroundStyle(CupaTheme.secondaryText)
+            }.font(.system(size: 10)).foregroundStyle(CupaTheme.secondaryText)
+            if thermalGuide.warning {
+                Text(thermalGuide.openHotWater && thermalGuide.temperatureC > thermalGuide.boilingC ? "Supera el hervor local" : "Calor fuera de zona · consulta ⓘ")
+                    .font(.system(size: 10)).foregroundStyle(CupaTheme.terracottaText)
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(thermalGuide.headline). \(thermalGuide.detail). Zona útil: \(thermalGuide.rangeText)")
     }
-    private var primaryOutcome: String {
-        let p = model.profile
-        if thermalGuide.warning { return thermalGuide.headline }
-        if p.bitterness > 65 { return "Intensa y con cuerpo" }
-        if p.body < 38 { return "Estilo té, alta claridad" }
-        if p.sweetness > 68 && p.bitterness < 42 { return "Taza dorada y balanceada" }
-        if p.acidity > 68 { return "Acidez brillante y frutal" }
-        return "Taza equilibrada clásica"
+    private var primaryOutcome: String { thermalGuide.headline }
+    private var labTimeRange: ClosedRange<Double> {
+        switch thermalGuide.kind { case "espresso": return 5...90; case "cold": return 3600...86400; default: return 30...600 }
     }
 
     private func labSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, display: String) -> some View {

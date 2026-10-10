@@ -3,6 +3,27 @@ import XCTest
 @testable import Cupa
 
 final class LabEngineParityTests: XCTestCase {
+    func testMethodReferencesAndPressureAreNotUniversalV60Rules() {
+        let low = (177.0 - 32) / 1.8
+        XCTAssertTrue(LabTemperatureGuide(temperatureC: low, altitudeMeters: 0, method: "V60").warning)
+        XCTAssertFalse(LabTemperatureGuide(temperatureC: low, altitudeMeters: 0, method: "AeroPress").warning)
+        XCTAssertEqual(LabTemperatureGuide(temperatureC: 93, altitudeMeters: 0, unit: .fahrenheit, method: "Chemex").rangeText, "≈ 200 °F")
+        XCTAssertFalse(LabTemperatureGuide(temperatureC: 94, altitudeMeters: 5000, method: "Espresso").warning)
+        XCTAssertFalse(LabTemperatureGuide(temperatureC: 20, altitudeMeters: 0, method: "Mi método").hasReference)
+        XCTAssertEqual(LabEngine.calculate(LabState(method: "Cold Brew", temperatureC: 20)).aroma, 0)
+    }
+    @MainActor func testMethodSwitchKeepsGrinderReferenceAndUsesHoursForColdBrew() throws {
+        let suite = "method-switch.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let lab = LabModel(defaults: defaults)
+        lab.update { $0.grindClicks = 27 }
+        lab.selectMethod("Cold Brew")
+        XCTAssertEqual(lab.state.temperatureC, 20); XCTAssertEqual(lab.state.timeSeconds, 43200)
+        XCTAssertEqual(lab.state.grindClicks, 27)
+        lab.selectMethod("Espresso")
+        XCTAssertEqual(lab.state.temperatureC, 92); XCTAssertEqual(lab.state.timeSeconds, 25)
+        XCTAssertEqual(lab.state.grindClicks, 27)
+    }
     @MainActor func testIntegerLabAndExactFahrenheitSurviveCompletionAndTasting() throws {
         let suite = "cup-lifecycle.\(UUID().uuidString)"; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -50,7 +71,7 @@ final class LabEngineParityTests: XCTestCase {
         )
         XCTAssertEqual(profile.extractionIndex, 0.95, accuracy: 0.000_01)
         XCTAssertEqual([profile.aroma, profile.acidity, profile.sweetness, profile.body, profile.bitterness, profile.finish], [64, 55, 87, 49, 32, 57])
-        XCTAssertEqual(profile.labels, ["Ventana Óptima", "Grano en Punto"])
+        XCTAssertEqual(profile.labels, ["Calor en zona de trabajo", "Hipótesis visual · no medición"])
     }
 
     func testAltitudeCapsTemperatureAndMatchesAndroid() {
@@ -61,8 +82,8 @@ final class LabEngineParityTests: XCTestCase {
         XCTAssertEqual(LabEngine.boilingPointC(altitudeMeters: 2240), 92.384, accuracy: 0.000_1)
         XCTAssertEqual(profile.extractionIndex, 0.919_259_2, accuracy: 0.000_01)
         XCTAssertEqual([profile.aroma, profile.acidity, profile.sweetness, profile.body, profile.bitterness, profile.finish], [64, 56, 84, 49, 33, 56])
-        XCTAssertEqual(profile.labels, ["Ventana Óptima", "Hervor 92.4°C", "Grano en Punto"])
-        XCTAssertTrue(profile.summary.contains("92.4°C"))
+        XCTAssertEqual(profile.labels, ["Supera el hervor local", "Hipótesis visual · no medición"])
+        XCTAssertTrue(profile.summary.contains("hierve"))
     }
 
     func testUnderExtractionBoundaryMatchesAndroid() {
@@ -72,7 +93,7 @@ final class LabEngineParityTests: XCTestCase {
         )
         XCTAssertEqual(profile.extractionIndex, 0.45, accuracy: 0.000_01)
         XCTAssertEqual([profile.aroma, profile.acidity, profile.sweetness, profile.body, profile.bitterness, profile.finish], [52, 82, 41, 48, 32, 45])
-        XCTAssertEqual(profile.labels, ["Sub-Extracción", "Alta Claridad", "Acidez Brillante"])
+        XCTAssertEqual(profile.labels, ["Calor bajo para V60", "Hipótesis visual · no medición"])
     }
 
     func testOverExtractionBoundaryMatchesAndroid() {
@@ -82,7 +103,7 @@ final class LabEngineParityTests: XCTestCase {
         )
         XCTAssertEqual(profile.extractionIndex, 1.65, accuracy: 0.000_01)
         XCTAssertEqual([profile.aroma, profile.acidity, profile.sweetness, profile.body, profile.bitterness, profile.finish], [78, 22, 32, 76, 84, 42])
-        XCTAssertEqual(profile.labels, ["Alta Extracción", "Cuerpo Denso", "Tono Tostado"])
+        XCTAssertEqual(profile.labels, ["Calor alto para V60", "Hipótesis visual · no medición"])
     }
 
     func testUnitConversionsRoundTrip() {

@@ -67,50 +67,121 @@ struct LabState: Codable, Equatable {
     var temperatureUnit = TemperatureUnit.celsius
 }
 
-// Mirror of Android LabTemperatureGuide: whole display degrees, canonical Celsius,
-// altitude-aware useful window and risk language rather than promised flavors.
+// Recipe references, not universal sensory thresholds. Mirror: Android LabTemperatureGuide.
 struct LabTemperatureGuide {
     let temperatureC: Double
     let altitudeMeters: Int
     var unit: TemperatureUnit = .celsius
+    var method = "V60"
+    var kind: String {
+        switch method.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "v60": return "filter"; case "chemex": return "chemex"
+        case "prensa francesa", "french press": return "press"; case "aeropress": return "aero"
+        case "espresso": return "espresso"; case "moka", "moka italiana": return "moka"
+        case "cold brew", "coldbrew": return "cold"; default: return "custom"
+        }
+    }
+    // Approximation, not measured pressure. Never cap a pressurized brewer.
     var boilingC: Double { 100 - Double(min(5000, max(0, altitudeMeters))) * 0.0034 }
-    var upperC: Double { min(96, boilingC) }
-    var lowerC: Double { max(80, min(90, upperC - 6)) }
+    var openHotWater: Bool { ["filter", "chemex", "press", "aero"].contains(kind) }
+    var lowerC: Double { switch kind { case "filter", "press": return 92; case "chemex": return (200.0 - 32) / 1.8; case "aero": return 80; case "espresso": return 90.5; default: return 0 } }
+    var upperC: Double { switch kind { case "filter", "press": return 96; case "chemex": return (200.0 - 32) / 1.8; case "aero": return 85; case "espresso": return 96.1; default: return 100 } }
+    var hasReference: Bool { !["moka", "cold", "custom"].contains(kind) }
+    var hasReachableBand: Bool { hasReference && (!openHotWater || boilingC >= lowerC) }
     func degrees(_ celsius: Double) -> Int { Int(unit.displayValue(celsius: celsius).rounded()) }
-    var recommendedRange: ClosedRange<Double> { Double(degrees(lowerC))...Double(degrees(upperC)) }
-    var rangeText: String { "\(degrees(lowerC))–\(degrees(upperC)) \(unit.symbol)" }
-    var sliderRange: ClosedRange<Double> { unit == .fahrenheit ? 176...208 : 80...98 }
-    var leftShare: Double { recommendedRange.lowerBound <= sliderRange.lowerBound ? 0 : recommendedRange.upperBound >= sliderRange.upperBound ? 0.5 : 0.25 }
-    // Same 25% / 50% / 25% magnification as Android's calibrated slider.
+    var sliderRange: ClosedRange<Double> {
+        let low: Double = kind == "cold" || kind == "custom" ? 0 : kind == "moka" ? 20 : 70
+        return Double(degrees(low))...Double(degrees(kind == "cold" ? 35 : 100))
+    }
+    var recommendedRange: ClosedRange<Double> {
+        hasReachableBand ? Double(degrees(lowerC))...Double(degrees(openHotWater ? min(upperC, boilingC) : upperC)) : sliderRange
+    }
+    var rangeText: String {
+        if !hasReference { return "Sin intervalo universal" }
+        if lowerC == upperC { return "≈ \(degrees(lowerC)) \(unit.symbol)" }
+        return "\(degrees(lowerC))–\(degrees(upperC)) \(unit.symbol)"
+    }
+    var workingRangeText: String {
+        if !hasReference { return "Según técnica" }
+        if !hasReachableBand { return "Sin zona a esta altura" }
+        let low = Int(recommendedRange.lowerBound), high = Int(recommendedRange.upperBound)
+        if kind == "aero" { return "Puntos · \(low) / \(high) \(unit.symbol)" }
+        if low == high { return "Punto · \(low) \(unit.symbol)" }
+        return "Zona de trabajo · \(low)–\(high) \(unit.symbol)"
+    }
+    var sourceName: String {
+        switch kind {
+        case "filter": return "Hario · receta V60"; case "press": return "Bodum · prensa"
+        case "chemex": return "Chemex · punto de partida"; case "aero": return "AeroPress · por tueste"
+        case "espresso": return "SCAA · referencia histórica"; case "moka": return "Bialetti · manejo del calor"
+        case "cold": return "Toddy · protocolo ambiente"; default: return "Método personalizado"
+        }
+    }
+    var sourceURL: String {
+        switch kind {
+        case "filter": return "https://www.hario.co.uk/pages/brew-guides-v60-expert"
+        case "press": return "https://www.bodum.com/es/es/1918-913-caffettiera"
+        case "chemex": return "https://assets.unilogcorp.com/187/ITEM/DOC/CHEMEX_102422786_Instruction_Installation_Manual.pdf"
+        case "aero": return "https://aeropress.com/pages/whats-the-optimal-brewing-temperature-for-aeropress-coffee-makers"
+        case "espresso": return "https://sca.coffee/sca-news/25-magazine/issue-3/defining-ever-changing-espresso-25-magazine-issue-3-zyx36"
+        case "moka": return "https://bialetti-cookware.zendesk.com/hc/en-us/articles/5416235346322-How-to-use-the-Moka-Express"
+        case "cold": return "https://toddycafe.com/cold-brew/instruction-manual"; default: return ""
+        }
+    }
+    var warning: Bool { (openHotWater && temperatureC > boilingC) || (hasReference && !(degrees(lowerC)...degrees(upperC)).contains(degrees(temperatureC))) }
+    var headline: String {
+        if openHotWater && temperatureC > boilingC { return "Supera el hervor local" }
+        if !hasReachableBand && hasReference { return "Referencia por encima del hervor" }
+        if kind == "moka" { return "Controla la llama, no una zona V60" }
+        if kind == "cold" { return "Extracción en frío: manda el tiempo" }
+        if kind == "custom" { return "Falta una referencia para este método" }
+        if kind == "chemex" { return warning ? "Difiere del punto Chemex" : "Cerca del punto Chemex" }
+        if kind == "aero" { return warning ? "Otra receta AeroPress" : "Referencias AeroPress por tueste" }
+        if degrees(temperatureC) < degrees(lowerC) { return "Calor bajo para \(method)" }
+        if degrees(temperatureC) > degrees(upperC) { return "Calor alto para \(method)" }
+        return "Calor en zona de trabajo"
+    }
+    var compactDetail: String {
+        if openHotWater && temperatureC > boilingC { return "Usa el hervor estimado; compensa con molienda o tiempo." }
+        if !hasReachableBand && hasReference { return "No inventamos otro rango. Ajusta molienda/tiempo y cata." }
+        if kind == "aero" { return "Oscuro: \(degrees(80)); medio/claro: \(degrees(85)) \(unit.symbol). Otras técnicas usan más calor." }
+        if kind == "moka" { return "Llama baja/media. Retira al terminar; no es temperatura de vertido." }
+        if kind == "cold" { return "Agua ambiente · 8–24 h. Para refrigeración, elige otra técnica." }
+        if kind == "custom" { return "Elige una técnica documentada; no heredamos V60." }
+        if kind == "chemex" { return "Punto aproximado, no intervalo óptimo. Confirma en Cata." }
+        if degrees(temperatureC) < degrees(lowerC) { return "Menos calor puede ralentizar la extracción: prueba menos gruesa o más tiempo." }
+        if degrees(temperatureC) > degrees(upperC) { return "Más calor puede acelerar extracción; no garantiza amargor." }
+        return "Punto de partida. Confirma el sabor en Cata."
+    }
+    var detail: String {
+        if openHotWater && temperatureC > boilingC { return "A tu altura, el agua hierve antes. Usa el hervor estimado como límite; prueba molienda menos gruesa o más tiempo." }
+        if !hasReachableBand && hasReference { return "La altura impide alcanzar esta referencia con agua abierta. No inventamos otro rango: ajusta molienda y tiempo, y compara en Cata." }
+        if kind == "aero" { return "Oscuro: \(degrees(80)) \(unit.symbol); medio/claro: \(degrees(85)) \(unit.symbol). Son puntos de partida, no límites; otras técnicas usan más calor." }
+        if kind == "moka" { return "Llama baja/media; retira al terminar. La temperatura inicial no describe la extracción interna bajo presión." }
+        if kind == "cold" { return "Toddy indica agua ambiente y 8–24 h. En refrigeración usa una técnica específica; no aplican los minutos del filtrado caliente." }
+        if kind == "custom" { return "Carga o elige una técnica documentada. No heredamos rangos ni consejos de V60." }
+        if kind == "chemex" { return "El manual propone aproximadamente \(degrees(lowerC)) \(unit.symbol); no define un intervalo óptimo universal. Confirma en Cata." }
+        if degrees(temperatureC) < degrees(lowerC) { return "Menos calor puede ralentizar la extracción. Prueba subir hacia los puntos orientativos, molienda menos gruesa o más tiempo; confirma en Cata." }
+        if degrees(temperatureC) > degrees(upperC) { return "Más calor puede acelerar la extracción; no demuestra amargor. Compara con los puntos orientativos y cambia una variable por vez." }
+        return "Punto de partida, no garantía de equilibrio. El sabor real se registra en Cata."
+    }
+    // Linear scale for absent or single-point references: no division by zero or fake band.
+    var magnified: Bool { hasReachableBand && !["aero", "chemex"].contains(kind) && recommendedRange.lowerBound < recommendedRange.upperBound }
+    var leftShare: Double { magnified ? (recommendedRange.lowerBound <= sliderRange.lowerBound ? 0 : recommendedRange.upperBound >= sliderRange.upperBound ? 0.5 : 0.25) : 0 }
     func fraction(_ value: Double) -> Double {
         let low = recommendedRange.lowerBound, high = recommendedRange.upperBound
-        let value = min(sliderRange.upperBound, max(sliderRange.lowerBound, value))
-        if value <= low { return low > sliderRange.lowerBound ? (value - sliderRange.lowerBound) / (low - sliderRange.lowerBound) * leftShare : leftShare }
-        if value >= high { return leftShare + 0.5 + (value - high) / (sliderRange.upperBound - high) * (0.5 - leftShare) }
-        return leftShare + (value - low) / (high - low) * 0.5
+        let v = min(sliderRange.upperBound, max(sliderRange.lowerBound, value))
+        if !magnified { return (v - sliderRange.lowerBound) / (sliderRange.upperBound - sliderRange.lowerBound) }
+        if v <= low { return low > sliderRange.lowerBound ? (v - sliderRange.lowerBound) / (low - sliderRange.lowerBound) * leftShare : leftShare }
+        if v >= high { return high < sliderRange.upperBound ? leftShare + 0.5 + (v - high) / (sliderRange.upperBound - high) * (0.5 - leftShare) : 1 }
+        return leftShare + (v - low) / (high - low) * 0.5
     }
     func value(_ fraction: Double) -> Double {
         let f = min(1, max(0, fraction)), low = recommendedRange.lowerBound, high = recommendedRange.upperBound
+        if !magnified { return (sliderRange.lowerBound + f * (sliderRange.upperBound - sliderRange.lowerBound)).rounded() }
         if f <= leftShare { return leftShare > 0 ? (sliderRange.lowerBound + f / leftShare * (low - sliderRange.lowerBound)).rounded() : low }
-        if f >= leftShare + 0.5 { return (high + (f - leftShare - 0.5) / (0.5 - leftShare) * (sliderRange.upperBound - high)).rounded() }
+        if f >= leftShare + 0.5 { return 0.5 > leftShare ? (high + (f - leftShare - 0.5) / (0.5 - leftShare) * (sliderRange.upperBound - high)).rounded() : high }
         return (low + (f - leftShare) / 0.5 * (high - low)).rounded()
-    }
-    var warning: Bool { temperatureC > boilingC || !(degrees(lowerC)...degrees(upperC)).contains(degrees(temperatureC)) }
-    var headline: String {
-        if temperatureC > boilingC { return "Supera el hervor local" }
-        if degrees(temperatureC) < degrees(lowerC - 3) { return "Agua demasiado fría" }
-        if degrees(temperatureC) < degrees(lowerC) { return "Agua por debajo de la zona útil" }
-        if degrees(temperatureC) > degrees(upperC) { return "Calor alto: vigila el amargor" }
-        return "En zona útil"
-    }
-    var detail: String {
-        switch headline {
-        case "Supera el hervor local": return "A tu altura, el agua hierve antes de alcanzar esa temperatura. Ajusta molienda o tiempo."
-        case "Agua demasiado fría": return "Riesgo de subextracción: taza agria o débil. Sube la temperatura hacia la zona útil; valida el resultado en Cata."
-        case "Agua por debajo de la zona útil": return "Puede faltar extracción y dulzor. Sube hacia la zona útil o compensa con molienda y tiempo."
-        case "Calor alto: vigila el amargor": return "Puede aumentar el amargor o la sequedad. Prueba bajar hacia la zona útil, especialmente con tueste oscuro."
-        default: return "Buen punto de partida; molienda, tiempo y grano también definen el sabor."
-        }
     }
 }
 
@@ -132,11 +203,13 @@ enum LabEngine {
             freshnessState: state.freshness,
             altitudeMeters: state.altitudeMeters,
             timeSeconds: state.timeSeconds,
-            temperatureUnit: state.temperatureUnit
+            temperatureUnit: state.temperatureUnit,
+            method: state.method
         )
     }
 
-    // Port literal de calculateLabProfile en LabScreen.kt (commit aff626e).
+    // Legacy visual heuristic, mirrored in Android. Not experimentally calibrated.
+    // Never expose these scores as percentages, extraction yield or documented facts.
     static func calculate(
         coffeeGrams: Float,
         waterMl: Int,
@@ -146,11 +219,13 @@ enum LabEngine {
         freshnessState: String,
         altitudeMeters: Int = 0,
         timeSeconds: Int = 180,
-        temperatureUnit: TemperatureUnit = .celsius
+        temperatureUnit: TemperatureUnit = .celsius,
+        method: String = "V60"
     ) -> LabFlavorProfile {
         let effectiveRatio = min(30, max(5, ratio > 0 ? ratio : 16))
         let tBoil = boilingPointC(altitudeMeters: altitudeMeters)
-        let tempEffective = min(Float(temperature), tBoil)
+        let reference = LabTemperatureGuide(temperatureC: temperature, altitudeMeters: altitudeMeters, unit: temperatureUnit, method: method)
+        let tempEffective = reference.openHotWater ? min(Float(temperature), tBoil) : Float(temperature)
         let altitudeFactor = sqrtf(tBoil / 100)
         let clicksActual = Float(min(50, max(4, grindClicks)))
         let timeFactor = min(1.85, max(0.55, Float(min(360, max(60, timeSeconds))) / 180))
@@ -171,90 +246,25 @@ enum LabEngine {
         let finishRaw = 48 + (Float(sweetness) - 50) * 0.25 + (Float(body) - 50) * 0.18 - max(0, Float(bitterness) - 58) * 0.22
         let finish = clampScore(finishRaw)
 
-        var labels: [String] = []
-        if extractionIndex > 1.20 { labels.append("Alta Extracción") }
-        else if extractionIndex < 0.85 { labels.append("Sub-Extracción") }
-        else { labels.append("Ventana Óptima") }
-        if effectiveRatio < 13 { labels.append("Cuerpo Denso") }
-        else if effectiveRatio > 17 { labels.append("Alta Claridad") }
-        if tempEffective < 88 { labels.append("Acidez Brillante") }
-        else if tempEffective > 94 { labels.append("Tono Tostado") }
-        if timeSeconds < 105 { labels.append("Paso Rápido") }
-        else if timeSeconds > 270 { labels.append("Contacto Prolongado") }
-        if Float(temperature) > tBoil { labels.append("Hervor \(oneDecimal(tBoil))°C") }
-        else if altitudeMeters >= 1800 { labels.append("Altitud \(altitudeMeters)m") }
-        let thermal = LabTemperatureGuide(temperatureC: temperature, altitudeMeters: altitudeMeters, unit: temperatureUnit)
-        if thermal.warning { labels.insert(thermal.headline, at: 0); labels.removeAll { $0 == "Ventana Óptima" || $0 == "Acidez Brillante" } }
-        switch freshnessState {
-        case "muy fresco": labels.append("Bloom Largo")
-        case "en ventana", "punto ideal": labels.append("Grano en Punto")
-        case "viejo": labels.append("Desgasificado")
-        default: break
-        }
-
-        let summary: String
-        if thermal.warning {
-            summary = thermal.detail
-        } else if bitterness >= 60 {
-            summary = "Extracción intensa con perfil seco/amargo pronunciado; disminuye temperatura o engruesa la molienda."
-        } else if acidity >= 68 && sweetness < 50 {
-            summary = "Acidez dominante con sub-extracción; aumenta temperatura o afina la molienda."
-        } else if sweetness >= 65 && bitterness < 45 {
-            summary = "Taza balanceada con dulzor redondo y acidez perfectamente integrada."
-        } else if body >= 65 {
-            summary = "Sensación táctil densa y untuosa con postgusto prolongado."
-        } else if body <= 35 {
-            summary = "Taza ligera y cristalina con marcada separación aromática."
-        } else {
-            summary = "Perfil armónico y equilibrado con desarrollo limpio de sabores."
-        }
-
+        let thermal = reference
+        let labels = [thermal.headline, "Hipótesis visual · no medición"]
+        let summary = thermal.detail
+        // Stored legacy scores remain an unvalidated illustration, never a measured
+        // extraction yield or a guaranteed flavor. Neutral outside the hot-water model.
+        let supported = ["filter", "chemex", "press", "aero"].contains(reference.kind)
         _ = coffeeGrams
         _ = waterMl
         return LabFlavorProfile(
-            aroma: aroma, acidity: acidity, sweetness: sweetness, body: body,
-            bitterness: bitterness, finish: finish, extractionIndex: extractionIndex,
+            aroma: supported ? aroma : 0, acidity: supported ? acidity : 0, sweetness: supported ? sweetness : 0, body: supported ? body : 0,
+            bitterness: supported ? bitterness : 0, finish: supported ? finish : 0, extractionIndex: extractionIndex,
             labels: Array(labels.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }.prefix(3)),
             summary: summary
         )
     }
 
     static func diagnostic(for state: LabState) -> (extraction: String, recommendation: String, risks: [String]) {
-        let tBoil = boilingPointC(altitudeMeters: state.altitudeMeters)
-        let effectiveTemp = min(Float(state.effectiveTemperatureC), tBoil)
-        let thermal = LabTemperatureGuide(temperatureC: state.effectiveTemperatureC, altitudeMeters: state.altitudeMeters, unit: state.temperatureUnit)
-        let extraction: String
-        if thermal.warning {
-            extraction = thermal.headline
-        } else if (effectiveTemp >= 96 && state.grindClicks <= 12) || (state.timeSeconds > 270 && state.grindClicks <= 15) {
-            extraction = "Sobre-extracción Extrema (Riesgo amargo/seco)"
-        } else if (effectiveTemp < 86 && state.ratio <= 12) || (state.timeSeconds < 100 && state.grindClicks >= 24) {
-            extraction = "Sub-extracción (Agria y salada)"
-        } else if (88...94.5).contains(effectiveTemp) && (14...26).contains(state.grindClicks) && (120...240).contains(state.timeSeconds) {
-            extraction = "Extracción Ideal del Barista"
-        } else {
-            extraction = "Hipótesis aceptable. Verifique molienda, tiempo y temperatura."
-        }
-
-        var risks: [String] = []
-        if Float(state.effectiveTemperatureC) > tBoil { risks.append("A \(state.altitudeMeters)m el agua hierve a \(oneDecimal(tBoil))°C; la temperatura real queda limitada.") }
-        if effectiveTemp > 95 { risks.append("La temperatura alta puede evaporar notas florales y dejar amargor.") }
-        if thermal.warning { risks.insert(thermal.detail, at: 0) }
-        if state.grindClicks < 13 { risks.append("La molienda fina puede obstruir el paso y causar astringencia.") }
-        if state.grindClicks > 28 { risks.append("La molienda gruesa puede dar canalización y una taza aguada.") }
-        if state.timeSeconds > 270 { risks.append("Un tiempo mayor a 4:30 puede saturar amargor y taninos.") }
-        if state.timeSeconds < 100 { risks.append("Un tiempo menor a 1:40 puede dejar el café sub-extraído.") }
-        if state.freshness == "muy fresco" { risks.append("El grano joven necesita una preinfusión larga de 50 s.") }
-        if state.freshness == "viejo" { risks.append("El grano desgasificado puede requerir más temperatura y molienda fina.") }
-
-        let recommendation: String
-        if thermal.warning { recommendation = thermal.detail }
-        else if state.altitudeMeters >= 2000 { recommendation = "Ajusta la molienda fina para retener dulzor en altitud elevada." }
-        else if state.ratio <= 3 { recommendation = "Esta hipótesis corta produce alta concentración de aceites." }
-        else if state.freshness == "muy fresco" { recommendation = "Aumenta el bloom para drenar dióxido de carbono." }
-        else if effectiveTemp >= 94 { recommendation = "Vierte suave para evitar agitación y astringencia." }
-        else { recommendation = "Mantén el ciclo preparar → probar → diagnosticar → ajustar." }
-        return (extraction, recommendation, risks)
+        let thermal = LabTemperatureGuide(temperatureC: state.effectiveTemperatureC, altitudeMeters: state.altitudeMeters, unit: state.temperatureUnit, method: state.method)
+        return (thermal.headline, thermal.detail, thermal.warning ? [thermal.detail] : [])
     }
 
     private static func clampScore(_ value: Float) -> Int { min(96, max(8, Int(roundf(value)))) }
@@ -314,6 +324,22 @@ final class LabModel: ObservableObject {
     }
 
     func update(_ change: (inout LabState) -> Void) { change(&state) }
+    func selectMethod(_ method: String) {
+        guard method != state.method else { return }
+        update {
+            $0.method = method; $0.methodId = nil; $0.techniqueId = nil
+            let guide = LabTemperatureGuide(temperatureC: $0.effectiveTemperatureC, altitudeMeters: $0.altitudeMeters, method: method)
+            if !guide.sliderRange.contains($0.effectiveTemperatureC) {
+                $0.temperatureC = guide.kind == "cold" ? 20 : 92
+                $0.preciseTemperatureC = Double($0.temperatureC)
+            }
+            switch guide.kind {
+            case "cold": if !(3600...86400).contains($0.timeSeconds) { $0.timeSeconds = 43200 }
+            case "espresso": if !(5...90).contains($0.timeSeconds) { $0.timeSeconds = 25 }
+            default: if !(30...600).contains($0.timeSeconds) { $0.timeSeconds = 180 }
+            }
+        }
+    }
     func setCoffeeGrams(_ grams: Float) {
         update {
             $0.coffeeGrams = grams.rounded()
@@ -412,7 +438,8 @@ final class LabModel: ObservableObject {
     }
 
     func selectMethod(_ method: EquipmentRecord?) {
-        update { $0.methodId = method?.id; if let method { $0.method = method.name } }
+        if let method { selectMethod(method.name) }
+        update { $0.methodId = method?.id }
     }
     func load(experiment: LabExperimentRecord) {
         update {

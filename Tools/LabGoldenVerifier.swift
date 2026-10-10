@@ -8,27 +8,33 @@ struct LabGoldenVerifier {
         for clicks in [12, 18, 24, 30] { for seconds in [120, 180, 240, 300] {
             let state = LabState(temperatureC: 81, preciseTemperatureC: low, grindClicks: clicks, timeSeconds: seconds, temperatureUnit: .fahrenheit)
             let profile = LabEngine.calculate(state)
-            precondition(profile.summary.contains("Riesgo de subextracción"))
-            precondition(profile.labels.first == "Agua demasiado fría" && !profile.labels.contains("Ventana Óptima"))
-            precondition(LabEngine.diagnostic(for: state).extraction == "Agua demasiado fría")
+            precondition(profile.summary.contains("puede ralentizar"))
+            precondition(profile.labels.first == "Calor bajo para V60" && !profile.labels.contains("Ventana Óptima"))
+            precondition(LabEngine.diagnostic(for: state).extraction == "Calor bajo para V60")
         } }
         let c = LabTemperatureGuide(temperatureC: 92, altitudeMeters: 0)
         let f = LabTemperatureGuide(temperatureC: (195.0 - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit)
-        precondition(c.rangeText == "90–96 °C" && f.rangeText == "194–205 °F")
-        for degree in 194...205 { precondition(!LabTemperatureGuide(temperatureC: (Double(degree) - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit).warning) }
-        precondition(LabTemperatureGuide(temperatureC: (193.0 - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit).warning)
+        precondition(c.rangeText == "92–96 °C" && f.rangeText == "198–205 °F")
+        for degree in 198...205 { precondition(!LabTemperatureGuide(temperatureC: (Double(degree) - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit).warning) }
+        precondition(LabTemperatureGuide(temperatureC: (197.0 - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit).warning)
         precondition(LabTemperatureGuide(temperatureC: (206.0 - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit).warning)
         let altitude = LabTemperatureGuide(temperatureC: 98, altitudeMeters: 2240, unit: .fahrenheit)
-        precondition(altitude.headline == "Supera el hervor local" && altitude.upperC <= altitude.boilingC && altitude.rangeText == "187–198 °F")
+        precondition(altitude.headline == "Supera el hervor local" && altitude.recommendedRange.upperBound <= Double(altitude.degrees(altitude.boilingC)) && altitude.rangeText == "198–205 °F")
         let high = LabTemperatureGuide(temperatureC: 90, altitudeMeters: 5000)
-        precondition(high.rangeText == "80–83 °C")
-        for guide in [c, f, altitude, high] {
+        precondition(!high.hasReachableBand)
+        let methods = ["V60", "Chemex", "Prensa Francesa", "AeroPress", "Espresso", "Moka", "Cold Brew", "Mi método"]
+        let guides = methods.flatMap { method in [TemperatureUnit.celsius, .fahrenheit].flatMap { unit in [0, 2240, 5000].map { LabTemperatureGuide(temperatureC: 92, altitudeMeters: $0, unit: unit, method: method) } } }
+        for guide in guides {
             for degree in Int(guide.sliderRange.lowerBound)...Int(guide.sliderRange.upperBound) {
                 precondition(guide.value(guide.fraction(Double(degree))) == Double(degree), "Calibrated scale must round trip every degree")
             }
         }
-        precondition(abs(f.fraction(194) - 0.25) < 0.000001 && abs(f.fraction(205) - 0.75) < 0.000001)
-        print("PASS: thermal guidance parity, 177°F warning, selectable zone boundaries, altitude ceiling, calibrated scale round trips")
+        precondition(abs(f.fraction(198) - 0.25) < 0.000001 && abs(f.fraction(205) - 0.75) < 0.000001)
+        precondition(!LabTemperatureGuide(temperatureC: low, altitudeMeters: 0, unit: .fahrenheit, method: "AeroPress").warning)
+        precondition(!LabTemperatureGuide(temperatureC: 94, altitudeMeters: 5000, method: "Espresso").warning)
+        precondition(!LabTemperatureGuide(temperatureC: 20, altitudeMeters: 0, method: "Mi método").hasReference)
+        precondition(LabEngine.calculate(LabState(method: "Cold Brew", temperatureC: 20)).aroma == 0)
+        print("PASS: method-specific documented thermal guidance, 177°F warning, selectable zone boundaries, altitude ceiling, calibrated scale round trips")
     }
 
     @MainActor static func verifyCupLifecycleAndIntegerLab() {

@@ -1,57 +1,51 @@
-# Axcis — pendientes Android para conexión online
+# Cupa Android · biblioteca local, cuentas y comunidad
 
-BARC reversible: el contrato de ajustes por grano/método y su pendiente de sync
-están en [BARC_BEAN_PROFILES.md](BARC_BEAN_PROFILES.md). Persistencia local lista;
-no declarar sincronización entre teléfonos hasta conectar `beans.brew_profiles`.
+Alcance vigente del propietario (19 octubre 2026): **NO sincronizar el Almacén**.
+Granos/ajustes por método, equipo, recetas/técnicas privadas, tazas, catas y
+laboratorio viven en Room. Sólo la acción Compartir envía un snapshot explícito.
+Ingresar, guardar o importar no crea una biblioteca remota.
 
-La guía integral y el protocolo iPhone↔Android están en `AXCIS_BACKEND_HANDOFF.md` de la rama `ios-production-migration`.
+El backend compartido está en `qndojncusqmhoxnokgwb`. La documentación completa
+y las migraciones aplicadas están en la rama `ios-production-migration`:
+`Backend/README.md`, `Backend/supabase/migrations`, `AXCIS_BACKEND_HANDOFF.md`.
+No reaplicar el SQL inicial Android ni la cola histórica iOS de la raíz.
 
-Actualización 2026-10-19: Codex realizará la integración por solicitud del
-propietario. `AXCIS-ONLINE` conserva su nombre histórico para localizar pendientes.
-No integrar IA ni desplegar Gemini: los consejos del laboratorio son locales.
-El proyecto Supabase creado todavía no demuestra que las apps estén online.
+## Implementado
 
-Servidor inicial desplegado (19 octubre 2026): proyecto `qndojncusqmhoxnokgwb`,
-23 tablas públicas con RLS, sin permisos anónimos de tabla y sin artefactos de IA.
-31 pruebas locales de contrato y ensayo SQL de roles A/B/C contra el servidor
-aprobados; no quedaron usuarios ficticios. El asesor de seguridad no reportó hallazgos.
-Es una base compartida, NO una afirmación de sincronización completa de las apps.
-La fuente de verdad aplicada es `Backend/supabase/migrations` en la rama iOS;
-consultar allí `Backend/README.md`. No reaplicar el SQL inicial Android ni la cola
-histórica iOS de la raíz sobre este nuevo proyecto.
-URL y clave pública ya están en `.env` local y en configuraciones iOS locales
-ignoradas por Git. El cliente Android ya distingue publishable key (`apikey`) del
-JWT de sesión (`Authorization: Bearer`), con pruebas. Falta el resto de esta lista.
+- SyncRepository no hace push/pull de bibliotecas. La API privada está revocada.
+- Publicar acepta UUID local, sin sincronizar primero una receta/técnica privada.
+- Snapshot completo, validado; importar/fork guarda padre+hijos de forma local
+  transaccional, con UUID nuevos, autoría y publicación de origen.
+- Sin llamadas a las RPC de copia remota. No implementarlas con el alcance actual.
+- Envíos directos por @alias; el servidor valida acceso y conserva al creador al
+  republicar una variante mediante `source_share_id`.
+- Servidor deriva nombre/alias y autor real desde el perfil. Los clientes no pueden
+  falsificar un autor ajeno ni editar el contador de likes.
+- Likes idempotentes y contador del servidor; estado propio consultado para el lote.
+- Consultas de comunidad acotadas a 30 registros/carga; sin Realtime ni buckets.
+- Sesión: access/refresh/expiración cifrados con Android Keystore. Sin fallback
+  persistente en texto plano; si Keystore falla, sólo memoria hasta cerrar proceso.
+- Migración de sesión antigua exige ingresar de nuevo; NO borra el inventario.
+- Una respuesta de registro sin tokens pide confirmar correo y no inicia sesión.
+- Perfil canónico sin columnas email/role inventadas; control Perfil privado.
+- No enviar cuerpos Auth a logs ni respaldar credenciales por backup/transferencia.
+  Se conservan los respaldos del SO del resto de datos, independientes de Supabase.
+- Almacén no muestra avisos engañosos de subida pendiente; datos locales son normales.
+- IA deshabilitada. Nunca agregar Google keys, service_role ni secrets al cliente.
 
-Pendientes que bloquean declarar Android online:
+## Pruebas y operación
 
-- Configurar `.env` local con el mismo `SUPABASE_URL` y `SUPABASE_ANON_KEY` usados por Cupa Staging en iOS.
-- Antes de aplicar SQL, confirmar si el proyecto está vacío o contiene datos, revisar las migraciones canónicas de la rama iOS y probar en Staging. URL/clave pública no permiten administrar el servidor: se necesita acceso autorizado mediante CLI o panel; nunca copiar credenciales administrativas al cliente ni al repositorio.
-- Implementar refresh token, `expires_at`, renovación previa a llamadas y almacenamiento cifrado en `SessionManager.kt`/Auth.
-- Mantener el logging HTTP sin cuerpos; nunca imprimir tokens.
-- Conectar el contrato remoto canónico completo de recetas (`recipes`, `recipe_ingredients` y `recipe_steps`). El agregado local ya guarda padre, ingredientes y pasos de forma transaccional, conserva su orden y está cubierto por pruebas; `SyncRepository.kt` no lo sube mediante el contrato heredado porque hacerlo perdería hijos y fabricaría cantidades. Las recetas permanecen locales y pendientes hasta recibir confirmación del agregado remoto completo.
-- Completar técnicas más allá del alta segura actual. Android puede crear la técnica, reintentar únicamente los pasos faltantes e importar agregados remotos completos; actualizaciones, borrados lógicos y conflictos remotos siguen esperando endpoints/contrato de Axcis. Nunca marcar la técnica `SYNCED` si falta un paso o si agua, proporción, acumulados y duración no coinciden.
-- Ampliar `SyncRepository.kt` más allá de recetas y técnicas: `beans`, `instruments`/equipo, `cups`, `catas` y `lab_experiments` ya se guardan localmente con `PENDING_CREATE`/`PENDING_UPDATE`, pero todavía no tienen push/pull remoto en Android. No cambiar esos estados a `SYNCED` hasta recibir confirmación del servidor.
-- Implementar borrado lógico y outbox para cafés, equipo, tazas, catas y experimentos. Hoy su eliminación local es inmediata porque el contrato Android aún no posee una cola de borrado para esas entidades.
-- Integrar en Android los envíos directos por alias y verificar muro, buzón, importación y variante contra las tablas canónicas de la rama iOS.
-  - La RPC real es `resolve_profile_alias(alias_input)` (no `resolve_profile_id_by_alias`). Ya está desplegada en el proyecto nuevo y probada con roles SQL; falta consumirla desde Android y probar con JWT reales. Mientras tanto el cliente identifica el campo como temporal, exige un UUID real y bloquea la publicación de recetas/técnicas que aún no tienen identidad remota. Compartir nunca debe cambiar por sí solo el `syncStatus` de la fórmula.
-  - Los snapshots sociales Android ya incluyen ingredientes/pasos reales de recetas y pasos/acumulados reales de técnicas. La importación rechaza snapshots parciales y guarda padre e hijos localmente en una transacción. Implementar las cuatro RPC de copia/variante según la sección **Contrato obligatorio de `payload_snapshot_json`** de `AXCIS_BACKEND_HANDOFF.md`; una RPC no puede confirmar éxito si sólo creó el padre.
-- Ejecutar el protocolo físico con dos cuentas y guardar UUID/capturas como evidencia.
-- Las técnicas se guardan en Room y su biblioteca canónica es **Almacén → Técnicas**; Preparar, Laboratorio y Comunidad deben escribir/importar en esa misma tabla.
-- `Cup.techniqueId` y `Cup.methodId` ya conservan la técnica y el método usados cuando la preparación proviene del Almacén; mantener esos UUID al mapear `cups` y `catas` al backend.
+El baseline pasó 31 pruebas SQL y el alcance local-first otras 33, además del
+ensayo real con roles del servidor (fixtures con ROLLBACK, sin emails).
+El asesor de seguridad no reporta hallazgos. No confundir con cuentas/JWT reales.
 
-Buscar `AXCIS-ONLINE` en el proyecto para localizar los puntos P0 comentados en código.
+Panel revisado con el propietario: redirects exactos ya guardados, sin localhost.
+Delete-account está desplegada; dos pruebas HTTP rechazaron correctamente acceso
+sin JWT/con JWT inválido. Pendiente externo: elegir proveedor/remitente SMTP y
+probar correos y eliminación autenticada antes de beta pública. El propietario debe elegir
+contraseñas en las apps y confirmar dos correos propios para probar
+Android ↔ iPhone: muro, directo, importar, variante, likes, atribución,
+offline/reinicio/cambio de cuenta. No declarar validación visual sin verla.
 
-## Evidencia que no depende de Axcis
-
-- Recetas locales: padre, ingredientes y pasos ordenados se guardan juntos; editar reemplaza el agregado sin dejar hijos obsoletos; decimales con coma se normalizan.
-- Técnicas locales: agua total, proporción, duración y acumulados se validan antes de guardar; cada técnica obtiene UUID propios para sus pasos.
-- Laboratorio → Técnica → Almacén → Preparar → Cata: recorrido automático aprobado con identidad y snapshots conservados.
-- La pantalla Perfil ya no afirma que Supabase o RLS están operativos: muestra modo local, sincronización parcial y prueba A/B pendiente según la configuración real.
-
-## Evidencia que sí requiere a Axcis o infraestructura externa
-
-- URL y clave pública del mismo proyecto Supabase Staging en ambos clientes.
-- Migraciones canónicas desplegadas, Auth/SMTP/redirects y Edge Functions configuradas.
-- Push/pull remoto completo de todos los agregados Android y refresh seguro de sesión.
-- Ensayo físico con dos cuentas/JWT reales para RLS, intercambio Android↔iPhone, alias, muro y buzón.
+No presupuestar costo cero: medir transferencia/publicaciones y configurar
+alertas/límites del plan; esta fase no contrata otro proyecto, plan o servicio.

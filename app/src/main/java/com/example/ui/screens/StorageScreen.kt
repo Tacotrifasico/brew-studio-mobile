@@ -169,43 +169,6 @@ private fun OwnerScopedStorageScreen(
             }) { Text(if (importingFileBusy) "Guardando…" else "Importar") } },
             dismissButton = { TextButton(enabled = !importingFileBusy, onClick = { importedFile = null }) { Text("Cancelar") } })
     }
-    val pendingBreakdown = storagePendingBreakdown(
-        beans = state.beansList.count { it.syncStatus != "SYNCED" },
-        recipes = state.recipesList.count { it.syncStatus != "SYNCED" },
-        retryableTechniques = state.techniquesList.count {
-            !viewModel.isBuiltInTechnique(it.id) && AndroidSyncPolicy.canRetryTechnique(it.syncStatus, it.remoteId)
-        },
-        backendTechniques = state.techniquesList.count {
-            !viewModel.isBuiltInTechnique(it.id) && AndroidSyncPolicy.techniqueAwaitsBackend(it.syncStatus, it.remoteId)
-        },
-        grinders = state.grindersList.count { it.syncStatus != "SYNCED" },
-        equipment = state.equipmentList.count { it.syncStatus != "SYNCED" },
-        cups = state.cupsList.count { it.syncStatus != "SYNCED" },
-        tastings = state.catasList.count { it.syncStatus != "SYNCED" },
-        experiments = state.experimentsList.count { it.syncStatus != "SYNCED" }
-    )
-    val pendingSyncableCount = pendingBreakdown.retryableNow
-    val pendingBackendCount = pendingBreakdown.awaitingBackend
-    var showSyncDetails by rememberSaveable { mutableStateOf(false) }
-    if (showSyncDetails) {
-        AlertDialog(
-            onDismissRequest = { showSyncDetails = false },
-            title = { Text("Tus datos") },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Tus datos están guardados en este dispositivo y disponibles sin conexión.")
-                if (pendingSyncableCount > 0) Text("$pendingSyncableCount elementos pendientes de sincronizar.")
-                if (pendingBackendCount > 0) Text("$pendingBackendCount registros todavía se guardan sólo en este dispositivo.")
-                syncState.syncMessage?.let { Text(it) }
-            } },
-            confirmButton = { TextButton(onClick = { showSyncDetails = false }) { Text("Cerrar") } },
-            dismissButton = { if (pendingSyncableCount > 0) TextButton(enabled = !syncState.isSyncing,
-                onClick = { showSyncDetails = false; if (syncState.isLoggedIn) onRetrySync() else onNavigateToCommunity() }) {
-                Text(if (syncState.isLoggedIn) "Reintentar" else "Ingresar")
-            } },
-            containerColor = SurfaceCard
-        )
-    }
-
     LaunchedEffect(selectedTechnique?.id, editingTechnique?.id) {
         val id = editingTechnique?.id ?: selectedTechnique?.id
         selectedTechniqueSteps = if (id == null) emptyList() else viewModel.getTechniqueSteps(id)
@@ -301,41 +264,6 @@ private fun OwnerScopedStorageScreen(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-
-        if (pendingSyncableCount > 0 || pendingBackendCount > 0 || syncState.syncMessage != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                border = BorderStroke(1.dp, BordeSuave),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        if (syncState.isSyncing) Icons.Default.Sync else Icons.Default.CloudUpload,
-                        contentDescription = null,
-                        tint = AcentoPrincipal,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            when {
-                                syncState.isSyncing -> "Sincronizando cambios…"
-                                else -> "Guardado en este dispositivo"
-                            },
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrincipal
-                        )
-                    }
-                    TextButton(onClick = { showSyncDetails = true }) { Text("Detalles", fontSize = 10.sp) }
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-        }
 
         // --- DASHBOARD SUMMARY CARDS FOR COFFEE BEANS ---
         if (selectedCategory == "Café") {
@@ -2370,22 +2298,7 @@ fun RecipeItemCard(
 
 @Composable
 private fun LocalSyncStatusLabel(syncStatus: String, retrySupported: Boolean = true) {
-    val label = if (!retrySupported) "Guardado local · backend pendiente" else when (syncStatus) {
-        "ERROR", "CONFLICT" -> "Requiere reintento"
-        "PENDING_UPDATE" -> "Cambios pendientes"
-        "PENDING_DELETE" -> "Eliminación pendiente"
-        else -> "Pendiente de sincronizar"
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = if (!retrySupported || syncStatus == "ERROR" || syncStatus == "CONFLICT") Icons.Default.SyncProblem else Icons.Default.CloudUpload,
-            contentDescription = null,
-            tint = AcentoPrincipal,
-            modifier = Modifier.size(11.dp)
-        )
-        Spacer(Modifier.width(3.dp))
-        Text(label, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = AcentoPrincipal)
-    }
+    // No cloud-pending badge: local storage is intentional.
 }
 
 @Composable

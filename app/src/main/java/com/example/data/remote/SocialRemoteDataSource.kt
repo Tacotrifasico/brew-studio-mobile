@@ -8,6 +8,26 @@ class SocialRemoteDataSource {
     private val TAG = "SocialRemoteDataSource"
     private val api = SupabaseClientProvider.apiService
 
+    suspend fun likedIds(userId: String, shareIds: List<String>): Result<Set<String>> {
+        if (shareIds.isEmpty()) return Result.success(emptySet())
+        return try {
+            val response = api.getMyLikes("eq.$userId", "in.("+shareIds.joinToString(",")+")")
+            if (response.isSuccessful) Result.success(response.body().orEmpty().mapNotNull { it["share_id"] }.toSet())
+            else Result.failure(IOException("No se pudieron consultar tus Me gusta."))
+        } catch(e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun resolveAlias(input: String): Result<String> {
+        val alias = input.trim().removePrefix("@")
+        if (!alias.matches(Regex("[A-Za-z0-9._-]{1,40}"))) return Result.failure(IOException("Escribe un @alias válido."))
+        return try {
+            val response = api.resolveAlias(mapOf("alias_input" to alias))
+            val id = response.body()?.firstOrNull()?.get("user_id")
+            if (response.isSuccessful && id != null) Result.success(id)
+            else Result.failure(IOException("No encontramos una cuenta con ese alias."))
+        } catch (e: Exception) { Result.failure(IOException("No pudimos buscar ese alias. Revisa tu conexión.", e)) }
+    }
+
     suspend fun getFeed(): Result<List<RemoteShare>> {
         if (!SupabaseClientProvider.isConfigured) return Result.failure(IOException("Backend no configurado. Tu contenido local sigue disponible offline."))
         return try {
@@ -24,7 +44,7 @@ class SocialRemoteDataSource {
     }
 
     suspend fun getInbox(userId: String): Result<List<RemoteInboxItem>> {
-        if (!SupabaseClientProvider.isConfigured) return Result.failure(IOException("Backend no configurado. Tu bandeja se mostrará cuando Axcis conecte Supabase."))
+        if (!SupabaseClientProvider.isConfigured) return Result.failure(IOException("Backend no configurado. Tu biblioteca sigue disponible offline."))
         return try {
             val response = api.getInbox("eq.$userId")
             if (response.isSuccessful) {
@@ -40,7 +60,7 @@ class SocialRemoteDataSource {
     suspend fun shareEntity(share: RemoteShare): Result<RemoteShare> {
         if (!SupabaseClientProvider.isConfigured) return Result.failure(Exception("Supabase no configurado"))
         return try {
-            val response = api.shareEntity(share)
+            val response = api.shareEntity(publicationPayload(share))
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
             } else {

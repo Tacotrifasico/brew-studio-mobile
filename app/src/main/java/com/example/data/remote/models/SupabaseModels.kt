@@ -20,17 +20,19 @@ data class SignInRequest(
 
 @JsonClass(generateAdapter = true)
 data class AuthResponse(
-    @param:Json(name = "access_token") val accessToken: String,
-    @param:Json(name = "refresh_token") val refreshToken: String,
-    @param:Json(name = "expires_in") val expiresIn: Long,
-    val user: SupabaseUser
+    @param:Json(name = "access_token") val accessToken: String? = null,
+    @param:Json(name = "refresh_token") val refreshToken: String? = null,
+    @param:Json(name = "expires_in") val expiresIn: Long = 0,
+    val user: SupabaseUser? = null,
+    val id: String? = null,
+    val email: String? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class SupabaseUser(
     val id: String,
     val email: String,
-    @param:Json(name = "created_at") val createdAt: String
+    @param:Json(name = "created_at") val createdAt: String = ""
 )
 
 
@@ -39,12 +41,13 @@ data class SupabaseUser(
 @JsonClass(generateAdapter = true)
 data class RemoteProfile(
     val id: String,
-    val email: String,
+    val email: String? = null,
     @param:Json(name = "display_name") val displayName: String,
     val handle: String?,
     @param:Json(name = "avatar_url") val avatarUrl: String?,
     @param:Json(name = "avatar_color") val avatarColor: String?,
-    val role: String?,
+    val role: String? = null,
+    @param:Json(name = "is_private") val isPrivate: Boolean = true,
     @param:Json(name = "created_at") val createdAt: String?,
     @param:Json(name = "updated_at") val updatedAt: String?
 )
@@ -158,6 +161,8 @@ data class RemoteShare(
     @param:Json(name = "original_entity_id") val originalEntityId: String?,
     @param:Json(name = "created_at") val createdAt: String,
     @param:Json(name = "updated_at") val updatedAt: String,
+    @param:Json(name = "source_share_id") val sourceShareId: String? = null,
+    @param:Json(name = "like_count") val likeCount: Int = 0,
     // Joined aggregate fields
     @param:Json(name = "likes_count") val likesCount: List<CountWrapper>? = null,
     @param:Json(name = "saves_count") val savesCount: List<CountWrapper>? = null

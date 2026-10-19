@@ -12,14 +12,14 @@ data class SocialPublicationTarget(
 object SocialPublicationPolicy {
     fun validate(remoteId: String?, visibility: String, targetUserId: String?): Result<SocialPublicationTarget> {
         val entityId = remoteId?.trim()?.takeIf(::isUsableUuid)
-            ?: return Result.failure(IllegalStateException("La fórmula sigue segura en este dispositivo. Sincronízala con Supabase antes de compartirla."))
+            ?: return Result.failure(IllegalStateException("La fórmula sigue segura en este dispositivo. No se pudo identificar esta receta o técnica."))
         val normalizedVisibility = visibility.trim().uppercase()
         if (normalizedVisibility !in setOf("PUBLIC", "DIRECT")) {
             return Result.failure(IllegalArgumentException("Selecciona Muro público o Buzón directo."))
         }
         val recipient = targetUserId?.trim()?.takeIf { it.isNotEmpty() }
         if (normalizedVisibility == "DIRECT" && !isUsableUuid(recipient)) {
-            return Result.failure(IllegalArgumentException("El Buzón directo necesita un identificador válido del receptor hasta que Axcis habilite el envío por alias."))
+            return Result.failure(IllegalArgumentException("No encontramos al destinatario de este envío."))
         }
         return Result.success(
             SocialPublicationTarget(

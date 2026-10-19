@@ -25,38 +25,50 @@ class SocialRepository(
     private val techniqueDao: TechniqueDao,
     private val techniqueStepDao: TechniqueStepDao
 ) {
+    suspend fun likedIds(ids: List<String>): Result<Set<String>> {
+        authRepo.ensureSession().exceptionOrNull()?.let { return Result.failure(it) }
+        return remoteSource.likedIds(authRepo.getUserId() ?: return Result.failure(Exception("Inicia sesión.")), ids)
+    }
     suspend fun getFeed(): Result<List<RemoteShare>> {
+        authRepo.ensureSession().exceptionOrNull()?.let { return Result.failure(it) }
         return remoteSource.getFeed()
     }
 
     suspend fun getInbox(): Result<List<RemoteInboxItem>> {
+        authRepo.ensureSession().exceptionOrNull()?.let { return Result.failure(it) }
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para ver su buzón"))
         return remoteSource.getInbox(uid)
     }
 
     suspend fun getActivityTimeline(): Result<List<RemoteActivityLog>> {
+        authRepo.ensureSession().exceptionOrNull()?.let { return Result.failure(it) }
         val uid = authRepo.getUserId() ?: return Result.success(emptyList())
         return remoteSource.getActivityTimeline(uid)
     }
 
     suspend fun likeShare(shareId: String): Result<Unit> {
+        authRepo.ensureSession().exceptionOrNull()?.let { return Result.failure(it) }
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para interactuar"))
         return remoteSource.likeShare(shareId, uid)
     }
 
     suspend fun unlikeShare(shareId: String): Result<Unit> {
+        authRepo.ensureSession().exceptionOrNull()?.let { return Result.failure(it) }
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para interactuar"))
         return remoteSource.unlikeShare(shareId, uid)
     }
 
     suspend fun saveShare(shareId: String): Result<Unit> {
+        authRepo.ensureSession().exceptionOrNull()?.let { return Result.failure(it) }
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para guardar"))
         return remoteSource.saveShare(shareId, uid)
     }
 
     suspend fun shareRecipe(localRecipe: Recipe, message: String, targetUserId: String? = null, visibility: String = "PUBLIC"): Result<RemoteShare> {
+        authRepo.ensureSession().exceptionOrNull()?.let { return Result.failure(it) }
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para compartir"))
-        val publication = SocialPublicationPolicy.validate(localRecipe.remoteId, visibility, targetUserId).getOrElse { return Result.failure(it) }
+        val recipient = resolveRecipient(visibility, targetUserId).getOrElse { return Result.failure(it) }
+        val publication = SocialPublicationPolicy.validate(localRecipe.id, visibility, recipient).getOrElse { return Result.failure(it) }
         val userName = authRepo.getCachedDisplayName()
         val userHandle = authRepo.getCachedHandle()
         val timestamp = com.example.data.database.currentIso8601()
@@ -75,7 +87,7 @@ class SocialRepository(
             fromName = userName,
             fromHandle = userHandle,
             targetUserId = publication.targetUserId,
-            visibility = publication.visibility,
+            visibility = publication.visibility.lowercase(),
             name = localRecipe.name,
             subtitle = "Receta de café",
             message = message,
@@ -83,6 +95,7 @@ class SocialRepository(
             originalAuthorUserId = localRecipe.originalAuthorUserId ?: uid,
             originalAuthorName = localRecipe.originalAuthorName ?: userName,
             originalEntityId = localRecipe.originalEntityId ?: publication.entityId,
+            sourceShareId = localRecipe.importedFromShareId,
             createdAt = timestamp,
             updatedAt = timestamp
         )
@@ -98,8 +111,10 @@ class SocialRepository(
     }
 
     suspend fun shareTechnique(localTech: Technique, steps: List<TechniqueStep>, message: String, targetUserId: String? = null, visibility: String = "PUBLIC"): Result<RemoteShare> {
+        authRepo.ensureSession().exceptionOrNull()?.let { return Result.failure(it) }
         val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para compartir"))
-        val publication = SocialPublicationPolicy.validate(localTech.remoteId, visibility, targetUserId).getOrElse { return Result.failure(it) }
+        val recipient = resolveRecipient(visibility, targetUserId).getOrElse { return Result.failure(it) }
+        val publication = SocialPublicationPolicy.validate(localTech.id, visibility, recipient).getOrElse { return Result.failure(it) }
         val userName = authRepo.getCachedDisplayName()
         val userHandle = authRepo.getCachedHandle()
         val timestamp = com.example.data.database.currentIso8601()
@@ -116,7 +131,7 @@ class SocialRepository(
             fromName = userName,
             fromHandle = userHandle,
             targetUserId = publication.targetUserId,
-            visibility = publication.visibility,
+            visibility = publication.visibility.lowercase(),
             name = localTech.name,
             subtitle = "Técnica de preparación",
             message = message,
@@ -124,6 +139,7 @@ class SocialRepository(
             originalAuthorUserId = localTech.originalAuthorUserId ?: uid,
             originalAuthorName = localTech.originalAuthorName ?: userName,
             originalEntityId = localTech.originalEntityId ?: publication.entityId,
+            sourceShareId = localTech.importedFromShareId,
             createdAt = timestamp,
             updatedAt = timestamp
         )
@@ -138,40 +154,8 @@ class SocialRepository(
         return result
     }
 
-    suspend fun syncImportedShare(share: RemoteShare, localEntityId: String): Result<String> {
-        val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para importar"))
-        val isRecipe = share.entityType.equals("recipe", ignoreCase = true)
-        val flowResult = remoteSource.importShare(share.id, isRecipe)
-        flowResult.getOrNull()?.let { remoteId ->
-            if (!markLocalCopySynced(localEntityId, remoteId, isRecipe, uid)) {
-                return Result.failure(Exception("La copia remota se creó, pero el registro local no pertenece a la sesión actual"))
-            }
-        }
-        return flowResult
-    }
-
-    suspend fun syncForkedShare(share: RemoteShare, localEntityId: String): Result<String> {
-        val uid = authRepo.getUserId() ?: return Result.failure(Exception("Inicie sesión para crear una variante"))
-        val isRecipe = share.entityType.equals("recipe", ignoreCase = true)
-        val flowResult = remoteSource.forkShare(share.id, isRecipe)
-        flowResult.getOrNull()?.let { remoteId ->
-            if (!markLocalCopySynced(localEntityId, remoteId, isRecipe, uid)) {
-                return Result.failure(Exception("La variante remota se creó, pero el registro local no pertenece a la sesión actual"))
-            }
-        }
-        return flowResult
-    }
-
-    private suspend fun markLocalCopySynced(localEntityId: String, remoteId: String, isRecipe: Boolean, uid: String): Boolean {
-        if (isRecipe) {
-            val local = recipeDao.getRecipeById(localEntityId) ?: return false
-            if (local.ownerUserId != uid) return false
-            recipeDao.insertRecipe(local.copy(remoteId = remoteId, syncStatus = "SYNCED", lastSyncedAt = com.example.data.database.currentIso8601()))
-        } else {
-            val local = techniqueDao.getTechniqueById(localEntityId) ?: return false
-            if (local.ownerUserId != uid) return false
-            techniqueDao.insertTechnique(local.copy(remoteId = remoteId, syncStatus = "SYNCED", lastSyncedAt = com.example.data.database.currentIso8601()))
-        }
-        return true
+    private suspend fun resolveRecipient(visibility: String, input: String?): Result<String?> {
+        if (!visibility.equals("DIRECT", true)) return Result.success(null)
+        return remoteSource.resolveAlias(input.orEmpty()).map { it as String? }
     }
 }

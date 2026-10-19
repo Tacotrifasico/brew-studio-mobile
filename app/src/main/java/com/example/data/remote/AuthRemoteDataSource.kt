@@ -21,7 +21,7 @@ class AuthRemoteDataSource {
                 Result.success(auth)
             } else {
                 val errBody = response.errorBody()?.string() ?: "Error desconocido"
-                Log.e(TAG, "Sign up failed: $errBody")
+
                 Result.failure(IOException("Fallo de registro: $errBody"))
             }
         } catch (e: Exception) {
@@ -42,7 +42,7 @@ class AuthRemoteDataSource {
                 Result.success(auth)
             } else {
                 val errBody = response.errorBody()?.string() ?: "Credenciales inválidas"
-                Log.e(TAG, "Sign in failed: $errBody")
+
                 Result.failure(IOException("Fallo de autenticación: $errBody"))
             }
         } catch (e: Exception) {
@@ -52,9 +52,16 @@ class AuthRemoteDataSource {
     }
 
     suspend fun signOut(): Result<Unit> {
+        runCatching { api.logout() }
         SupabaseClientProvider.setAuthToken(null)
         return Result.success(Unit)
     }
+
+    suspend fun refresh(refreshToken: String): Result<AuthResponse> = try {
+        val response = api.refresh(mapOf("refresh_token" to refreshToken))
+        if (response.isSuccessful && response.body()?.accessToken != null) Result.success(response.body()!!)
+        else Result.failure(IOException(if (response.code() in listOf(400, 401, 403)) "SESSION_REVOKED" else "No se pudo renovar la sesión. Intenta de nuevo."))
+    } catch (e: Exception) { Result.failure(IOException("Sin conexión. Tu biblioteca sigue disponible.", e)) }
 
     suspend fun getProfile(userId: String): Result<RemoteProfile> {
         if (!SupabaseClientProvider.isConfigured) {

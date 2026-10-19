@@ -11,7 +11,8 @@ interface SupabaseApi {
     @Headers("Prefer: return=representation")
     @POST("auth/v1/signup")
     suspend fun signUp(
-        @Body request: SignUpRequest
+        @Body request: SignUpRequest,
+        @Query("redirect_to") redirect: String = com.example.BuildConfig.APPLICATION_ID + "://auth/confirmed"
     ): Response<AuthResponse>
 
     @POST("auth/v1/token?grant_type=password")
@@ -19,6 +20,15 @@ interface SupabaseApi {
         @Body request: SignInRequest
     ): Response<AuthResponse>
 
+
+    @POST("auth/v1/token?grant_type=refresh_token")
+    suspend fun refresh(@Body request: Map<String, String>): Response<AuthResponse>
+
+    @POST("auth/v1/logout?scope=local")
+    suspend fun logout(): Response<Unit>
+
+    @POST("rest/v1/rpc/resolve_profile_alias")
+    suspend fun resolveAlias(@Body request: Map<String, String>): Response<List<Map<String, String>>>
 
     // PROFILES TABLE CRUD
 
@@ -28,7 +38,7 @@ interface SupabaseApi {
         @Query("select") select: String = "*"
     ): Response<List<RemoteProfile>>
 
-    @Headers("Prefer: return=representation")
+    @Headers("Prefer: resolution=merge-duplicates,return=representation", "Accept: application/vnd.pgrst.object+json")
     @POST("rest/v1/profiles")
     suspend fun upsertProfile(
         @Body profile: RemoteProfile
@@ -96,19 +106,27 @@ interface SupabaseApi {
     @GET("rest/v1/shares")
     suspend fun getPublicFeed(
         @Query("visibility") visibilityFilter: String = "eq.public",
-        @Query("select") select: String = "*,likes_count:share_likes(count),saves_count:share_saves(count)",
-        @Query("order") order: String = "created_at.desc"
+        @Query("status") statusFilter: String = "eq.active",
+        @Query("deleted_at") deletedFilter: String = "is.null",
+        @Query("select") select: String = "*",
+        @Query("order") order: String = "created_at.desc,id.desc",
+        @Query("limit") limit: Int = 30
     ): Response<List<RemoteShare>>
 
-    @Headers("Prefer: return=representation")
+    @Headers("Prefer: return=representation", "Accept: application/vnd.pgrst.object+json")
     @POST("rest/v1/shares")
     suspend fun shareEntity(
-        @Body share: RemoteShare
+        @Body share: Map<String, Any>
     ): Response<RemoteShare>
 
 
+    @GET("rest/v1/share_likes")
+    suspend fun getMyLikes(@Query("user_id") user: String, @Query("share_id") ids: String,
+        @Query("select") select: String = "share_id", @Query("limit") limit: Int = 30): Response<List<Map<String, String>>>
+
     // SHARE LIKES CRUD
 
+    @Headers("Prefer: resolution=ignore-duplicates")
     @POST("rest/v1/share_likes")
     suspend fun likeShare(
         @Body like: Map<String, String> // e.g. {"share_id": "...", "user_id": "..."}
@@ -123,6 +141,7 @@ interface SupabaseApi {
 
     // SHARE SAVES CRUD
 
+    @Headers("Prefer: resolution=ignore-duplicates")
     @POST("rest/v1/share_saves")
     suspend fun saveShare(
         @Body save: Map<String, String>
@@ -134,8 +153,9 @@ interface SupabaseApi {
     @GET("rest/v1/inbox_items")
     suspend fun getInbox(
         @Query("target_user_id") uidFilter: String, // "eq.UUID"
-        @Query("select") select: String = "*,share:shares(*,likes_count:share_likes(count),saves_count:share_saves(count))",
-        @Query("order") order: String = "created_at.desc"
+        @Query("select") select: String = "*,share:shares(*)",
+        @Query("order") order: String = "created_at.desc,id.desc",
+        @Query("limit") limit: Int = 30
     ): Response<List<RemoteInboxItem>>
 
 
@@ -144,7 +164,8 @@ interface SupabaseApi {
     @GET("rest/v1/activity_log")
     suspend fun getActivityTimeline(
         @Query("user_id") uidFilter: String, // "eq.UUID"
-        @Query("order") order: String = "created_at.desc"
+        @Query("order") order: String = "created_at.desc,id.desc",
+        @Query("limit") limit: Int = 30
     ): Response<List<RemoteActivityLog>>
 
     @POST("rest/v1/activity_log")

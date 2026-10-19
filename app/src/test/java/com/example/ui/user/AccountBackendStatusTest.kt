@@ -19,7 +19,7 @@ class AccountBackendStatusTest {
         val status = accountBackendStatus(backendConfigured = true, loggedIn = true)
 
         assertEquals("Sesión de Supabase iniciada", status.account)
-        assertEquals("Sincronización Android parcial", status.data)
+        assertEquals("Biblioteca local · sólo compartes lo que eliges", status.data)
         assertTrue(status.security.contains("A/B"))
     }
 }

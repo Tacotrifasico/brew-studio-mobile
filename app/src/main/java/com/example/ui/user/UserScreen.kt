@@ -297,6 +297,9 @@ fun UnauthenticatedView(viewModel: SocialViewModel) {
                         )
                     }
 
+                    state.authNotice?.let { notice ->
+                        Text(notice, color = AcentoPrincipal, fontSize = 12.sp)
+                    }
                     state.authError?.let { err ->
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(err, color = Advertencia, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -345,7 +348,7 @@ fun UnauthenticatedView(viewModel: SocialViewModel) {
             Spacer(modifier = Modifier.height(16.dp))
             TextButton(onClick = { isSignUpMode = !isSignUpMode }) {
                 Text(
-                    text = if (isSignUpMode) "¿Ya tienes un usuario? Ingresa aquí" else "¿No tienes una cuenta? Regístrate gratis en Postgres",
+                    text = if (isSignUpMode) "¿Ya tienes un usuario? Ingresa aquí" else "¿No tienes una cuenta? Crea tu cuenta",
                     color = AcentoPrincipal,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp
@@ -361,6 +364,7 @@ fun PersonalProfileTab(viewModel: SocialViewModel, state: SocialUiState) {
     var dispName by remember { mutableStateOf(state.displayName) }
     var hand by remember { mutableStateOf(state.handle) }
     var colorHex by remember { mutableStateOf(state.avatarColor) }
+    var privateProfile by remember(state.isPrivate) { mutableStateOf(state.isPrivate) }
 
     Column(
         modifier = Modifier
@@ -414,9 +418,13 @@ fun PersonalProfileTab(viewModel: SocialViewModel, state: SocialUiState) {
                     )
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Perfil privado", modifier = Modifier.weight(1f), color = TextPrincipal)
+                        Switch(checked = privateProfile, onCheckedChange = { privateProfile = it })
+                    }
                     Button(
                         onClick = {
-                            viewModel.updateProfile(dispName, hand, colorHex)
+                            viewModel.updateProfile(dispName, hand, colorHex, privateProfile)
                             editMode = false
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal),
@@ -475,12 +483,12 @@ internal fun accountBackendStatus(backendConfigured: Boolean, loggedIn: Boolean)
     )
     !loggedIn -> AccountBackendStatus(
         account = "Supabase configurado · falta ingresar",
-        data = "Sin sincronización remota",
+        data = "Biblioteca guardada en este dispositivo",
         security = "RLS pendiente de validar en Staging"
     )
     else -> AccountBackendStatus(
         account = "Sesión de Supabase iniciada",
-        data = "Sincronización Android parcial",
+        data = "Biblioteca local · sólo compartes lo que eliges",
         security = "RLS pendiente de prueba física A/B"
     )
 }

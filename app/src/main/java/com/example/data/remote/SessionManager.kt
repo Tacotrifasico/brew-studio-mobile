@@ -2,6 +2,7 @@ package com.example.data.remote
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.json.JSONArray
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -11,10 +12,8 @@ class SessionManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("brew_studio_prefs", Context.MODE_PRIVATE)
 
     companion object {
-        // AXCIS-ONLINE P0: ampliar la sesión con refresh_token y expires_at,
-        // guardarlos mediante Android Keystore/EncryptedSharedPreferences y
-        // renovar antes de cada sincronización. Un access token persistido sin
-        // expiración hace que la UI parezca conectada aunque Supabase ya responda 401.
+        private const val KEY_ENCRYPTED = "encrypted_session_v1"
+        private var memorySession: String? = null // memory-only fallback if Keystore is unavailable
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_EMAIL = "user_email"
@@ -23,9 +22,13 @@ class SessionManager(context: Context) {
         private const val KEY_AVATAR_COLOR = "avatar_color"
     }
 
-    fun saveSession(token: String, userId: String, email: String, displayName: String, handle: String?, avatarColor: String?) {
+    fun saveSession(token: String, userId: String, email: String, displayName: String, handle: String?, avatarColor: String?, refreshToken: String? = null, expiresAt: Long = Long.MAX_VALUE) {
+        val bundle = JSONArray().put(token).put(refreshToken.orEmpty()).put(expiresAt).put(userId).toString()
+        memorySession = bundle
+        val encrypted = runCatching { SessionCipher.encrypt(bundle) }.getOrNull()
         prefs.edit().apply {
-            putString(KEY_ACCESS_TOKEN, token)
+            remove(KEY_ACCESS_TOKEN) // retire plaintext legacy credential
+            if (encrypted != null) putString(KEY_ENCRYPTED, encrypted) else remove(KEY_ENCRYPTED)
             putString(KEY_USER_ID, userId)
             putString(KEY_USER_EMAIL, email)
             putString(KEY_DISPLAY_NAME, displayName)
@@ -47,8 +50,10 @@ class SessionManager(context: Context) {
     }
 
     fun clearSession() {
+        memorySession = null
         prefs.edit().apply {
             remove(KEY_ACCESS_TOKEN)
+            remove(KEY_ENCRYPTED)
             remove(KEY_USER_ID)
             remove(KEY_USER_EMAIL)
             remove(KEY_DISPLAY_NAME)
@@ -59,8 +64,19 @@ class SessionManager(context: Context) {
         SupabaseClientProvider.setAuthToken(null)
     }
 
-    fun getAccessToken(): String? = prefs.getString(KEY_ACCESS_TOKEN, null)
+    private fun credentials(): JSONArray? {
+        val raw = prefs.getString(KEY_ENCRYPTED, null)?.let { runCatching { SessionCipher.decrypt(it) }.getOrNull() } ?: memorySession
+        return raw?.let { runCatching { JSONArray(it) }.getOrNull() }
+            ?.takeIf { it.optString(3) == prefs.getString(KEY_USER_ID, null) }
+    }
+    fun getAccessToken(): String? = credentials()?.optString(0)?.takeIf { it.isNotBlank() }
+    fun getRefreshToken(): String? = credentials()?.optString(1)?.takeIf { it.isNotBlank() }
+    fun getExpiresAt(): Long = credentials()?.optLong(2, 0) ?: 0
     fun getUserId(): String? = prefs.getString(KEY_USER_ID, null)
+    fun replaceTokens(access: String, refresh: String, expiresIn: Long) = saveSession(
+        access, requireNotNull(getUserId()), getUserEmail().orEmpty(), getDisplayName(), getHandle(), getAvatarColor(),
+        refresh, System.currentTimeMillis() + expiresIn.coerceAtLeast(0) * 1000
+    )
     fun getUserEmail(): String? = prefs.getString(KEY_USER_EMAIL, null)
     fun getDisplayName(): String = prefs.getString(KEY_DISPLAY_NAME, "") ?: ""
     fun getHandle(): String = prefs.getString(KEY_HANDLE, "") ?: ""
@@ -78,7 +94,9 @@ class SessionManager(context: Context) {
     }.distinctUntilChanged()
 
     init {
-        // Automatically restore token in provider on init
+        // Never reuse a plaintext legacy credential; require login again.
+        prefs.edit().remove(KEY_ACCESS_TOKEN).apply()
+        // Restore the encrypted credential; refresh runs before community requests.
         val savedToken = getAccessToken()
         if (!savedToken.isNullOrBlank()) {
             SupabaseClientProvider.setAuthToken(savedToken)

@@ -75,7 +75,7 @@ object SupabaseClientProvider {
             val requestBuilder = original.newBuilder()
                 .header("apikey", supabaseAnonKey)
                 .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
+            if (original.header("Accept") == null) requestBuilder.header("Accept", "application/json")
 
             // Publishable keys identify the app through apikey; they are not JWTs.
             // Keep the legacy anon-JWT fallback, but only a real session signs in a user.

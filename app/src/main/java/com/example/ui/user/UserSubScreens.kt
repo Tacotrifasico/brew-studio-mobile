@@ -95,6 +95,7 @@ fun FeedAndInboxTab(viewModel: SocialViewModel, state: SocialUiState) {
                             ShareCard(
                                 share = share,
                                 currentUserId = state.userId,
+                                isLiked = share.id in state.likedShareIds,
                                 onLike = { viewModel.likeShare(share.id) },
                                 onUnlike = { viewModel.unlikeShare(share.id) },
                                 onImport = {
@@ -213,9 +214,9 @@ fun ShareCard(
     onUnlike: () -> Unit,
     onImport: () -> Unit,
     onFork: () -> Unit,
-    isInboxView: Boolean = false
+    isInboxView: Boolean = false,
+    isLiked: Boolean = false
 ) {
-    var isLiked by remember { mutableStateOf(false) } // simplistic localtoggle for immediate UI feedback
     val snap = share.payloadSnapshotJson
 
     val ratio = snap["ratio"]?.toString() ?: "16"
@@ -346,8 +347,7 @@ fun ShareCard(
             ) {
                 if (!isInboxView) {
                     IconButton(onClick = {
-                        isLiked = !isLiked
-                        if (isLiked) onLike() else onUnlike()
+                        if (isLiked) onUnlike() else onLike()
                     }) {
                         Icon(
                             imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -356,8 +356,7 @@ fun ShareCard(
                         )
                     }
 
-                    val rawCount = share.likesCount?.firstOrNull()?.count ?: 0
-                    val displayCount = if (isLiked) rawCount + 1 else rawCount
+                    val displayCount = share.likeCount
                     Text(
                         displayCount.toString(),
                         fontSize = 12.sp,
@@ -600,11 +599,7 @@ fun ShareComposerSheet(
     var visMode by remember { mutableStateOf("public") } // "public" or "direct"
     var recipientId by remember { mutableStateOf("") }
     val directRecipientValid = remember(visMode, recipientId) {
-        if (visMode != "direct") true else try {
-            UUID.fromString(recipientId.trim()) != UUID(0, 0)
-        } catch (_: IllegalArgumentException) {
-            false
-        }
+        visMode != "direct" || recipientId.trim().removePrefix("@").matches(Regex("[A-Za-z0-9._-]{1,40}"))
     }
 
     AlertDialog(
@@ -662,11 +657,11 @@ fun ShareComposerSheet(
                     OutlinedTextField(
                         value = recipientId,
                         onValueChange = { recipientId = it },
-                        label = { Text("Identificador del receptor") },
+                        label = { Text("@alias del destinatario") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         isError = recipientId.isNotBlank() && !directRecipientValid,
-                        supportingText = { Text("Temporalmente se usa el UUID de Supabase; el envío por @alias depende de Axcis.") }
+                        supportingText = { Text("Por ejemplo: @ana.cafe") }
                     )
                 }
             }

@@ -29,9 +29,11 @@ data class SocialUiState(
     val handle: String = "",
     val avatarColor: String = "#3F7A63",
     val email: String = "",
+    val isPrivate: Boolean = true,
     
     // Feed data
     val feed: List<RemoteShare> = emptyList(),
+    val likedShareIds: Set<String> = emptySet(),
     val isFeedLoading: Boolean = false,
     val feedError: String? = null,
 
@@ -51,6 +53,7 @@ data class SocialUiState(
     // Auth screen transitions state
     val isAuthLoading: Boolean = false,
     val authError: String? = null,
+    val authNotice: String? = null,
     val isRegistrationSuccess: Boolean = false,
 
     // Stats
@@ -146,12 +149,12 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
     fun login(email: String, password: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isAuthLoading = true, authError = null) }
+            _uiState.update { it.copy(isAuthLoading = true, authError = null, authNotice = null) }
             val result = authRepo.signIn(email, password)
             if (result.isSuccess) {
                 _uiState.update {
                     it.copy(
-                        isLoggedIn = true,
+                        isLoggedIn = authRepo.isLoggedIn(),
                         userId = authRepo.getUserId(),
                         displayName = authRepo.getCachedDisplayName(),
                         handle = authRepo.getCachedHandle(),
@@ -161,7 +164,7 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
                 fetchRemoteData()
-                triggerSync() // Auto-run sync on successful login
+
             } else {
                 _uiState.update { 
                     it.copy(
@@ -175,23 +178,23 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
     fun register(email: String, password: String, displayName: String, handle: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isAuthLoading = true, authError = null, isRegistrationSuccess = false) }
+            _uiState.update { it.copy(isAuthLoading = true, authError = null, authNotice = null, isRegistrationSuccess = false) }
             val result = authRepo.signUp(email, password, displayName, handle)
             if (result.isSuccess) {
                 _uiState.update {
                     it.copy(
-                        isLoggedIn = true,
+                        isLoggedIn = authRepo.isLoggedIn(),
                         userId = authRepo.getUserId(),
                         displayName = authRepo.getCachedDisplayName(),
                         handle = authRepo.getCachedHandle(),
                         avatarColor = authRepo.getCachedAvatarColor(),
                         email = authRepo.getCachedEmail() ?: "",
                         isRegistrationSuccess = true,
+                        authNotice = if (authRepo.isLoggedIn()) null else "Revisa tu correo y confirma tu cuenta. Después inicia sesión.",
                         isAuthLoading = false
                     )
                 }
-                fetchRemoteData()
-                triggerSync()
+                if (authRepo.isLoggedIn()) fetchRemoteData()
             } else {
                 _uiState.update { 
                     it.copy(
@@ -211,7 +214,7 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
                     isLoggedIn = false,
                     displayName = "",
                     handle = "",
-                    feed = it.feed // retain feed cache for seamless guest reading
+                    feed = emptyList() // Clear account-specific social cache
                 )
             }
         }
@@ -232,16 +235,17 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun updateProfile(displayName: String, handle: String, avatarColor: String) {
+    fun updateProfile(displayName: String, handle: String, avatarColor: String, isPrivate: Boolean = true) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isAuthLoading = true, authError = null) }
-            val result = authRepo.updateProfile(displayName, handle, avatarColor)
+            _uiState.update { it.copy(isAuthLoading = true, authError = null, authNotice = null) }
+            val result = authRepo.updateProfile(displayName, handle, avatarColor, isPrivate)
             if (result.isSuccess) {
                 val p = result.getOrThrow()
                 _uiState.update {
                     it.copy(
                         displayName = p.displayName,
                         handle = p.handle ?: "",
+                        isPrivate = p.isPrivate,
                         avatarColor = p.avatarColor ?: "#3F7A63",
                         isAuthLoading = false
                     )
@@ -266,6 +270,7 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
                     it.copy(
                         displayName = p.displayName,
                         handle = p.handle ?: "",
+                        isPrivate = p.isPrivate,
                         avatarColor = p.avatarColor ?: "#3F7A63"
                     )
                 }
@@ -278,9 +283,13 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
     fun fetchFeed() {
         viewModelScope.launch {
             _uiState.update { it.copy(isFeedLoading = true, feedError = null) }
+            val requestedOwner = authRepo.getUserId()
             val result = socialRepo.getFeed()
+            if (requestedOwner != authRepo.getUserId()) return@launch
             if (result.isSuccess) {
-                _uiState.update { it.copy(feed = result.getOrThrow(), isFeedLoading = false) }
+                val liked = socialRepo.likedIds(result.getOrThrow().map { it.id }).getOrNull()
+                if (requestedOwner != authRepo.getUserId()) return@launch
+                _uiState.update { it.copy(feed = result.getOrThrow(), likedShareIds = liked ?: it.likedShareIds, isFeedLoading = false) }
             } else {
                 _uiState.update { 
                     it.copy(
@@ -296,7 +305,9 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             if (!authRepo.isLoggedIn()) return@launch
             _uiState.update { it.copy(isInboxLoading = true, inboxError = null) }
+            val requestedOwner = authRepo.getUserId()
             val result = socialRepo.getInbox()
+            if (requestedOwner != authRepo.getUserId()) return@launch
             if (result.isSuccess) {
                 _uiState.update { it.copy(inbox = result.getOrThrow(), isInboxLoading = false) }
             } else {
@@ -314,7 +325,9 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             if (!authRepo.isLoggedIn()) return@launch
             _uiState.update { it.copy(activityError = null) }
+            val requestedOwner = authRepo.getUserId()
             val result = socialRepo.getActivityTimeline()
+            if (requestedOwner != authRepo.getUserId()) return@launch
             if (result.isSuccess) {
                 _uiState.update { it.copy(activity = result.getOrThrow(), activityError = null) }
             } else {
@@ -327,17 +340,7 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val result = socialRepo.likeShare(shareId)
             if (result.isSuccess) {
-                // Instantly update counter locally for fast UI response
-                _uiState.update { state ->
-                    val updatedFeed = state.feed.map { item ->
-                        if (item.id == shareId) {
-                            val currentLikes = item.likesCount?.firstOrNull()?.count ?: 0
-                            item.copy(likesCount = listOf(com.example.data.remote.models.CountWrapper(currentLikes + 1)))
-                        } else item
-                    }
-                    state.copy(feed = updatedFeed)
-                }
-                fetchActivity()
+                fetchFeed() // server counter is authoritative; repeated likes are idempotent
             }
         }
     }
@@ -346,16 +349,7 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val result = socialRepo.unlikeShare(shareId)
             if (result.isSuccess) {
-                _uiState.update { state ->
-                    val updatedFeed = state.feed.map { item ->
-                        if (item.id == shareId) {
-                            val currentLikes = item.likesCount?.firstOrNull()?.count ?: 1
-                            item.copy(likesCount = listOf(com.example.data.remote.models.CountWrapper(kotlin.math.max(0, currentLikes - 1))))
-                        } else item
-                    }
-                    state.copy(feed = updatedFeed)
-                }
-                fetchActivity()
+                fetchFeed()
             }
         }
     }
@@ -374,6 +368,11 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch {
             try {
+                val uid = authRepo.getUserId()
+                if (uid == null || (share.visibility.equals("direct",true) && share.fromUserId != uid && share.targetUserId != uid)) {
+                    onResult(false, "Esta publicación no pertenece a la cuenta actual.")
+                    return@launch
+                }
                 val brewShare = RemoteShareDomainMapper.map(share).getOrElse { error ->
                     onResult(false, error.message ?: "La publicación está incompleta. No se creó ninguna copia.")
                     return@launch
@@ -390,14 +389,7 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
                 }
 
                 if (result.isSuccess) {
-                    val localId = result.getOrThrow()
-                    val syncResult = socialRepo.syncImportedShare(share, localId)
-                    val message = if (syncResult.isSuccess) {
-                        "Copia guardada y sincronizada en tu biblioteca."
-                    } else {
-                        "Copia guardada en este dispositivo. Quedó pendiente de sincronizar."
-                    }
-                    onResult(true, message)
+                    onResult(true, "Copia guardada en este dispositivo con su autoría.")
                     fetchActivity()
                 } else {
                     onResult(false, result.exceptionOrNull()?.message ?: "Error al importar copia")
@@ -415,6 +407,11 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch {
             try {
+                val uid = authRepo.getUserId()
+                if (uid == null || (share.visibility.equals("direct",true) && share.fromUserId != uid && share.targetUserId != uid)) {
+                    onResult(false, "Esta publicación no pertenece a la cuenta actual.")
+                    return@launch
+                }
                 val brewShare = RemoteShareDomainMapper.map(share).getOrElse { error ->
                     onResult(false, error.message ?: "La publicación está incompleta. No se creó ninguna variante.")
                     return@launch
@@ -429,14 +426,7 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
                 }
 
                 if (result.isSuccess) {
-                    val localId = result.getOrThrow()
-                    val syncResult = socialRepo.syncForkedShare(share, localId)
-                    val message = if (syncResult.isSuccess) {
-                        "Variante editable guardada y sincronizada en tu biblioteca."
-                    } else {
-                        "Variante editable guardada en este dispositivo. Quedó pendiente de sincronizar."
-                    }
-                    onResult(true, message)
+                    onResult(true, "Variante guardada en este dispositivo con su autoría.")
                     fetchActivity()
                 } else {
                     onResult(false, result.exceptionOrNull()?.message ?: "No se pudo crear la variante")
@@ -449,6 +439,10 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
     fun shareRecipeToFeed(recipe: Recipe, message: String, targetUserId: String? = null, visibility: String = "public", onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
+            if (_uiState.value.isPrivate && visibility.equals("public",true)) {
+                onResult(false, "Tu perfil es privado. Usa Buzón directo o hazlo público en Perfil.")
+                return@launch
+            }
             val result = socialRepo.shareRecipe(recipe, message, targetUserId, visibility)
             if (result.isSuccess) {
                 onResult(true, "Receta compartida exitosamente.")
@@ -462,6 +456,10 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
     fun shareTechniqueToFeed(tech: Technique, steps: List<com.example.data.database.TechniqueStep>, message: String, targetUserId: String? = null, visibility: String = "public", onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
+            if (_uiState.value.isPrivate && visibility.equals("public",true)) {
+                onResult(false, "Tu perfil es privado. Usa Buzón directo o hazlo público en Perfil.")
+                return@launch
+            }
             val result = socialRepo.shareTechnique(tech, steps, message, targetUserId, visibility)
             if (result.isSuccess) {
                 onResult(true, "Técnica compartida exitosamente.")

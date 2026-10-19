@@ -2,6 +2,145 @@ import SwiftUI
 import CoreData
 import UIKit
 
+// One horizontal row per quantity. Four digits never add a second text/control level.
+private struct BrewLabQuantityControl: View {
+    let label: String
+    let unit: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    var body: some View {
+        HStack(spacing: 0) {
+            (Text("\(label) ").font(.system(size: 11, weight: .semibold)).foregroundColor(CupaTheme.secondaryText)
+             + Text("\(value) \(unit)").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundColor(CupaTheme.text))
+                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("lab_quantity_\(unit)")
+            Button { value = max(range.lowerBound, value - 1) } label: { Image(systemName: "minus").font(.system(size: 13)).frame(width: 24, height: 36).contentShape(Rectangle()) }
+                .disabled(value <= range.lowerBound).accessibilityLabel("Menos 1 \(unit) de \(label)")
+            Button { value = min(range.upperBound, value + 1) } label: { Image(systemName: "plus").font(.system(size: 13)).frame(width: 24, height: 36).contentShape(Rectangle()) }
+                .disabled(value >= range.upperBound).accessibilityLabel("Más 1 \(unit) de \(label)")
+        }
+        .buttonStyle(.plain).foregroundStyle(CupaTheme.forest)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
+        .background(CupaTheme.backgroundAlt, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// Native touch tracking, with a persistent colour rail instead of a progress fill.
+private struct BrewTemperatureRail: UIViewRepresentable {
+    @Binding var value: Double
+    let guide: LabTemperatureGuide
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> BrewTemperatureUISlider {
+        let slider = BrewTemperatureUISlider(frame: .zero)
+        slider.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .valueChanged)
+        return slider
+    }
+    func updateUIView(_ slider: BrewTemperatureUISlider, context: Context) {
+        context.coordinator.parent = self
+        slider.minimumValue = Float(guide.sliderRange.lowerBound)
+        slider.maximumValue = Float(guide.sliderRange.upperBound)
+        slider.value = Float(value)
+        slider.zone = guide.recipeBand
+        slider.points = guide.recipePoints
+        slider.ceiling = guide.openHotWater ? Double(guide.degrees(guide.boilingC)) : nil
+        slider.accessibilityLabel = "Temperatura del agua"
+        slider.accessibilityValue = "\(Int(value)) \(guide.unit.symbol). \(guide.headline)"
+        slider.setNeedsLayout()
+    }
+    final class Coordinator: NSObject {
+        var parent: BrewTemperatureRail
+        init(_ parent: BrewTemperatureRail) { self.parent = parent }
+        @objc func changed(_ slider: UISlider) {
+            let next = Double(slider.value.rounded())
+            slider.value = Float(next)
+            if next != parent.value { parent.value = next }
+        }
+    }
+}
+
+private final class BrewTemperatureUISlider: UISlider {
+    var zone: ClosedRange<Double>?
+    var points: [Double] = []
+    var ceiling: Double?
+    private let rail = UIImageView()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        rail.isUserInteractionEnabled = false
+        insertSubview(rail, at: 0)
+        let clear = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in }
+        setMinimumTrackImage(clear, for: .normal); setMaximumTrackImage(clear, for: .normal)
+        let thumb = UIGraphicsImageRenderer(size: CGSize(width: 28, height: 28)).image { _ in
+            let circle = UIBezierPath(ovalIn: CGRect(x: 3, y: 3, width: 22, height: 22))
+            UIColor.white.setFill(); circle.fill()
+            UIColor(red: 200/255, green: 109/255, blue: 81/255, alpha: 1).setStroke()
+            circle.lineWidth = 2; circle.stroke()
+        }
+        setThumbImage(thumb, for: .normal); setThumbImage(thumb, for: .highlighted)
+    }
+    required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0, maximumValue > minimumValue else { return }
+        rail.frame = bounds; sendSubviewToBack(rail)
+        let track = trackRect(forBounds: bounds)
+        let start = thumbRect(forBounds: bounds, trackRect: track, value: minimumValue).midX
+        let end = thumbRect(forBounds: bounds, trackRect: track, value: maximumValue).midX
+        let mid = track.midY
+        func x(_ v: Double) -> CGFloat { start + (end - start) * CGFloat((v - Double(minimumValue)) / Double(maximumValue - minimumValue)) }
+        rail.image = UIGraphicsImageRenderer(size: bounds.size).image { renderer in
+            // Match Android: continuous heat colours, with recipe bounds on a separate bracket.
+            let colours: [UIColor] = [
+                UIColor(red: 87/255, green: 157/255, blue: 184/255, alpha: 1),
+                UIColor(red: 145/255, green: 188/255, blue: 192/255, alpha: 1),
+                UIColor(red: 226/255, green: 187/255, blue: 112/255, alpha: 1),
+                UIColor(red: 216/255, green: 137/255, blue: 79/255, alpha: 1),
+                UIColor(red: 184/255, green: 77/255, blue: 62/255, alpha: 1)
+            ]
+            let context = renderer.cgContext
+            context.saveGState()
+            UIBezierPath(roundedRect: CGRect(x: start - 4, y: mid - 4, width: end - start + 8, height: 8), cornerRadius: 4).addClip()
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colours.map(\.cgColor) as CFArray, locations: [0, 0.25, 0.5, 0.75, 1]) {
+                context.drawLinearGradient(gradient, start: CGPoint(x: start, y: mid), end: CGPoint(x: end, y: mid), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+            }
+            context.restoreGState()
+            if let zone {
+                let left = x(zone.lowerBound), right = x(zone.upperBound)
+                let green = UIColor(red: 63/255, green: 122/255, blue: 99/255, alpha: 1)
+                let grey = UIColor(red: 164/255, green: 158/255, blue: 148/255, alpha: 1)
+                let bracket = UIBezierPath()
+                bracket.move(to: CGPoint(x: left, y: mid + 9)); bracket.addLine(to: CGPoint(x: right, y: mid + 9))
+                bracket.lineWidth = 4; bracket.lineCapStyle = .round; grey.setStroke(); bracket.stroke()
+                let reachableRight = x(min(zone.upperBound, ceiling ?? Double(maximumValue)))
+                if reachableRight >= left {
+                    let reachable = UIBezierPath(); reachable.move(to: CGPoint(x: left, y: mid + 9)); reachable.addLine(to: CGPoint(x: reachableRight, y: mid + 9))
+                    reachable.lineWidth = 4; reachable.lineCapStyle = .round; green.setStroke(); reachable.stroke()
+                }
+                for bound in Set([zone.lowerBound, zone.upperBound]) {
+                    let px = x(bound)
+                    let tick = UIBezierPath(); tick.move(to: CGPoint(x: px, y: mid - 8)); tick.addLine(to: CGPoint(x: px, y: mid + 9))
+                    tick.lineCapStyle = .round
+                    tick.lineWidth = 5; UIColor.white.setStroke(); tick.stroke()
+                    tick.lineWidth = 2; (bound <= (ceiling ?? Double(maximumValue)) ? green : grey).setStroke(); tick.stroke()
+                }
+            }
+            for point in points where point >= Double(minimumValue) && point <= Double(maximumValue) {
+                let colour = point <= (ceiling ?? Double(maximumValue)) ? UIColor(red: 156/255, green: 109/255, blue: 46/255, alpha: 1) : UIColor(red: 164/255, green: 158/255, blue: 148/255, alpha: 1)
+                let tick = UIBezierPath(); tick.move(to: CGPoint(x: x(point), y: mid - 10)); tick.addLine(to: CGPoint(x: x(point), y: mid - 4))
+                tick.lineCapStyle = .round; tick.lineWidth = 5; UIColor.white.setStroke(); tick.stroke()
+                tick.lineWidth = 2; colour.setStroke(); tick.stroke()
+                colour.setFill(); UIBezierPath(ovalIn: CGRect(x: x(point) - 2.5, y: mid - 12.5, width: 5, height: 5)).fill()
+            }
+        }
+    }
+    override func accessibilityIncrement() { adjust(1) }
+    override func accessibilityDecrement() { adjust(-1) }
+    private func adjust(_ delta: Float) {
+        value = min(maximumValue, max(minimumValue, value.rounded() + delta))
+        sendActions(for: .valueChanged)
+    }
+}
+
 // Plain-text handoff through the system share sheet; no automatic feed publication.
 func recipeShareText(_ draft: RecipeDraftModel) -> String {
     let units = ["GRAMS": "g", "MILLILITERS": "ml", "UNITS": "uds", "TEASPOONS": "cdta", "TABLESPOONS": "cda", "OUNCES": "oz"]
@@ -73,7 +212,7 @@ struct HomeView: View {
         ZStack {
             BrewOrganicCanvas().ignoresSafeArea()
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 10) {
                     HStack {
                         Button { showHub = true } label: {
                             Label(account.tokens?.email ?? "Mi perfil", systemImage: "person.crop.circle").font(.subheadline.weight(.semibold))
@@ -88,11 +227,8 @@ struct HomeView: View {
                     }
                     .foregroundStyle(CupaTheme.forestText)
 
-                    SectionHeader(
-                        eyebrow: "Cupa",
-                        title: "Taller del Brewther",
-                        subtitle: "Calibra, prepara y aprende de cada taza."
-                    )
+                    Text("Taller del Brewther").font(.system(size: 22, weight: .bold, design: .serif))
+                        .foregroundStyle(CupaTheme.text).frame(maxWidth: .infinity, alignment: .leading)
 
                     BaristaCalculatorCard(
                         calculator: calculator,
@@ -901,7 +1037,7 @@ struct LabView: View {
         ZStack(alignment: .bottom) {
             BrewOrganicCanvas().ignoresSafeArea()
             ScrollView {
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Laboratorio").font(.title3.bold()).foregroundStyle(CupaTheme.text)
@@ -914,6 +1050,7 @@ struct LabView: View {
                     .buttonStyle(.bordered)
                 }
                 calibrationWorkspaceCard
+                compactHypothesis
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             }
@@ -927,6 +1064,7 @@ struct LabView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Cómo leer la estimación").font(.title2.bold())
                         Text("Los números de 0 a 100 son puntuaciones orientativas, no porcentajes ni mediciones del sabor. Sirven para comparar ajustes; no garantizan el resultado de tu taza.")
+                        Text("Calor: el corchete marca el rango de la receta. Verde: alcanzable; gris: por encima del hervor estimado. Los puntos dorados son referencias por tueste, no un intervalo continuo. En V60 corresponden a la técnica 4:6.")
                         Text("El modelo es una hipótesis local, no una fórmula científicamente calibrada. Grano, tueste, molino, agua y técnica cambian el resultado. Registra el sabor real en Cata. Para métodos sin modelo disponible verás —.")
                         Text(thermalGuide.headline).font(.headline)
                         Text(thermalGuide.detail)
@@ -1090,28 +1228,37 @@ struct LabView: View {
     }
 
     private var compactHypothesis: some View {
-        DisclosureGroup(isExpanded: $profileExpanded) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(model.profile.summary).font(.caption)
-                Text("Ilustración orientativa, no medición de extracción. El sabor real se registra en Cata.")
-                    .font(.caption2)
-            }.padding(.top, 4)
-        } label: {
-            VStack(alignment: .leading, spacing: 3) {
-            Text("GUÍA DEL MÉTODO").font(.caption2.bold()).tracking(0.8)
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(primaryOutcome).font(.caption.bold()).fixedSize(horizontal: false, vertical: true)
-                Spacer()
-
-            }
+        VStack(alignment: .leading, spacing: 4) {
+            Button { profileExpanded.toggle() } label: {
+                HStack {
+                    Text(thermalGuide.headline).font(.system(size: 12, weight: .bold)).multilineTextAlignment(.leading)
+                    Spacer(minLength: 4)
+                    Text(profileExpanded ? "Menos" : "Consejos").font(.system(size: 10, weight: .bold))
+                    Image(systemName: profileExpanded ? "chevron.up" : "chevron.down").font(.system(size: 12))
+                }
+            }.buttonStyle(.plain).accessibilityLabel(profileExpanded ? "Ocultar consejos" : "Ver consejos completos")
+            Text(thermalGuide.compactDetail).font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.92)).fixedSize(horizontal: false, vertical: true)
+            if profileExpanded {
+                ForEach(Array(thermalGuide.recipeAdvice.enumerated()), id: \.offset) { _, advice in
+                    Text(advice).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true).padding(.top, 6)
+                }
+                if let url = URL(string: thermalGuide.sourceURL), !thermalGuide.sourceURL.isEmpty {
+                    Link(thermalGuide.sourceName + " ↗", destination: url).font(.system(size: 11)).padding(.vertical, 8)
+                }
+                if thermalGuide.kind == "filter" {
+                    Link("Kasuya · técnica 4:6 ↗", destination: URL(string: "https://en.philocoffea.com/blogs/blog/coffee-brewing-method")!).font(.system(size: 11)).padding(.vertical, 8)
+                }
             }
         }
-        .tint(CupaTheme.onAccent)
-        .foregroundStyle(CupaTheme.onAccent)
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .leading, endPoint: .trailing))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .accessibilityElement(children: .combine)
+        .background(LinearGradient(colors: [Color(hex: 0x214F3F), Color(hex: 0x81573F)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .accessibilityIdentifier("lab_heat_advice")
+        .tint(.white)
+        .accessibilityElement(children: .contain)
         .accessibilityHint("Orientación por método; confirma el sabor en Cata")
     }
 
@@ -1139,7 +1286,8 @@ struct LabView: View {
                                         .animation(.easeOut(duration: 0.2), value: value)
                                 }
                             }.frame(width: 12, height: 70)
-                            Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center).frame(height: 26)
+                            Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true).frame(minHeight: 20)
                         }
                         .frame(maxWidth: .infinity)
                         .accessibilityElement(children: .ignore)
@@ -1147,18 +1295,16 @@ struct LabView: View {
                         .accessibilityValue(value == 0 ? "Sin estimación disponible" : "Estimación \(value) de 100")
                     }
                 }
-
         }
     }
 
     @ViewBuilder private var controlsContent: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: category == .bean ? 9 : 5) {
                 switch category {
                 case .ratio:
-                    HStack {
-                        Stepper("Café \(model.state.coffeeGrams.formatted()) g", value: labCoffeeBinding, in: 1...100, step: 1)
-                        Divider()
-                        Stepper("Agua \(model.state.waterMl) ml", value: labWaterBinding, in: 10...2000, step: 1)
+                    HStack(spacing: 8) {
+                        BrewLabQuantityControl(label: "Café", unit: "g", value: Binding(get: { Int(labCoffeeBinding.wrappedValue.rounded()) }, set: { labCoffeeBinding.wrappedValue = Double($0) }), range: 1...100)
+                        BrewLabQuantityControl(label: "Agua", unit: "ml", value: labWaterBinding, range: 10...2000)
                     }
                     labSlider("Proporción", value: labRatioBinding, range: 1...40, step: 1, display: "1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...2))))")
                     labSlider("Tiempo", value: bindingInt(\.timeSeconds), range: labTimeRange, step: thermalGuide.kind == "cold" ? 3600 : 1, display: formattedTime)
@@ -1284,36 +1430,14 @@ struct LabView: View {
                 Button { labTemperatureBinding.wrappedValue = min(thermalGuide.sliderRange.upperBound, labTemperatureBinding.wrappedValue + 1) } label: { Image(systemName: "plus").frame(width: 32, height: 32) }
                     .buttonStyle(.plain).accessibilityLabel("Más 1 grado")
             }
-            Slider(value: Binding(get: { labTemperatureBinding.wrappedValue }, set: { next in
+            BrewTemperatureRail(value: Binding(get: { labTemperatureBinding.wrappedValue }, set: { next in
                 if next.rounded() != labTemperatureBinding.wrappedValue {
                     labTemperatureBinding.wrappedValue = next.rounded()
                     let now = Date().timeIntervalSinceReferenceDate
                     if now - lastThermalHaptic >= 0.045 { lastThermalHaptic = now; UISelectionFeedbackGenerator().selectionChanged() }
                 }
-            }), in: thermalGuide.sliderRange, step: 1)
-            .tint(Color(hex: 0xC86D51))
-            .overlay {
-                if thermalGuide.hasReachableBand {
-                    GeometryReader { proxy in
-                        let width = max(0, proxy.size.width - 28)
-                        Canvas { context, size in
-                            let mid = size.height / 2
-                            let low = thermalGuide.sliderRange.lowerBound
-                            let span = thermalGuide.sliderRange.upperBound - low
-                            let left = 14 + width * (thermalGuide.recommendedRange.lowerBound - low) / span
-                            let right = 14 + width * (thermalGuide.recommendedRange.upperBound - low) / span
-                            if !["aero", "chemex"].contains(thermalGuide.kind) {
-                                var band = Path(); band.move(to: CGPoint(x: left, y: mid)); band.addLine(to: CGPoint(x: right, y: mid))
-                                context.stroke(band, with: .color(Color(hex: 0xC86D51).opacity(0.18)), style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                            }
-                            for x in Set([left, right]) {
-                                var tick = Path(); tick.move(to: CGPoint(x: x, y: mid - 6)); tick.addLine(to: CGPoint(x: x, y: mid + 6))
-                                context.stroke(tick, with: .color(Color(hex: 0xC86D51).opacity(0.65)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                            }
-                        }
-                    }.allowsHitTesting(false)
-                }
-            }
+            }), guide: thermalGuide)
+            .frame(height: 44)
             .accessibilityLabel("Temperatura del agua")
             .accessibilityValue("\(temperatureText). \(thermalGuide.headline)")
             .accessibilityAdjustableAction { direction in
@@ -1327,13 +1451,13 @@ struct LabView: View {
             HStack {
                 Text("\(Int(thermalGuide.sliderRange.lowerBound))\(model.state.temperatureUnit.symbol)")
                 Spacer(minLength: 2)
-                Text(thermalGuide.workingRangeText)
+                Text(thermalGuide.recipeBandText)
+                    .foregroundStyle(thermalGuide.hasReachableBand ? CupaTheme.forest : CupaTheme.secondaryText).fontWeight(.semibold)
                 Spacer(minLength: 2)
                 Text("\(Int(thermalGuide.sliderRange.upperBound))\(model.state.temperatureUnit.symbol)")
             }.font(.system(size: 10)).foregroundStyle(CupaTheme.secondaryText)
-            if thermalGuide.warning {
-                Text(thermalGuide.openHotWater && thermalGuide.temperatureC > thermalGuide.boilingC ? "Supera el hervor local" : "Calor fuera de zona · consulta ⓘ")
-                    .font(.system(size: 10)).foregroundStyle(CupaTheme.terracottaText)
+            if let points = thermalGuide.recipePointsText {
+                Text(points).font(.system(size: 10)).foregroundStyle(Color(red: 156/255, green: 109/255, blue: 46/255))
             }
         }
     }

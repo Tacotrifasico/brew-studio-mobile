@@ -1,6 +1,6 @@
 # Cupa para iOS
 
-> Integración pendiente para Axcis: consultar [`AXCIS_BACKEND_HANDOFF.md`](AXCIS_BACKEND_HANDOFF.md) antes de configurar Supabase o probar Android↔iOS.
+> Integración Supabase a cargo de Codex por solicitud del propietario: consultar [`AXCIS_BACKEND_HANDOFF.md`](AXCIS_BACKEND_HANDOFF.md) antes de configurar el servidor o probar Android↔iOS. Los marcadores Axcis conservan su nombre histórico.
 
 Migración nativa en curso de Brew Studio Mobile a iPhone.
 
@@ -14,9 +14,7 @@ Esta etapa incluye navegación principal, diseño visual base y la calculadora b
 
 La pantalla de cuenta está preparada para Supabase Auth y almacena tokens en Keychain. La sincronización dispone de outbox persistente, reintentos y resolución de conflictos; la migración y RLS están en `supabase/migrations`. Mientras no se definan `SUPABASE_URL` y `SUPABASE_ANON_KEY`, la app indica que la cuenta aún no está conectada y todos los módulos locales siguen funcionando.
 
-Gemini se invoca únicamente desde una Edge Function autenticada y la app conserva un fallback local. Las instrucciones de configuración, despliegue y Archive están en `DEPLOYMENT.md`. El esquema `Cupa` usa Development al ejecutar y Production al archivar; `Cupa-Staging` utiliza un backend y bundle separados para pruebas previas a producción.
-
-Antes del primer envío remoto a Gemini, la app explica qué parámetros se compartirán con Google y solicita permiso revocable. El manifiesto `PrivacyInfo.xcprivacy` declara los datos sincronizados y el uso local de preferencias sin tracking.
+No se utiliza IA ni se envían parámetros a servicios de generación. Los consejos son deterministas y locales; los archivos históricos de Gemini no deben activarse ni desplegarse. Las instrucciones de configuración, despliegue y Archive están en `DEPLOYMENT.md`. El esquema `Cupa` usa Development al ejecutar y Production al archivar; `Cupa-Staging` utiliza un backend y bundle separados para pruebas previas a producción. Los valores propios de cada proyecto se guardan en archivos `Config/*.local.xcconfig` ignorados por Git.
 
 Configuración permite tema del sistema, claro u oscuro y preferencias de unidades. Brew Hub ofrece perfil editable con avatar de iniciales/color, validación, privacidad efectiva y estadísticas derivadas exclusivamente de los datos reales guardados.
 
@@ -34,4 +32,4 @@ El target `CupaTests` contiene pruebas XCTest. Si CoreSimulator no inicia, `Tool
 
 El target `CupaUITests` contiene recorridos de interfaz y lanza una base Core Data en memoria mediante el argumento `-ui-testing`, sin alterar ni depender de datos personales del simulador.
 
-Supabase, sincronización multiusuario, Gemini mediante backend y los demás CRUD siguen el estado documentado en `PARITY_MATRIX.md` y `BLOCKERS.md`.
+Supabase, sincronización multiusuario y los demás CRUD siguen el estado documentado en `AXCIS_BACKEND_HANDOFF.md` y `BLOCKERS.md`. No declarar conexión completa hasta ejecutar el ensayo con dos cuentas reales en ambos teléfonos.

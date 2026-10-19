@@ -4,6 +4,16 @@ import CoreData
 @main
 struct LabGoldenVerifier {
     static func verifyThermalGuidance() {
+        let at158 = LabTemperatureGuide(temperatureC: 70, altitudeMeters: 0, unit: .fahrenheit)
+        precondition(at158.warning && at158.headline == "Calor bajo para V60")
+        precondition(at158.compactDetail == "Sube el agua a 198–205 °F. Puede faltar extracción.")
+        precondition(LabTemperatureGuide(temperatureC: 70, altitudeMeters: 0, unit: .fahrenheit, method: "AeroPress").compactDetail.hasPrefix("Agua por debajo"))
+        let dark = LabTemperatureGuide(temperatureC: 83, altitudeMeters: 0, unit: .fahrenheit)
+        precondition(dark.headline == "V60 · calor para otra técnica" && dark.compactDetail.contains("4:6"))
+        precondition(LabTemperatureGuide(temperatureC: (181.0 - 32) / 1.8, altitudeMeters: 0, unit: .fahrenheit).headline == dark.headline)
+        precondition(dark.recipeAdvice.contains { $0.contains("Oscuro: ≈ 181 °F") && $0.contains("medio: ≈ 190 °F") })
+        precondition(at158.recipeAdvice.first!.contains("158 °F está por debajo"))
+        precondition(!LabTemperatureGuide(temperatureC: 83, altitudeMeters: 0, method: "Mi método").recipeAdvice.contains { $0.contains("Kasuya") })
         let low = (177.0 - 32) / 1.8
         for clicks in [12, 18, 24, 30] { for seconds in [120, 180, 240, 300] {
             let state = LabState(temperatureC: 81, preciseTemperatureC: low, grindClicks: clicks, timeSeconds: seconds, temperatureUnit: .fahrenheit)
@@ -22,6 +32,16 @@ struct LabGoldenVerifier {
         precondition(altitude.headline == "Supera el hervor local" && altitude.recommendedRange.upperBound <= Double(altitude.degrees(altitude.boilingC)) && altitude.rangeText == "198–205 °F")
         let high = LabTemperatureGuide(temperatureC: 90, altitudeMeters: 5000)
         precondition(!high.hasReachableBand)
+        let markedHigh = LabTemperatureGuide(temperatureC: 90, altitudeMeters: 2600, unit: .fahrenheit)
+        precondition(markedHigh.recipeBand == 198...205 && markedHigh.recipePoints == [181, 190, 199])
+        precondition(markedHigh.recipeBandText == "Clásico · 198–205 °F" && markedHigh.recipePointsText!.contains("oscuro 181"))
+        let markedC = LabTemperatureGuide(temperatureC: 90, altitudeMeters: 2600)
+        precondition(markedC.recipeBand == 92...96 && markedC.recipePoints == [83, 88, 93])
+        let customMarks = LabTemperatureGuide(temperatureC: 90, altitudeMeters: 2600, method: "Mi método")
+        precondition(customMarks.recipeBand == nil && customMarks.recipePoints.isEmpty && customMarks.recipePointsText == nil)
+        precondition(LabTemperatureGuide(temperatureC: 90, altitudeMeters: 2600).workingRangeText == "Hervor aprox. · 91 °C")
+        precondition(LabTemperatureGuide(temperatureC: 90, altitudeMeters: 2600, unit: .fahrenheit).workingRangeText == "Hervor aprox. · 196 °F")
+        precondition(LabTemperatureGuide(temperatureC: 90, altitudeMeters: 2600, method: "Mi método").workingRangeText == "Según técnica")
         let methods = ["V60", "Chemex", "Prensa Francesa", "AeroPress", "Espresso", "Moka", "Cold Brew", "Mi método"]
         let guides = methods.flatMap { method in [TemperatureUnit.celsius, .fahrenheit].flatMap { unit in [0, 2240, 5000].map { LabTemperatureGuide(temperatureC: 92, altitudeMeters: $0, unit: unit, method: method) } } }
         for guide in guides {

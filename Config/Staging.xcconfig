@@ -2,3 +2,4 @@
 APP_ENVIRONMENT = Staging
 APP_DISPLAY_NAME = Cupa Staging
 AUTH_URL_SCHEME = com.tacotrifasico.cupa.staging
+#include? "Staging.local.xcconfig"

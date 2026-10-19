@@ -2,9 +2,9 @@
 
 ## Configuración local
 
-1. Copiar los valores públicos de Supabase al archivo del ambiente: `Config/Development.xcconfig`, `Config/Staging.xcconfig` o `Config/Production.xcconfig`.
+1. Guardar los valores públicos de Supabase en el archivo local del ambiente: `Config/Development.local.xcconfig`, `Config/Staging.local.xcconfig` o `Config/Production.local.xcconfig`. Están ignorados por Git y cada archivo de ambiente versionado incluye opcionalmente su variante local al final.
 2. Usar la URL del proyecto y una **publishable key** (o la anon key heredada), nunca una secret key ni `service_role` en el proyecto iOS.
-3. Mantener los archivos reales con secretos de servidor fuera del repositorio. `GEMINI_API_KEY` sólo se configura como secreto de Edge Functions.
+3. Mantener secretos de servidor fuera del repositorio y del cliente. Brew Studio no usa IA: no configurar claves de Google ni desplegar funciones Gemini heredadas.
 
 Variables esperadas:
 
@@ -16,7 +16,7 @@ PRIVACY_POLICY_URL=https://ejemplo.com/privacidad
 SUPPORT_URL=https://ejemplo.com/soporte
 ```
 
-En archivos `.xcconfig`, una URL con `//` debe escaparse para que no se interprete como comentario, por ejemplo `PRIVACY_POLICY_URL = https:/$()/ejemplo.com/privacidad` y `SUPPORT_URL = https:/$()/ejemplo.com/soporte`.
+En archivos `.xcconfig`, una URL con `//` debe escaparse para que no se interprete como comentario, por ejemplo `SUPABASE_URL = https:/$()/PROJECT.supabase.co`, `PRIVACY_POLICY_URL = https:/$()/ejemplo.com/privacidad` y `SUPPORT_URL = https:/$()/ejemplo.com/soporte`.
 
 ## Supabase
 
@@ -24,17 +24,16 @@ Con Supabase CLI autenticado y enlazado al proyecto:
 
 ```bash
 supabase link --project-ref PROJECT_REF
+supabase db push --dry-run
 supabase db push
-supabase secrets set GEMINI_API_KEY=VALUE GEMINI_MODEL=gemini-3.5-flash
-supabase functions deploy gemini-suggestions
 supabase functions deploy delete-account
 ```
 
 Antes de `supabase db push`, crear un respaldo y ensayar sobre un proyecto Staging clonado. El orden versionado prepara primero las tablas Android, conserva las referencias de granos y finalmente alinea `beans`/`shares` como fuentes comunes. Después del ensayo, comparar conteos y una muestra por UUID antes/después; no ejecutar la migración directamente sobre producción si aparecen violaciones de claves, propietarios nulos o duplicados de buzón.
 
-Después se debe validar con dos cuentas distintas que cada usuario sólo pueda leer y modificar sus filas. También se prueban registro, verificación de correo, recuperación, renovación, cierre, eliminación, cuota de Gemini y restauración en otro dispositivo. Con las dos aplicaciones se crea y edita al menos un café, molino, equipo, receta, técnica con pasos, experimento, perfil y publicación en cada dirección; ambos clientes deben ver el mismo UUID y el último valor.
+Después se debe validar con dos cuentas distintas que cada usuario sólo pueda leer y modificar sus filas. También se prueban registro, verificación de correo, recuperación, renovación, cierre, eliminación y restauración en otro dispositivo. Con las dos aplicaciones se crea y edita al menos un café, molino, equipo, receta, técnica con pasos, experimento, perfil y publicación en cada dirección; ambos clientes deben ver el mismo UUID y el último valor.
 
-La cuota propia de Cupa admite cinco solicitudes Gemini por usuario en una ventana móvil de 60 segundos y es adicional a los límites del proyecto de Google. En Staging se deben comprobar cinco éxitos, una sexta respuesta 429, independencia entre dos cuentas, timeout y fallback. `ai_request_log` sólo debe mostrar `prompt_version`, `outcome_code` y fechas; no se deben agregar prompts, mediciones ni respuestas.
+Los archivos y migraciones históricos de IA no habilitan esa funcionalidad en el producto. No desplegar `gemini-suggestions` ni añadir llamadas a generación; los consejos del laboratorio se calculan localmente. No reescribir el historial de migraciones ya aplicado en un proyecto existente.
 
 En Authentication → Email debe configurarse un proveedor SMTP real y conservarse **Confirm email** activado para producción. La app acepta correctamente tanto el alta que devuelve sesión inmediata como el alta que devuelve sólo usuario pendiente, permite reenviar la confirmación y pide iniciar sesión después de abrir el enlace. La recuperación usa una respuesta deliberadamente genérica para no revelar si una dirección tiene cuenta.
 
@@ -64,6 +63,6 @@ La compilación sin firma y un Archive técnico ya están validados. El Archive 
 
 `ITSAppUsesNonExemptEncryption` está en `NO` porque el código auditado sólo usa cifrado estándar provisto por iOS para HTTPS y Keychain; no incorpora algoritmos criptográficos propios. Confirmar esta declaración si se agrega posteriormente una biblioteca de cifrado.
 
-Apple exige que la política de privacidad esté disponible tanto en App Store Connect como dentro de la app, que las prácticas de datos se declaren en App Privacy y que contenido social tenga filtrado preventivo, reporte, bloqueo, contacto publicado y una respuesta oportuna. La app ya implementa filtro en cliente y SQL, reporte, bloqueo, eliminación remota y purga local de la cuenta, manifiesto de privacidad y consentimiento revocable antes de compartir parámetros con Gemini; el texto legal, URL pública, contacto y proceso humano de moderación, y respuestas de App Privacy deben ser definidos por el propietario. Para revisión se necesita además una cuenta de demostración activa y el backend accesible.
+La preparación de publicación debe incluir política de privacidad, declaración de datos, reporte y bloqueo de contenido social, eliminación de cuenta y contacto de moderación. Los textos legales, URLs públicas, proceso humano de moderación y respuestas de App Privacy deben ser definidos por el propietario y revisados contra los requisitos vigentes. No declarar uso de IA: el producto no lo incorpora. Para revisión se necesita una cuenta de demostración activa y el backend accesible.
 
 Referencias oficiales: [claves Supabase](https://supabase.com/docs/guides/getting-started/api-keys), [recuperación por contraseña](https://supabase.com/docs/guides/auth/passwords), [enlaces profundos móviles](https://supabase.com/docs/guides/auth/native-mobile-deep-linking), [autenticación en Edge Functions](https://supabase.com/docs/guides/functions/auth-legacy-jwt), [despliegue de funciones](https://supabase.com/docs/guides/functions/deploy), [Gemini API](https://ai.google.dev/api), [App Review](https://developer.apple.com/app-store/review/guidelines/), [eliminación de cuentas](https://developer.apple.com/support/offering-account-deletion-in-your-app/), [requisitos de envío](https://developer.apple.com/app-store/submitting/), [manifiestos de privacidad](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files), [launch screen](https://developer.apple.com/documentation/technotes/tn3208-preparing-your-apps-launch-screen-to-meet-app-store-requirements) y [subida de builds](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds).

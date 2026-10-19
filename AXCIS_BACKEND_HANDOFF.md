@@ -2,6 +2,13 @@
 
 Esta es la guía operativa para conectar Android e iOS al mismo backend y validar el núcleo social de Cupa. Los marcadores `AXCIS-ONLINE` dentro del código señalan puntos que no deben darse por terminados sin la validación indicada aquí.
 
+Actualización 2026-10-19: Codex realizará la integración solicitada por el propietario.
+Los nombres históricos de esta guía y de los marcadores no implican que se deba
+esperar a Axcis. Tener el proyecto Supabase creado no significa que las apps estén
+online: faltan configuración, despliegue y las verificaciones P0/P1 de abajo.
+No usar IA: las recomendaciones son deterministas y locales. No desplegar ni
+activar funciones de Gemini que permanezcan como archivos históricos.
+
 ## Fuente de verdad
 
 - Repositorio: `Tacotrifasico/brew-studio-mobile`.
@@ -15,11 +22,11 @@ Esta es la guía operativa para conectar Android e iOS al mismo backend y valida
 ## P0 — necesario para estar online
 
 1. Crear o clonar un proyecto **Supabase Staging** y obtener `PROJECT_REF`, URL HTTPS y publishable/anon key.
-2. Crear respaldo y ejecutar todas las migraciones con `supabase db push` en Staging.
+2. Identificar si el proyecto está vacío o contiene datos; respaldar si corresponde, revisar las migraciones con `supabase db push --dry-run` y ensayarlas en Staging antes de aplicarlas. No modificar producción a ciegas ni reescribir migraciones ya aplicadas.
 3. Configurar Auth Email, SMTP, confirmación de correo y redirects:
    - `com.tacotrifasico.cupa://auth/recovery`
    - `com.tacotrifasico.cupa.staging://auth/recovery`
-4. Desplegar `gemini-suggestions` y `delete-account`; `GEMINI_API_KEY` vive únicamente como secreto de la Edge Function.
+4. Desplegar y verificar `delete-account`. No configurar claves de Google ni desplegar `gemini-suggestions`: el producto no utiliza IA.
 5. Android: completar refresh token, expiración y almacenamiento cifrado señalados en `SessionManager.kt`. Eliminar el estado falso de “conectado” cuando el JWT venció.
 6. Android: implementar el contrato canónico de recetas con `recipe_ingredients` y `recipe_steps`. `SyncRepository.kt` conserva hoy las recetas localmente en lugar de enviarlas por el contrato heredado, porque ese contrato perdería los hijos y obligaría a inventar cantidades.
    - Las técnicas ya permiten alta segura, reintento de pasos faltantes e importación de agregados remotos completos. Falta implementar actualizaciones, borrados lógicos y resolución de conflictos; no declarar `SYNCED` un agregado incompleto.
@@ -27,7 +34,7 @@ Esta es la guía operativa para conectar Android e iOS al mismo backend y valida
    - Agregar outbox y borrado lógico para esas entidades. Su borrado Android sigue siendo únicamente local hasta que exista ese contrato remoto.
 7. Confirmar que Android e iOS usan el mismo Staging:
    - Android: `.env` local con `SUPABASE_URL` y `SUPABASE_ANON_KEY`.
-   - iOS: configuración Staging mediante xcconfig local con las mismas dos claves.
+   - iOS: `Config/Staging.local.xcconfig` (ignorado por Git) con las mismas dos claves; `Staging.xcconfig` ya lo incluye opcionalmente. Development y Production tienen sus propios archivos `*.local.xcconfig`; no copiar credenciales entre ambientes sin revisar el destino.
 8. Validar RLS con dos usuarios reales antes de usar producción.
 
 ## P1 — núcleo social antes de beta pública
@@ -54,6 +61,20 @@ Android e iOS rechazan localmente snapshots incompletos o contradictorios y no c
 ## Configuración segura
 
 Nunca subir `service_role`, `GEMINI_API_KEY`, contraseñas, access tokens ni refresh tokens. Sí pueden vivir en los clientes la URL pública y la publishable/anon key. Desactivar registro de cuerpos HTTP: una respuesta de Auth contiene tokens.
+
+La URL y clave pública permiten conectar clientes; no autorizan aplicar SQL ni
+desplegar funciones. Para preparar el servidor hace falta acceso administrativo
+autorizado mediante CLI o panel, fuera de archivos versionados. Antes de declarar
+el servicio online deben pasar las pruebas de dos cuentas y RLS contra el proyecto
+real; las pruebas locales con dobles o PostgreSQL efímero no las sustituyen.
+
+Compatibilidad de instalación limpia (2026-10-19): la migración
+`202610090010_preparation_cups_precision.sql` comprueba que exista la tabla Android
+heredada `cups` antes de ampliarla. Las bases que sólo tienen el modelo iOS usan
+`cup_sessions`; no debe crearse una tabla vacía ni duplicar tazas para satisfacer
+un nombre heredado. Este guard es para instalaciones donde esa migración aún no
+se ejecutó; no borrar registros del historial ni forzar su reaplicación en un
+servidor ya migrado. El verificador local comprueba ambos escenarios y sus datos.
 
 ## Ensayo físico iPhone ↔ Android
 

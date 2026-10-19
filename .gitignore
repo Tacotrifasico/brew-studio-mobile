@@ -4,3 +4,8 @@ xcuserdata/
 DerivedData/
 build/
 node_modules/
+.env
+.env.*
+!.env.example
+Config/*.local.xcconfig
+supabase/.temp/

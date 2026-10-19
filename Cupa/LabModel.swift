@@ -96,6 +96,19 @@ struct LabTemperatureGuide {
     var recommendedRange: ClosedRange<Double> {
         hasReachableBand ? Double(degrees(lowerC))...Double(degrees(openHotWater ? min(upperC, boilingC) : upperC)) : sliderRange
     }
+    // Reference geometry must not disappear when the local boiling point is lower.
+    var recipeBand: ClosedRange<Double>? {
+        hasReference && !["aero", "chemex"].contains(kind) ? Double(degrees(lowerC))...Double(degrees(upperC)) : nil
+    }
+    var recipePoints: [Double] {
+        let points: [Double]
+        switch kind { case "filter": points = [83, 88, 93]; case "aero": points = [80, 85]; case "chemex": points = [lowerC]; default: points = [] }
+        return points.map { Double(degrees($0)) }
+    }
+    var recipeBandText: String { recipeBand != nil ? "\(kind == "filter" ? "Clásico" : "Referencia") · \(rangeText)" : workingRangeText }
+    var recipePointsText: String? {
+        kind == "filter" ? "4:6 · oscuro \(degrees(83)) · medio \(degrees(88)) · claro \(degrees(93)) \(unit.symbol)" : nil
+    }
     var rangeText: String {
         if !hasReference { return "Sin intervalo universal" }
         if lowerC == upperC { return "≈ \(degrees(lowerC)) \(unit.symbol)" }
@@ -103,11 +116,11 @@ struct LabTemperatureGuide {
     }
     var workingRangeText: String {
         if !hasReference { return "Según técnica" }
-        if !hasReachableBand { return "Sin zona a esta altura" }
+        if !hasReachableBand { return "Hervor aprox. · \(degrees(boilingC)) \(unit.symbol)" }
         let low = Int(recommendedRange.lowerBound), high = Int(recommendedRange.upperBound)
         if kind == "aero" { return "Puntos · \(low) / \(high) \(unit.symbol)" }
         if low == high { return "Punto · \(low) \(unit.symbol)" }
-        return "Zona de trabajo · \(low)–\(high) \(unit.symbol)"
+        return "\(kind == "filter" ? "Clásico" : "Zona de trabajo") · \(low)–\(high) \(unit.symbol)"
     }
     var sourceName: String {
         switch kind {
@@ -135,6 +148,7 @@ struct LabTemperatureGuide {
         if kind == "moka" { return "Controla la llama, no una zona V60" }
         if kind == "cold" { return "Extracción en frío: manda el tiempo" }
         if kind == "custom" { return "Falta una referencia para este método" }
+        if kind == "filter" && degrees(temperatureC) >= degrees(83) && degrees(temperatureC) < degrees(lowerC) { return "V60 · calor para otra técnica" }
         if kind == "chemex" { return warning ? "Difiere del punto Chemex" : "Cerca del punto Chemex" }
         if kind == "aero" { return warning ? "Otra receta AeroPress" : "Referencias AeroPress por tueste" }
         if degrees(temperatureC) < degrees(lowerC) { return "Calor bajo para \(method)" }
@@ -142,16 +156,35 @@ struct LabTemperatureGuide {
         return "Calor en zona de trabajo"
     }
     var compactDetail: String {
-        if openHotWater && temperatureC > boilingC { return "Usa el hervor estimado; compensa con molienda o tiempo." }
-        if !hasReachableBand && hasReference { return "No inventamos otro rango. Ajusta molienda/tiempo y cata." }
-        if kind == "aero" { return "Oscuro: \(degrees(80)); medio/claro: \(degrees(85)) \(unit.symbol). Otras técnicas usan más calor." }
-        if kind == "moka" { return "Llama baja/media. Retira al terminar; no es temperatura de vertido." }
-        if kind == "cold" { return "Agua ambiente · 8–24 h. Para refrigeración, elige otra técnica." }
-        if kind == "custom" { return "Elige una técnica documentada; no heredamos V60." }
-        if kind == "chemex" { return "Punto aproximado, no intervalo óptimo. Confirma en Cata." }
-        if degrees(temperatureC) < degrees(lowerC) { return "Menos calor puede ralentizar la extracción: prueba menos gruesa o más tiempo." }
-        if degrees(temperatureC) > degrees(upperC) { return "Más calor puede acelerar extracción; no garantiza amargor." }
-        return "Punto de partida. Confirma el sabor en Cata."
+        if openHotWater && temperatureC > boilingC { return "A tu altura, el agua hierve cerca de \(degrees(boilingC)) \(unit.symbol). Baja el calor." }
+        if !hasReachableBand && hasReference { return "A esta altura no alcanzas \(rangeText). Usa el hervor local y ajusta molienda o tiempo." }
+        if kind == "moka" { return "Usa llama baja o media. Retira al terminar." }
+        if kind == "cold" { return "Usa agua a temperatura ambiente y deja reposar 8–24 h." }
+        if kind == "custom" { return "Este método aún no tiene un rango de temperatura. Añade una técnica." }
+        if kind == "filter" && degrees(temperatureC) >= degrees(83) && degrees(temperatureC) < degrees(lowerC) { return "V60 4:6: calor según tueste; ajusta molienda y vertidos." }
+        if degrees(temperatureC) < degrees(lowerC) { return kind == "aero" ? "Agua por debajo de los puntos AeroPress. Prueba \(rangeText) según el tueste." : "Sube el agua a \(rangeText). Puede faltar extracción." }
+        if degrees(temperatureC) > degrees(upperC) { return kind == "aero" ? "Por encima de los puntos AeroPress. Úsalo si tu técnica lo indica." : "Baja el agua hacia \(rangeText) para \(method). Prueba antes de cambiar la molienda." }
+        if kind == "aero" { return "Tueste oscuro: \(degrees(80)) \(unit.symbol). Medio o claro: \(degrees(85)) \(unit.symbol)." }
+        if kind == "chemex" { return "Cerca de \(rangeText), el punto indicado por Chemex. Prueba y ajusta." }
+        return "Estás en \(rangeText) para \(method). Prueba la taza antes de ajustar."
+    }
+    // Recipe-specific alternatives, not a wider universal green zone. Mirror: LabTemperatureGuide.kt.
+    var recipeAdvice: [String] {
+        if kind != "filter" { return [compactDetail, detail, "Cambia una variable por vez y compara la taza en Cata."] }
+        let symbol = unit.symbol
+        let context: String
+        if openHotWater && temperatureC > boilingC { context = "A tu altura, el agua hierve cerca de \(degrees(boilingC)) \(symbol). No podrás mantenerla por encima de ese punto en una tetera abierta." }
+        else if degrees(temperatureC) < degrees(83) { context = "\(degrees(temperatureC)) \(symbol) está por debajo de los puntos de partida de estas dos técnicas. Prueba más calor antes de cambiar varias cosas a la vez. No lo tratamos como una zona recomendada." }
+        else if degrees(temperatureC) < degrees(92) { context = "Esta temperatura puede encajar en una V60 4:6 según el tueste. No basta con bajar el calor de la técnica clásica: cambia también la molienda y los vertidos." }
+        else { context = "Elige la técnica según el tueste y el sabor que buscas; la temperatura sola no determina el resultado." }
+        return [
+            context,
+            "V60 clásico · \(degrees(92))–\(degrees(96)) \(symbol). Ejemplo Hario: 15 g y 250 ml, molienda media-fina, floración de 30 s y vertido circular suave; unos 2:30 min en total.",
+            "V60 4:6 · Kasuya. Oscuro: ≈ \(degrees(83)) \(symbol); medio: ≈ \(degrees(88)) \(symbol); claro: ≈ \(degrees(93)) \(symbol). Molienda media-gruesa a gruesa; proporción 1:15.",
+            "Ejemplo 4:6 · 20 g y 300 ml: 60 ml a 0:00, 0:45, 1:30, 2:15 y 2:45; termina cerca de 3:30. Espera a que casi drene antes del siguiente vertido. Para oscuro, prueba dividir los últimos 180 ml en dos vertidos, no tres.",
+            "Si queda aguada o ácida · prueba molienda un poco menos gruesa o sube el calor hacia el punto de tu tueste. Si tarda demasiado en drenar · prueba más gruesa. Si queda áspera · reduce la agitación y compara. Son ajustes de prueba, no garantías.",
+            "La 4:6 se diseñó con el V60 Kasuya, que drena más lento. Con un V60 estándar ajusta la molienda al drenaje; no copies números de otro molino."
+        ]
     }
     var detail: String {
         if openHotWater && temperatureC > boilingC { return "A tu altura, el agua hierve antes. Usa el hervor estimado como límite; prueba molienda menos gruesa o más tiempo." }

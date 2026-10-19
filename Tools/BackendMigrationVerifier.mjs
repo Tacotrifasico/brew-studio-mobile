@@ -37,10 +37,22 @@ async function apply(db, file) {
   }
 }
 
-async function applyIOSMigrations(db, excludedSuffix = '') {
-  for (const name of migrationNames.filter(name => !excludedSuffix || !name.endsWith(excludedSuffix))) {
+async function applyIOSMigrations(db, beforeMigration = null) {
+  for (const name of migrationNames.filter(name => !beforeMigration || name < beforeMigration)) {
     await apply(db, path.join(migrationsDirectory, name));
   }
+}
+
+async function verifyCupPrecision(db) {
+  const legacy = await db.query(`select to_regclass('public.cups') as table_name`);
+  const columns = await db.query(`select table_name from information_schema.columns
+    where table_schema='public' and column_name='precise_temperature_c'
+    and table_name in ('cup_sessions','brew_sessions','lab_experiments','cups')`);
+  const expected = legacy.rows[0]?.table_name ? 4 : 3;
+  if (columns.rows.length !== expected) throw new Error('Faltan columnas de precisión para tazas, preparación o laboratorio');
+  const tasting = await db.query(`select is_nullable from information_schema.columns
+    where table_schema='public' and table_name='cup_sessions' and column_name='tasting_id'`);
+  if (tasting.rows[0]?.is_nullable !== 'YES') throw new Error('Una taza sin cata todavía exige tasting_id');
 }
 
 async function verifyRLS(db) {
@@ -93,6 +105,7 @@ async function androidUpgradeScenario() {
       values ('80000000-0000-4000-8000-000000000001','${userId}','V60',15,240,16,92,22,'fresco',180,'Prueba',1);
   `);
   await applyIOSMigrations(db);
+  await verifyCupPrecision(db);
   await verifyRLS(db);
 
   const bean = (await db.query(`select name, remaining_quantity_grams from public.coffee_beans where id='20000000-0000-4000-8000-000000000001'`)).rows[0];
@@ -120,13 +133,18 @@ async function androidUpgradeScenario() {
 
 async function iosUpgradeScenario() {
   const db = new PGlite(); await db.waitReady; await bootstrap(db);
-  await applyIOSMigrations(db, '007_android_backend_alignment.sql');
+  const alignment = '202609010007_android_backend_alignment.sql';
+  // Build a real pre-alignment snapshot; later migrations depend on its tables.
+  await applyIOSMigrations(db, alignment);
   await db.exec(`
     insert into auth.users(id,email) values ('${userId}','ana@example.com');
     insert into public.coffee_beans(id,owner_id,name,brand,remaining_quantity_grams,initial_quantity_grams)
       values ('90000000-0000-4000-8000-000000000001','${userId}','Oaxaca','Casa',180,250);
   `);
-  await apply(db, path.join(migrationsDirectory, '202609010007_android_backend_alignment.sql'));
+  for (const name of migrationNames.filter(name => name >= alignment)) {
+    await apply(db, path.join(migrationsDirectory, name));
+  }
+  await verifyCupPrecision(db);
   const bean = (await db.query(`select user_id,name,stock_grams from public.beans where id='90000000-0000-4000-8000-000000000001'`)).rows[0];
   if (bean?.name !== 'Oaxaca' || Number(bean?.stock_grams) !== 180 || bean?.user_id !== userId) throw new Error('El café iOS anterior no se conservó');
   await db.close();

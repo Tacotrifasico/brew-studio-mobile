@@ -24,6 +24,9 @@ class CalculatorCompactHomeTest {
     @Test fun calculatorActionsFitFirstViewportAboveBottomNavigation() {
         val model = BaristaCalcViewModel(ApplicationProvider.getApplicationContext<Application>())
         compose.setContent { MyApplicationTheme { HomeScreen(model, {}) } }
+        compose.onNodeWithText("Taller del Brewther").assertIsDisplayed()
+        compose.onNodeWithText("CUPA", ignoreCase = true).assertDoesNotExist()
+        compose.onNodeWithText("Calibra, prepara y aprende", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Calculadora barista").assertIsDisplayed()
         compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-compact-home-320.png")
         listOf("Preparar", "Laboratorio", "Guardar proporción en Calculadora").forEach {

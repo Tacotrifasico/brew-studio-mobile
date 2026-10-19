@@ -29,16 +29,71 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36], qualifiers = "w360dp-h780dp")
 class CupLifecycleTest {
+    @Test fun quantityLabelsAndGeometryStayStableAcrossDigitChanges() {
+        var coffee by mutableIntStateOf(99)
+        var water by mutableIntStateOf(999)
+        compose.setContent { MyApplicationTheme {
+            Row(Modifier.width(260.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LabQuantityControl("Café", coffee, "g", 1..100, Modifier.weight(1f)) { coffee = it }
+                LabQuantityControl("Agua", water, "ml", 10..2000, Modifier.weight(1f)) { water = it }
+            }
+        } }
+        compose.onNodeWithText("Café", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Agua", substring = true).assertIsDisplayed()
+        val before = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        assertTrue("All quantity controls must fit in one level", before.height <= 36f * compose.density.density)
+        val valueCenter = compose.onNodeWithTag("lab_quantity_ml").fetchSemanticsNode().boundsInRoot.center.y
+        assertEquals(valueCenter, compose.onNodeWithContentDescription("Más 1 ml de Agua").fetchSemanticsNode().boundsInRoot.center.y, 1f)
+        compose.onNodeWithContentDescription("Más 1 ml de Agua").performClick()
+        compose.onNodeWithContentDescription("Más 1 g de Café").performClick()
+        compose.onNodeWithText("1000 ml", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("100 g", substring = true).assertIsDisplayed()
+        assertEquals(before, compose.onRoot().fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithContentDescription("Más 1 g de Café").assertIsNotEnabled()
+        compose.runOnIdle { water = 1999 }
+        compose.onNodeWithContentDescription("Más 1 ml de Agua").performClick()
+        compose.onNodeWithText("2000 ml", substring = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Más 1 ml de Agua").assertIsNotEnabled()
+        assertEquals(before, compose.onRoot().fetchSemanticsNode().boundsInRoot)
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-quantities.png")
+        for (unit in listOf("g", "ml")) {
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            compose.onNodeWithTag("lab_quantity_$unit").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue(layouts.isNotEmpty()); assertFalse("$unit: ${layouts.first().size}, width overflow ${layouts.first().didOverflowWidth}, height overflow ${layouts.first().didOverflowHeight}", layouts.first().hasVisualOverflow)
+        }
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-quantities.png")
+    }
     @get:Rule val compose = createComposeRule()
+
+    @Test fun equalizerNamesAreNotClippedWithLargerSystemText() {
+        val profile = calculateLabProfile(15f, 240, 16f, 92, 24, "en ventana")
+        compose.setContent {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 1.35f)) {
+                MyApplicationTheme { Box(Modifier.width(320.dp)) { SensoryMixerCard(profile) } }
+            }
+        }
+        for (label in listOf("Aroma", "Acidez", "Dulzor", "Cuerpo", "Amargor", "Final")) for (part in listOf("label", "value")) {
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            compose.onNodeWithTag("equalizer_${part}_$label").assertIsDisplayed()
+                .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertFalse("$label ($part) no debe quedar cortado: ${layouts.single().size}", layouts.single().hasVisualOverflow)
+        }
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-equalizer-large-text.png")
+    }
 
     @Test fun lowTemperatureWarningIsVisibleAndDiagnosisAgrees() {
         val model = BaristaCalcViewModel(ApplicationProvider.getApplicationContext<Application>())
         compose.setContent { val state by model.state.collectAsState(); MyApplicationTheme {
-            LabVariableDock(LabCategory.Extraccion, state, model, true, {})
+            Column(Modifier.width(360.dp)) {
+                LabVariableDock(LabCategory.Extraccion, state, model, true, {})
+                LabHeatAdviceCard(com.example.data.engine.LabTemperatureGuide(state.labPreciseTemp ?: state.labTemp.toDouble(), state.labAltitudeMeters, true, state.labMethod))
+            }
         } }
         compose.runOnIdle { model.setPreparationSettings(0, true); model.updateLabVariables(preciseTemperature = (177.0 - 32) / 1.8) }
         compose.onNodeWithText("177 °F").assertIsDisplayed()
-        compose.onNodeWithText("Calor fuera de zona · consulta ⓘ").assertIsDisplayed()
+        compose.onNodeWithText("Calor bajo para V60").assertIsDisplayed()
+        compose.onNodeWithText("Sube el agua a 198–205 °F. Puede faltar extracción.").assertIsDisplayed()
         compose.onNodeWithText("puede ralentizar", substring = true).assertDoesNotExist()
         assertEquals("Calor bajo para V60", model.state.value.labPreviewExtraction)
         assertTrue(model.state.value.labRecommendationText.contains("puede ralentizar"))
@@ -48,6 +103,20 @@ class CupLifecycleTest {
         compose.onNodeWithText("Hario · receta V60 ↗").assertDoesNotExist()
         compose.onNodeWithText("Clics de molienda").assertDoesNotExist()
         compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-177f.png")
+        compose.runOnIdle { model.updateLabVariables(preciseTemperature = 70.0) }
+        compose.onNodeWithText("158 °F").assertIsDisplayed()
+        compose.onNodeWithText("Sube el agua a 198–205 °F. Puede faltar extracción.").assertIsDisplayed()
+    }
+
+    @Test fun temperatureRecipeMarksAndLegendRemainVisibleAtHighAltitude() {
+        val model = BaristaCalcViewModel(ApplicationProvider.getApplicationContext<Application>())
+        compose.setContent { val state by model.state.collectAsState(); MyApplicationTheme {
+            Column(Modifier.width(360.dp)) { LabVariableDock(LabCategory.Extraccion, state, model, true, {}) }
+        } }
+        compose.runOnIdle { model.setPreparationSettings(2600, true); model.updateLabVariables(preciseTemperature = 90.0) }
+        compose.onNodeWithText("Clásico · 198–205 °F").assertIsDisplayed()
+        compose.onNodeWithText("4:6 · oscuro 181 · medio 190 · claro 199 °F").assertIsDisplayed()
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-temperature-high-altitude.png")
     }
 
     @Test fun equalizerAndBothSlidersFitCompactViewportAndInfoOwnsLongCopy() {
@@ -73,6 +142,8 @@ class CupLifecycleTest {
         compose.waitForIdle()
         compose.onNodeWithText("Aroma").assertIsDisplayed()
         compose.onNodeWithText("Amargor").assertIsDisplayed()
+        compose.onNodeWithTag("equalizer_advice").assertDoesNotExist()
+        compose.onNodeWithText("V60 4:6: calor según tueste; ajusta molienda y vertidos.").assertIsDisplayed()
         val s = model.state.value
         val estimated = calculateLabProfile(s.labCoffee, s.labWater, s.labRatio, s.labTemp, s.labClicks, s.labBeanFreshness, preciseTemperatureC = s.labPreciseTemp, useFahrenheit = true)
         compose.onAllNodesWithText(estimated.aroma.toString()).onFirst().assertIsDisplayed()
@@ -84,6 +155,17 @@ class CupLifecycleTest {
             compose.onNodeWithText("Más gruesa →").fetchSemanticsNode().boundsInRoot.bottom <=
                 compose.onNodeWithTag("lab_actions").fetchSemanticsNode().boundsInRoot.top)
         compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-compact.png")
+        compose.runOnIdle { model.updateLabVariables(preciseTemperature = 70.0) }
+        compose.onNodeWithText("158 °F").assertIsDisplayed()
+        compose.onNodeWithText("Sube el agua a 198–205 °F. Puede faltar extracción.").assertIsDisplayed()
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-158f.png")
+        compose.onNodeWithTag("lab_advice_toggle").performClick()
+        compose.onNodeWithText("V60 4:6 · Kasuya.", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Ejemplo 4:6 ·", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-advice-expanded.png")
+        compose.onNodeWithTag("lab_advice_toggle").performScrollTo().performClick()
+        compose.onNodeWithText("Laboratorio").performScrollTo()
+        compose.runOnIdle { model.updateLabVariables(preciseTemperature = (195.0 - 32) / 1.8) }
         compose.onNodeWithContentDescription("Proporción").performClick()
         compose.onNodeWithContentDescription("Proporción de café y agua").assertIsDisplayed()
         compose.onNodeWithContentDescription("Tiempo de extracción").assertIsDisplayed()
@@ -93,10 +175,13 @@ class CupLifecycleTest {
                 compose.onNodeWithTag("lab_actions").fetchSemanticsNode().boundsInRoot.top)
         compose.onRoot().captureRoboImage(filePath = "/private/tmp/brew-lab-compact-ratio.png")
         compose.onNodeWithText("Ilustración orientativa", substring = true).assertDoesNotExist()
+        println("Lab compact: sliders and advice fit; opening information")
         compose.onNodeWithContentDescription("Acerca del ecualizador").performClick()
+        println("Lab compact: information opened")
         compose.onNodeWithText("Cómo leer la estimación").assertIsDisplayed()
         compose.onNodeWithText("no porcentajes", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Listo").performScrollTo().performClick()
+        println("Lab compact: information closed")
         compose.mainClock.advanceTimeBy(1000)
         compose.waitForIdle()
     }
@@ -105,7 +190,7 @@ class CupLifecycleTest {
         var selected by mutableFloatStateOf(190f)
         val changes = mutableListOf<Float>()
         compose.setContent { MyApplicationTheme {
-            LabCalibratedSlider(selected, { selected = it; changes += it }, 158f..212f, 198f..205f, activeColor = androidx.compose.ui.graphics.Color(0xFFC26638), accessibilityLabel = "Prueba de calor", accessibilityValue = "$selected °F")
+            LabCalibratedSlider(selected, { selected = it; changes += it }, 158f..212f, 198f..205f, activeColor = androidx.compose.ui.graphics.Color(0xFFC26638), accessibilityLabel = "Prueba de calor", accessibilityValue = "$selected °F", temperatureZones = true)
         } }
         val slider = compose.onNodeWithContentDescription("Prueba de calor")
         slider.performTouchInput { swipe(Offset(width * .15f, center.y), Offset(width * .94f, center.y), 600) }

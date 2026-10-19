@@ -6,9 +6,15 @@ no declarar sincronización entre teléfonos hasta conectar `beans.brew_profiles
 
 La guía integral y el protocolo iPhone↔Android están en `AXCIS_BACKEND_HANDOFF.md` de la rama `ios-production-migration`.
 
+Actualización 2026-10-19: Codex realizará la integración por solicitud del
+propietario. `AXCIS-ONLINE` conserva su nombre histórico para localizar pendientes.
+No integrar IA ni desplegar Gemini: los consejos del laboratorio son locales.
+El proyecto Supabase creado todavía no demuestra que las apps estén online.
+
 Pendientes que bloquean declarar Android online:
 
 - Configurar `.env` local con el mismo `SUPABASE_URL` y `SUPABASE_ANON_KEY` usados por Cupa Staging en iOS.
+- Antes de aplicar SQL, confirmar si el proyecto está vacío o contiene datos, revisar las migraciones canónicas de la rama iOS y probar en Staging. URL/clave pública no permiten administrar el servidor: se necesita acceso autorizado mediante CLI o panel; nunca copiar credenciales administrativas al cliente ni al repositorio.
 - Implementar refresh token, `expires_at`, renovación previa a llamadas y almacenamiento cifrado en `SessionManager.kt`/Auth.
 - Mantener el logging HTTP sin cuerpos; nunca imprimir tokens.
 - Conectar el contrato remoto canónico completo de recetas (`recipes`, `recipe_ingredients` y `recipe_steps`). El agregado local ya guarda padre, ingredientes y pasos de forma transaccional, conserva su orden y está cubierto por pruebas; `SyncRepository.kt` no lo sube mediante el contrato heredado porque hacerlo perdería hijos y fabricaría cantidades. Las recetas permanecen locales y pendientes hasta recibir confirmación del agregado remoto completo.

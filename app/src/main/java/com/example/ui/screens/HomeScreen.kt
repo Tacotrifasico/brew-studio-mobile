@@ -262,9 +262,9 @@ fun HomeScreen(
 
                 // Title
                 Text(
-                    text = "¡Buen día, Brewther!",
+                    text = "Taller del Brewther",
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                    fontSize = 24.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Black,
                     color = TextPrincipal,
                     letterSpacing = (-0.5).sp

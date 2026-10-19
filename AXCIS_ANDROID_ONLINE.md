@@ -11,6 +11,18 @@ propietario. `AXCIS-ONLINE` conserva su nombre histórico para localizar pendien
 No integrar IA ni desplegar Gemini: los consejos del laboratorio son locales.
 El proyecto Supabase creado todavía no demuestra que las apps estén online.
 
+Servidor inicial desplegado (19 octubre 2026): proyecto `qndojncusqmhoxnokgwb`,
+23 tablas públicas con RLS, sin permisos anónimos de tabla y sin artefactos de IA.
+31 pruebas locales de contrato y ensayo SQL de roles A/B/C contra el servidor
+aprobados; no quedaron usuarios ficticios. El asesor de seguridad no reportó hallazgos.
+Es una base compartida, NO una afirmación de sincronización completa de las apps.
+La fuente de verdad aplicada es `Backend/supabase/migrations` en la rama iOS;
+consultar allí `Backend/README.md`. No reaplicar el SQL inicial Android ni la cola
+histórica iOS de la raíz sobre este nuevo proyecto.
+URL y clave pública ya están en `.env` local y en configuraciones iOS locales
+ignoradas por Git. El cliente Android ya distingue publishable key (`apikey`) del
+JWT de sesión (`Authorization: Bearer`), con pruebas. Falta el resto de esta lista.
+
 Pendientes que bloquean declarar Android online:
 
 - Configurar `.env` local con el mismo `SUPABASE_URL` y `SUPABASE_ANON_KEY` usados por Cupa Staging en iOS.
@@ -22,7 +34,7 @@ Pendientes que bloquean declarar Android online:
 - Ampliar `SyncRepository.kt` más allá de recetas y técnicas: `beans`, `instruments`/equipo, `cups`, `catas` y `lab_experiments` ya se guardan localmente con `PENDING_CREATE`/`PENDING_UPDATE`, pero todavía no tienen push/pull remoto en Android. No cambiar esos estados a `SYNCED` hasta recibir confirmación del servidor.
 - Implementar borrado lógico y outbox para cafés, equipo, tazas, catas y experimentos. Hoy su eliminación local es inmediata porque el contrato Android aún no posee una cola de borrado para esas entidades.
 - Integrar en Android los envíos directos por alias y verificar muro, buzón, importación y variante contra las tablas canónicas de la rama iOS.
-  - La RPC `resolve_profile_id_by_alias` ya está definida en `202609050008_direct_recipient_alias.sql` y fue verificada sobre PostgreSQL efímero. Falta desplegar esa migración en Staging y consumir la RPC desde Android; mientras tanto el cliente identifica el campo como temporal, exige un UUID real y bloquea la publicación de recetas/técnicas que aún no tienen identidad remota. Compartir nunca debe cambiar por sí solo el `syncStatus` de la fórmula.
+  - La RPC real es `resolve_profile_alias(alias_input)` (no `resolve_profile_id_by_alias`). Ya está desplegada en el proyecto nuevo y probada con roles SQL; falta consumirla desde Android y probar con JWT reales. Mientras tanto el cliente identifica el campo como temporal, exige un UUID real y bloquea la publicación de recetas/técnicas que aún no tienen identidad remota. Compartir nunca debe cambiar por sí solo el `syncStatus` de la fórmula.
   - Los snapshots sociales Android ya incluyen ingredientes/pasos reales de recetas y pasos/acumulados reales de técnicas. La importación rechaza snapshots parciales y guarda padre e hijos localmente en una transacción. Implementar las cuatro RPC de copia/variante según la sección **Contrato obligatorio de `payload_snapshot_json`** de `AXCIS_BACKEND_HANDOFF.md`; una RPC no puede confirmar éxito si sólo creó el padre.
 - Ejecutar el protocolo físico con dos cuentas y guardar UUID/capturas como evidencia.
 - Las técnicas se guardan en Room y su biblioteca canónica es **Almacén → Técnicas**; Preparar, Laboratorio y Comunidad deben escribir/importar en esa misma tabla.

@@ -48,8 +48,8 @@ el descriptor remoto iOS existente omite este campo y no borra la copia local.
 
 Antes de habilitar sincronización entre teléfonos:
 
-1. Añadir a public.beans una columna brew_profiles JSONB NOT NULL DEFAULT '{}',
-   con CHECK (jsonb_typeof(brew_profiles) = 'object'). Conservar RLS por propietario.
+1. Completado en servidor (19 octubre 2026): public.beans.brew_profiles es JSONB
+   NOT NULL DEFAULT '{}', valida objeto/tamaño y conserva RLS por propietario.
 2. Mapear Bean.brewProfilesJSON (Android) y CoffeeBeanRecord.brewProfilesJSON (iOS)
    a brew_profiles como objeto JSON, no como cadena JSON ni campo notes.
 3. Preservar la copia local cuando un servidor viejo omita el campo; no reemplazar
@@ -60,7 +60,9 @@ Antes de habilitar sincronización entre teléfonos:
 5. Probar Android → iPhone y viceversa, offline/reconexión, dos métodos del mismo
    grano, dos granos, cambio de cuenta y conflictos concurrentes.
 
-No se ha desplegado ninguna migración remota como parte de este cambio.
+La columna ya está desplegada en `qndojncusqmhoxnokgwb`; los puntos 2–5 siguen
+pendientes en los clientes. Ver `Backend/README.md` de la rama iOS. Tener la columna
+no significa que los ajustes locales ya se sincronicen entre teléfonos.
 
 ## Verificación
 

@@ -77,9 +77,11 @@ object SupabaseClientProvider {
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
 
-            // Attach user session token if active, otherwise use anon key
-            val currentToken = authToken ?: supabaseAnonKey
-            requestBuilder.header("Authorization", "Bearer $currentToken")
+            // Publishable keys identify the app through apikey; they are not JWTs.
+            // Keep the legacy anon-JWT fallback, but only a real session signs in a user.
+            val bearer = supabaseBearerToken(supabaseAnonKey, authToken)
+            if (bearer != null) requestBuilder.header("Authorization", "Bearer $bearer")
+            else requestBuilder.removeHeader("Authorization")
 
             chain.proceed(requestBuilder.build())
         }
@@ -107,3 +109,7 @@ object SupabaseClientProvider {
             .create(SupabaseApi::class.java)
     }
 }
+
+internal fun supabaseBearerToken(apiKey: String, accessToken: String?): String? =
+    accessToken?.trim()?.takeIf { it.isNotEmpty() }
+        ?: apiKey.trim().takeIf { it.startsWith("eyJ") && it.count { char -> char == '.' } == 2 }

@@ -294,7 +294,7 @@ private struct GrinderDetailView: View {
                 Section("Registro") {
                     inventoryDetailRow("Creado", grinder.createdAt.formatted(date: .abbreviated, time: .shortened))
                     inventoryDetailRow("Actualizado", grinder.updatedAt.formatted(date: .abbreviated, time: .shortened))
-                    inventoryDetailRow("Sincronización", inventorySyncStatusLabel(grinder.syncStatus))
+                    inventoryDetailRow("Almacenamiento", inventorySyncStatusLabel(grinder.syncStatus))
                 }
                 Section {
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar molino", systemImage: "trash") }
@@ -465,7 +465,7 @@ private struct EquipmentDetailView: View {
                 Section("Disponibilidad") {
                     inventoryDetailRow(equipment.isBrewingMethod ? "Calculadora" : "Favorito", equipment.isFavorite ? "Sí" : "No")
                     inventoryDetailRow("Equipo activo", equipment.isActive ? "Sí" : "No")
-                    inventoryDetailRow("Sincronización", inventorySyncStatusLabel(equipment.syncStatus))
+                    inventoryDetailRow("Almacenamiento", inventorySyncStatusLabel(equipment.syncStatus))
                 }
                 Section {
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar equipo", systemImage: "trash") }
@@ -505,16 +505,7 @@ private func equipmentTypeLabel(_ code: String) -> String { equipmentTypes.first
 private func grinderScaleLabel(_ code: String) -> String {
     switch code { case "CLICKS": "clics"; case "MICRONS": "micras"; case "SETTING_NUMERIC": "niveles"; default: "descriptiva" }
 }
-func inventorySyncStatusLabel(_ status: SyncStatus) -> String {
-    switch status {
-    case .synced: "Sincronizado"
-    case .pendingCreate: "Guardado local"
-    case .pendingUpdate: "Cambios pendientes"
-    case .pendingDelete: "Eliminación pendiente"
-    case .conflict: "Conflicto · reintentar"
-    case .error: "Reintento pendiente"
-    }
-}
+func inventorySyncStatusLabel(_ status: SyncStatus) -> String { "Guardado en este dispositivo" }
 @ViewBuilder private func inventoryDetailRow(_ title: String, _ value: String) -> some View {
     HStack(alignment: .top) {
         Text(title)
@@ -525,18 +516,4 @@ func inventorySyncStatusLabel(_ status: SyncStatus) -> String {
 private func equipmentIcon(_ code: String) -> String {
     switch code { case "KETTLE": "kettle"; case "SCALE": "scalemass"; case "BREWER_METHOD": "mug"; default: "wrench.and.screwdriver" }
 }
-@ViewBuilder func inventorySyncBadge(_ status: SyncStatus) -> some View {
-    if status != .synced {
-        let needsAttention = status == .error || status == .conflict
-        Label(
-            inventorySyncStatusLabel(status),
-            systemImage: needsAttention ? "exclamationmark.arrow.triangle.2.circlepath" : "icloud.and.arrow.up"
-        )
-        .font(.caption2.bold())
-        .foregroundStyle(needsAttention ? CupaTheme.terracottaText : CupaTheme.goldText)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background(CupaTheme.backgroundAlt, in: Capsule())
-        .accessibilityLabel(inventorySyncStatusLabel(status))
-    }
-}
+@ViewBuilder func inventorySyncBadge(_ status: SyncStatus) -> some View { EmptyView() }

@@ -175,7 +175,11 @@ struct SupabaseAuthService {
     func signIn(email: String, password: String) async throws -> AuthTokens { try await token(path: "/auth/v1/token?grant_type=password", payload: ["email": email, "password": password]) }
     func signUp(email: String, password: String) async throws -> SignUpResult {
         let payload = ["email": email, "password": password]
-        let (data, _) = try await request(path: "/auth/v1/signup", method: "POST", payload: payload, bearer: nil)
+        var path = URLComponents(); path.path = "/auth/v1/signup"
+        if let callback = configuration.authRedirectURL?.deletingLastPathComponent().appendingPathComponent("confirmed") {
+            path.queryItems = [URLQueryItem(name: "redirect_to", value: callback.absoluteString)]
+        }
+        let (data, _) = try await request(path: path.string ?? "/auth/v1/signup", method: "POST", payload: payload, bearer: nil)
         if let tokens = try? decodeTokens(data, fallbackEmail: email) { return .signedIn(tokens) }
 
         struct PendingUser: Decodable { let id: UUID; let email: String? }
@@ -299,6 +303,12 @@ final class AccountModel: ObservableObject {
     }
     @discardableResult
     func handleAuthCallback(_ url: URL, now: Date = .now) -> Bool {
+        if let callback = configuration.authRedirectURL?.deletingLastPathComponent().appendingPathComponent("confirmed"),
+           AuthCallbackParser.matches(url, expectedRedirectURL: callback) {
+            // A deep link is not proof of authentication. Do not store fragment tokens.
+            sessionNotice = "Vuelve a iniciar sesión para continuar."
+            return true
+        }
         guard let expectedURL = configuration.authRedirectURL,
               AuthCallbackParser.matches(url, expectedRedirectURL: expectedURL) else { return false }
         do {

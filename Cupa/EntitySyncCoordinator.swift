@@ -28,6 +28,8 @@ enum CoreSyncSchema {
         .init(entityName: "LabExperimentRecord", table: "lab_experiments", fields: [f("methodId","method_id",.uuid),f("recipeId","recipe_id",.uuid),f("techniqueId","technique_id",.uuid),f("beanId","bean_id",.uuid),f("grinderId","grinder_id",.uuid),f("method"),f("coffeeGrams","coffee_grams",.double),f("waterMl","water_ml",.integer),f("ratio",kind:.double),f("temperatureC","temperature_c",.integer),f("preciseTemperatureC","precise_temperature_c",.double),f("grindClicks","grind_clicks",.integer),f("freshness"),f("timeSeconds","time_seconds",.integer),f("altitudeMeters","altitude_meters",.integer),f("cityName","city_name"),f("notes"),f("extractionIndex","extraction_index",.double),f("summary")], ownerField: "user_id"),
         .init(entityName: "UserProfileRecord", table: "profiles", fields: [f("displayName","display_name"),f("alias","handle"),f("biography"),f("avatarColor","avatar_color"),f("favoriteMethods","favorite_methods"),f("isPrivate","is_private",.boolean)], profileIdentity: true)
     ]
+    // The library never participates in background cloud sync.
+    static var cloudDescriptors: [SyncEntityDescriptor] { descriptors.filter(\.profileIdentity) }
     private static func f(_ local: String, _ remote: String? = nil, _ kind: RemoteFieldKind = .string) -> RemoteField { .init(local: local, remote: remote ?? snake(local), kind: kind) }
     private static func f(_ local: String, kind: RemoteFieldKind) -> RemoteField { f(local, nil, kind) }
     private static func snake(_ value: String) -> String { value.reduce(into: "") { result, char in if char.isUppercase { result.append("_"); result.append(char.lowercased()) } else { result.append(char) } } }
@@ -106,11 +108,11 @@ final class EntitySyncCoordinator: ObservableObject {
         do {
             try repairLegacyOutbox(ownerId: ownerId)
             try enqueuePending(ownerId: ownerId)
-            if forceRetry { try SyncOutboxRepository(context: context).retryNow(ownerId: ownerId) }
+            if forceRetry { try SyncOutboxRepository(context: context).retryNow(ownerId: ownerId, tables: CoreSyncSchema.cloudDescriptors.map(\.table)) }
             try await push(ownerId: ownerId, accessToken: accessToken)
             let safeCheckpoint = try await pull(ownerId: ownerId, accessToken: accessToken, fallbackCheckpoint: startedAt.addingTimeInterval(-fallbackOverlap))
             defaults.set(safeCheckpoint, forKey: checkpointKey(ownerId))
-            let pending = try SyncOutboxRepository(context: context).pendingCount(ownerId: ownerId)
+            let pending = try SyncOutboxRepository(context: context).pendingCount(ownerId: ownerId, tables: CoreSyncSchema.cloudDescriptors.map(\.table))
             state = pending == 0 ? .completed(now()) : .waitingRetry(pending)
         } catch {
             authenticationRejected = RemoteFailureClassifier.isUnauthorized(error)
@@ -120,7 +122,7 @@ final class EntitySyncCoordinator: ObservableObject {
 
     func enqueuePending(ownerId: UUID) throws {
         let outbox = SyncOutboxRepository(context: context)
-        for descriptor in CoreSyncSchema.descriptors {
+        for descriptor in CoreSyncSchema.cloudDescriptors {
             let request = NSFetchRequest<NSManagedObject>(entityName: descriptor.entityName)
             request.predicate = NSPredicate(format: "(ownerId == nil OR ownerId == %@) AND syncStatusRaw != %@", ownerId as CVarArg, SyncStatus.synced.rawValue)
             for record in try context.fetch(request) {
@@ -139,8 +141,8 @@ final class EntitySyncCoordinator: ObservableObject {
         let request = NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")
         request.predicate = NSPredicate(format: "ownerId == %@ AND tableName == %@ AND deletedAt == nil", ownerId as CVarArg, "")
         for item in try context.fetch(request) {
-            let matches = try CoreSyncSchema.descriptors.filter { try localObject($0.entityName, id: item.entityId, expectedOwner: ownerId) != nil }
-            guard matches.count == 1, let descriptor = matches.first else { throw SyncServiceError.unrecoverableLegacyOperation(item.id.uuidString) }
+            let matches = try CoreSyncSchema.cloudDescriptors.filter { try localObject($0.entityName, id: item.entityId, expectedOwner: ownerId) != nil }
+            guard matches.count == 1, let descriptor = matches.first else { continue }
             item.tableName = descriptor.table
         }
         if context.hasChanges { try context.save() }
@@ -148,7 +150,8 @@ final class EntitySyncCoordinator: ObservableObject {
 
     private func push(ownerId: UUID, accessToken: String) async throws {
         let outbox = SyncOutboxRepository(context: context); let service = SupabaseDataService(configuration: configuration, transport: transport)
-        for item in try outbox.ready(ownerId: ownerId) {
+        for item in try outbox.ready(ownerId: ownerId, tables: CoreSyncSchema.cloudDescriptors.map(\.table)) {
+            guard CoreSyncSchema.cloudDescriptors.contains(where: { $0.table == item.tableName }) else { continue }
             guard let data = item.payloadJSON.data(using: .utf8) else { continue }
             do {
                 let table = item.tableName
@@ -172,7 +175,7 @@ final class EntitySyncCoordinator: ObservableObject {
         let since = defaults.object(forKey: checkpointKey(ownerId)) as? Date ?? Date(timeIntervalSince1970: 0)
         var safeCheckpoint = fallbackCheckpoint
         var downloaded: [(SyncEntityDescriptor, [[String: Any]])] = []
-        for (index, descriptor) in CoreSyncSchema.descriptors.enumerated() {
+        for (index, descriptor) in CoreSyncSchema.cloudDescriptors.enumerated() {
             let batch = try await service.changes(table: descriptor.table, since: since, accessToken: accessToken)
             if index == 0, let serverDate = batch.serverDate { safeCheckpoint = serverDate.addingTimeInterval(-fallbackOverlap) }
             let rows = (try JSONSerialization.jsonObject(with: batch.data)) as? [[String: Any]] ?? []

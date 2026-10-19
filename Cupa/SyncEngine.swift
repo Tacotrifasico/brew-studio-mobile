@@ -71,10 +71,11 @@ struct SyncOutboxRepository {
         try context.save(); return item
     }
 
-    func ready(ownerId: UUID? = nil, now: Date = .now, limit: Int = 100) throws -> [SyncOperationRecord] {
+    func ready(ownerId: UUID? = nil, now: Date = .now, limit: Int = 100, tables: [String]? = nil) throws -> [SyncOperationRecord] {
         let request = NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")
         if let ownerId { request.predicate = NSPredicate(format: "ownerId == %@ AND deletedAt == nil AND nextAttemptAt <= %@", ownerId as CVarArg, now as NSDate) }
         else { request.predicate = NSPredicate(format: "deletedAt == nil AND nextAttemptAt <= %@", now as NSDate) }
+        if let tables { request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [request.predicate!, NSPredicate(format: "tableName IN %@", tables)]) }
         request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]; request.fetchLimit = limit
         return try context.fetch(request)
     }
@@ -87,16 +88,18 @@ struct SyncOutboxRepository {
         try context.save()
     }
 
-    func retryNow(ownerId: UUID, now: Date = .now) throws {
+    func retryNow(ownerId: UUID, now: Date = .now, tables: [String]? = nil) throws {
         let request = NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")
         request.predicate = NSPredicate(format: "ownerId == %@ AND deletedAt == nil", ownerId as CVarArg)
+        if let tables { request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [request.predicate!, NSPredicate(format: "tableName IN %@", tables)]) }
         for item in try context.fetch(request) { item.nextAttemptAt = now; item.updatedAt = now }
         if context.hasChanges { try context.save() }
     }
 
-    func pendingCount(ownerId: UUID) throws -> Int {
+    func pendingCount(ownerId: UUID, tables: [String]? = nil) throws -> Int {
         let request = NSFetchRequest<NSManagedObject>(entityName: "SyncOperationRecord")
         request.predicate = NSPredicate(format: "ownerId == %@ AND deletedAt == nil", ownerId as CVarArg)
+        if let tables { request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [request.predicate!, NSPredicate(format: "tableName IN %@", tables)]) }
         return try context.count(for: request)
     }
 }

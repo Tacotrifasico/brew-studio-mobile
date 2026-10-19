@@ -1,126 +1,89 @@
-# Entrega online para Axcis
+# Cupa · entrega de cuentas y comunidad
 
-Esta es la guía operativa para conectar Android e iOS al mismo backend y validar el núcleo social de Cupa. Los marcadores `AXCIS-ONLINE` dentro del código señalan puntos que no deben darse por terminados sin la validación indicada aquí.
+## Contrato vigente
 
-Actualización 2026-10-19: Codex realizará la integración solicitada por el propietario.
-Los nombres históricos de esta guía y de los marcadores no implican que se deba
-esperar a Axcis. Tener el proyecto Supabase creado no significa que las apps estén
-online: faltan configuración, despliegue y las verificaciones P0/P1 de abajo.
-Servidor inicial desplegado el 19 de octubre de 2026 en `qndojncusqmhoxnokgwb`:
-23 tablas con RLS y pruebas SQL reales aprobadas. [Backend/README.md](Backend/README.md)
-detalla el historial aplicado y los pendientes; esto NO declara las apps online.
-La cola para este nuevo proyecto está en `Backend/supabase/migrations`; no volver
-a aplicar la cola histórica de la raíz ni la inicial de Android sobre ese servidor.
+El propietario cambió el alcance el 19 octubre 2026: **biblioteca local, nube
+sólo para cuentas e intercambio social**. Este documento reemplaza los pendientes
+anteriores de subir todo el Almacén. No habilitar esa sincronización ni las cuatro
+RPC antiguas de importar/fork remoto.
 
-No usar IA: las recomendaciones son deterministas y locales. No desplegar ni
-activar funciones de Gemini que permanezcan como archivos históricos.
+- Android: rama `main`, Room.
+- iOS: rama `ios-production-migration`, Core Data/SQLite.
+- Backend compartido: `qndojncusqmhoxnokgwb`.
+- Fuente de verdad del servidor: [Backend/README.md](Backend/README.md) y
+  `Backend/supabase/migrations`. No reaplicar la cola histórica de la raíz.
+- No Gemini/IA. Altura y unidades en Configuración; temperaturas internas en Celsius.
+- Firma y configuración personal de Xcode no se deben sobrescribir.
 
-## Fuente de verdad
+## Qué se queda en el teléfono
 
-- Repositorio: `Tacotrifasico/brew-studio-mobile`.
-- Android vigente: rama `main`.
-- iOS vigente: rama `ios-production-migration`.
-- Contrato canónico: `profiles`, `beans`, `grinders`, `equipment`, `recipes`, `recipe_ingredients`, `recipe_steps`, `techniques`, `technique_steps`, `shares`, `share_likes`, `share_saves`, `inbox_items`, `activity_log`, `blocked_users` y `content_reports`.
-- Migraciones del proyecto nuevo: `Backend/supabase/migrations` de `ios-production-migration`. La carpeta raíz `supabase/migrations` conserva los upgrades históricos y sus ensayos, no se reaplica sobre el nuevo baseline.
-- Identidad compartida: `auth.users.id`; propiedad privada mediante `user_id`; UUID estable por entidad.
-- Las técnicas pertenecen al **Almacén**. Preparar y Laboratorio son puntos de creación/uso, no almacenes alternos.
+Granos y ajustes BARC por método, molinos, equipo/métodos, biblioteca de recetas
+e ingredientes/pasos, técnicas/pasos, experimentos, preparaciones, tazas y catas.
+Guardar/editar/importar no llama al servidor para respaldar esos registros.
+No anunciar recuperación de esa biblioteca al reinstalar o cambiar de teléfono.
+Los archivos exportados y respaldos del sistema operativo son independientes.
 
-## P0 — necesario para estar online
+## Qué usa Supabase
 
-1. Crear o clonar un proyecto **Supabase Staging** y obtener `PROJECT_REF`, URL HTTPS y publishable/anon key.
-2. Identificar si el proyecto está vacío o contiene datos; respaldar si corresponde, revisar las migraciones con `supabase db push --dry-run` y ensayarlas en Staging antes de aplicarlas. No modificar producción a ciegas ni reescribir migraciones ya aplicadas.
-3. Configurar Auth Email, SMTP, confirmación de correo y redirects:
-   - `com.tacotrifasico.cupa://auth/recovery`
-   - `com.tacotrifasico.cupa.staging://auth/recovery`
-4. Desplegar y verificar `delete-account`. No configurar claves de Google ni desplegar `gemini-suggestions`: el producto no utiliza IA.
-5. Android: completar refresh token, expiración y almacenamiento cifrado señalados en `SessionManager.kt`. Eliminar el estado falso de “conectado” cuando el JWT venció.
-6. Android: implementar el contrato canónico de recetas con `recipe_ingredients` y `recipe_steps`. `SyncRepository.kt` conserva hoy las recetas localmente en lugar de enviarlas por el contrato heredado, porque ese contrato perdería los hijos y obligaría a inventar cantidades.
-   - Las técnicas ya permiten alta segura, reintento de pasos faltantes e importación de agregados remotos completos. Falta implementar actualizaciones, borrados lógicos y resolución de conflictos; no declarar `SYNCED` un agregado incompleto.
-   - Incluir también `beans`, `instruments`/equipo, `cups`, `catas` y `lab_experiments`. Android ya marca las escrituras locales como pendientes y conserva `Cup.techniqueId`/`Cup.methodId`; falta que el backend confirme cada operación antes de pasarla a `SYNCED`.
-   - Agregar outbox y borrado lógico para esas entidades. Su borrado Android sigue siendo únicamente local hasta que exista ese contrato remoto.
-7. Confirmar que Android e iOS usan el mismo Staging:
-   - Android: `.env` local con `SUPABASE_URL` y `SUPABASE_ANON_KEY`.
-   - iOS: `Config/Staging.local.xcconfig` (ignorado por Git) con las mismas dos claves; `Staging.xcconfig` ya lo incluye opcionalmente. Development y Production tienen sus propios archivos `*.local.xcconfig`; no copiar credenciales entre ambientes sin revisar el destino.
-8. Validar RLS con dos usuarios reales antes de usar producción.
+Auth y perfiles, snapshots que el usuario decide publicar o enviar, registro del
+creador, likes/contador, guardados, recibidos, actividad social mínima, bloqueos y
+reportes. Sin buckets ni conexiones Realtime permanentes.
+Guardar localmente no genera solicitudes ni filas en esas tablas.
 
-## P1 — núcleo social antes de beta pública
+La publicación usa el UUID local como `entity_id`, sin exigir una receta remota.
+El servidor registra al creador y deriva identidad del perfil autenticado.
+Importar/crear variante usa snapshot validado, UUID nuevos y transacción local.
+La copia conserva autor, entidad original y publicación de origen.
+Al volver a compartir se manda `source_share_id`; la autoría no se inventa.
 
-- Conectar en Android la resolución de destinatarios por alias; el usuario no debe copiar UUID. La RPC real es `resolve_profile_alias(alias_input)` (no `resolve_profile_id_by_alias`). Ya está desplegada y probada con roles SQL en el proyecto nuevo; falta el ensayo con JWT reales y teléfonos.
-- Muro público: publicar receta y técnica, ver autor, atribución y snapshot completo.
-- Envío directo: crear `share` de visibilidad `direct`, generar `inbox_item` y permitir al receptor marcarlo leído.
-- Importar crea una copia profunda con UUID nuevos y `copy_mode=IMPORT`.
-- Variante crea una copia profunda con UUID nuevos y `copy_mode=FORK`.
-- Conservar siempre `original_author_user_id`, `original_author_name`, `original_entity_id`, `root_entity_id` e `imported_from_share_id`.
-- Likes idempotentes, guardados privados, bloqueo reversible y reporte moderable.
-- Actualización, borrado lógico, reintento offline y conflicto por `updated_at`/versión deben funcionar en ambas plataformas.
+## Seguridad y consumo
 
-### Contrato obligatorio de `payload_snapshot_json`
+La API de las tablas privadas está revocada; no borrar las tablas vacías como
+mecanismo de ahorro. Sólo las nueve tablas sociales/de perfil están operativas.
+No secrets/service_role en clientes. Publishable key en `apikey`; JWT del usuario
+en Bearer. Los archivos de configuración local están ignorados por Git.
+Android cifra credenciales con Keystore, conserva refresh/expiración, renueva
+antes de Comunidad y no respalda credenciales por copia/transferencia del SO.
+iOS mantiene Keychain y renovación. Una confirmación de registro pendiente no
+se trata como sesión iniciada.
 
-Los clientes ya publican y consumen el mismo snapshot plano. Axcis debe conservarlo completo; no resumirlo ni reconstruir valores por defecto:
+Límites: 64 KiB por snapshot, 80 pasos/ingredientes, 30 publicaciones/hora/cuenta,
+30 resultados por carga. No es garantía de factura: revisar uso y límites del plan.
 
-- Receta: `name`, `recipeKind`, `intention`, `suggestedMethodId`, `suggestedMethodName`, `tags`, `ingredients[]` (`name`, `amount`, `unit`, `orderIndex`) y `steps[]` (`stepNumber`, `instruction`, `durationSeconds`). Ingredientes y pasos son obligatorios y deben mantener su orden.
-- Técnica: `name`, `method`/`methodName`, `methodId`, `doseG`/`coffeeGrams`, `waterMl`, `ratio`, `temperatureC`/`temperature`, molienda, `executionMode`, `totalTimeSeconds` y `steps[]`. Cada paso incluye `step_order`, `title`, `duration_sec`, `water_add_ml`, `target_water_ml`, `gesture`, `intensity` y `note`.
-- Invariantes de técnica: órdenes consecutivos desde 1; duraciones positivas; agua agregada no negativa; cada `target_water_ml` equivale a la suma acumulada; la suma final coincide con `waterMl`; `waterMl / coffeeGrams` coincide con `ratio`; la suma de duraciones coincide con `totalTimeSeconds`.
+## Ensayo final con dos cuentas (no realizado todavía)
 
-Android e iOS rechazan localmente snapshots incompletos o contradictorios y no crean una copia vacía. Las RPC `import_share_as_recipe`, `fork_share_as_recipe`, `import_share_as_technique` y `fork_share_as_technique` deben repetir esas validaciones y crear padre e hijos en una sola transacción. Si una RPC falla, el cliente conserva la copia local como pendiente; nunca debe devolver éxito después de insertar sólo el padre.
+1. Verificar Auth Email/SMTP y redirects desde el panel autenticado.
+   Recuperación iOS: `com.tacotrifasico.cupa://auth/recovery` y
+   `com.tacotrifasico.cupa.staging://auth/recovery`.
+   No desactivar confirmación para evitar configurar correo.
+2. Instalar las compilaciones actuales en ambos teléfonos; registrarse con dos
+   correos propios, elegir contraseñas en los dispositivos y confirmar correos.
+3. Perfil A: nombre/alias y público si desea publicar al muro. Perfil B puede
+   permanecer privado para envíos directos.
+4. Android crea receta y técnica en Almacén; antes de compartir verificar que
+   no existen filas privadas remotas. Publicar receta y enviar técnica a @alias B.
+5. iPhone abre muro/Recibidos, importa y crea variante. Verificar hijos, cantidades,
+   acumulados y autor. Editar la copia NO modifica el original.
+6. Repetir iPhone → Android. Dar/quitar like; tras recargar y reabrir, estado y
+   total correctos. Enviar dos veces el mismo like no incrementa el total.
+7. Republicar una variante conserva creador original y publicador distinto.
+8. Sin conexión: inventario, preparación, laboratorio, cata e importados funcionan.
+   Reinicio/cambio de cuenta no mezcla bibliotecas privadas.
+9. Confirmar que compartir no sube inventario/equipo/tazas y que ninguna cuenta
+   puede leer envíos directos ajenos. Bloqueo se respeta en ambos sentidos.
 
-## Configuración segura
+## Evidencia actual y bloqueos operativos
 
-Nunca subir `service_role`, `GEMINI_API_KEY`, contraseñas, access tokens ni refresh tokens. Sí pueden vivir en los clientes la URL pública y la publishable/anon key. Desactivar registro de cuerpos HTTP: una respuesta de Auth contiene tokens.
+31 pruebas locales del baseline + 33 local-first y ensayo SQL real con roles
+aprobados. Todos los fixtures se revierten; cero usuarios reales creados por esas
+pruebas, sin correos enviados. Esto no sustituye JWT reales ni teléfonos.
+El asesor de seguridad terminó sin hallazgos. Compilación, lógica y validación
+visual deben informarse por separado.
 
-La URL y clave pública permiten conectar clientes; no autorizan aplicar SQL ni
-desplegar funciones. Para preparar el servidor hace falta acceso administrativo
-autorizado mediante CLI o panel, fuera de archivos versionados. Antes de declarar
-el servicio online deben pasar las pruebas de dos cuentas y RLS contra el proyecto
-real; las pruebas locales con dobles o PostgreSQL efímero no las sustituyen.
-
-Compatibilidad de instalación limpia (2026-10-19): la migración
-`202610090010_preparation_cups_precision.sql` comprueba que exista la tabla Android
-heredada `cups` antes de ampliarla. Las bases que sólo tienen el modelo iOS usan
-`cup_sessions`; no debe crearse una tabla vacía ni duplicar tazas para satisfacer
-un nombre heredado. Este guard es para instalaciones donde esa migración aún no
-se ejecutó; no borrar registros del historial ni forzar su reaplicación en un
-servidor ya migrado. El verificador local comprueba ambos escenarios y sus datos.
-
-## Ensayo físico iPhone ↔ Android
-
-Usar dos correos diferentes; no iniciar la misma cuenta en ambos teléfonos para esta prueba.
-
-### Preparación
-
-1. Instalar **Cupa Staging** en iPhone y el APK `debug` conectado al mismo Staging en Android.
-2. Crear usuario A en Android con alias `@android_a`.
-3. Crear usuario B en iPhone con alias `@iphone_b`.
-4. Confirmar ambos correos, cerrar y volver a abrir las apps, e iniciar sesión otra vez.
-5. En Supabase verificar dos filas distintas en `profiles` y que ninguna pueda leer inventario privado de la otra.
-
-### Android → iPhone
-
-1. En Android crear una receta y una técnica de tres pasos desde **Almacén**.
-2. Confirmar que la técnica aparece en **Almacén → Técnicas**.
-3. Publicar la receta en el muro. En iPhone actualizar Comunidad y abrirla.
-4. Importarla en iPhone. Debe aparecer en **Almacén → Recetas** y poder editarse sin modificar la original.
-5. Enviar la técnica directamente a `@iphone_b`.
-6. En iPhone abrir Recibidos, marcarla leída e importarla. Debe aparecer en **Almacén → Técnicas**, conservar sus pasos y poder iniciar Preparar.
-
-### iPhone → Android
-
-Repetir el recorrido al revés con nombres diferentes. En Android la receta importada debe aparecer en Recetas y la técnica en **Almacén → Técnicas**. Crear además una variante y comprobar que el autor original sigue visible.
-
-### Reinicio y aislamiento
-
-1. Apagar red, editar una técnica en cada teléfono y recuperar conexión; comprobar sincronización o conflicto explícito.
-2. Forzar cierre y reabrir: la sesión debe renovarse o pedir login, nunca mostrar una comunidad vacía fingiendo estar conectada.
-3. Cerrar sesión A e iniciar B en el mismo teléfono: no deben verse datos privados de A.
-4. Intentar leer por REST una fila privada del otro usuario: RLS debe devolver cero filas o 403.
-5. Interrumpir una descarga entre `techniques` y `technique_steps`: iOS debe conservar el agregado local anterior y Android no debe importar la técnica nueva. Al reintentar, sólo debe aparecer cuando todos los pasos y acumulados sean válidos.
-
-## BARC reversible: memoria por grano y método
-
-Consultar [BARC_BEAN_PROFILES.md](BARC_BEAN_PROFILES.md): incluye el formato JSON
-compartido, migración local sin perder inventario y pasos pendientes para habilitar
-`beans.brew_profiles` en ambas plataformas. Actualmente estos ajustes son locales.
-
-## Evidencia obligatoria
-
-Guardar fecha, SHA de ambas apps, UUID de usuarios/receta/técnica/shares, capturas de Almacenes y buzones, resultado offline/reinicio/RLS, conteos de migración y errores con responsable. La salida se acepta cuando una receta y una técnica con pasos completan el recorrido en ambos sentidos y sobreviven reinicio, reinstalación/login y cambio de cuenta.
+El panel se revisó con sesión del propietario. Con su aprobación se reemplazó
+localhost por com.tacotrifasico.cupa://auth/confirmed y se autorizaron exactamente
+cinco retornos de iOS normal/Staging y Android. SMTP personalizado está desactivado;
+falta elegir proveedor/remitente sin desactivar confirmación. No se inventaron
+contraseñas ni se enviaron correos a los usuarios. La función delete-account ya
+está activa y rechaza solicitudes sin sesión o con JWT inválido (401); falta ensayo
+autenticado. Registro/confirmación y prueba física siguen pendientes de SMTP.

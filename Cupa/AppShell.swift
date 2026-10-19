@@ -187,7 +187,7 @@ struct AppShell: View {
         syncInProgress = true
         defer { syncInProgress = false }
         guard let tokens = await account.validTokens() else { return }
-        syncNotice = "Sincronizando cambios guardados…"
+        syncNotice = "Actualizando perfil…"
         let coordinator = EntitySyncCoordinator(context: context, configuration: account.configuration)
         await coordinator.sync(ownerId: tokens.userId, accessToken: tokens.accessToken, forceRetry: forceRetry)
         if coordinator.authenticationRejected, let refreshed = await account.validTokens(forceRefresh: true) {
@@ -195,7 +195,7 @@ struct AppShell: View {
         }
         switch coordinator.state {
         case .completed: syncNotice = nil
-        case .offline: syncNotice = "Sin conexión. Los cambios se sincronizarán automáticamente al volver internet."
+        case .offline: syncNotice = "Sin conexión. Tu biblioteca permanece en este dispositivo."
         case let .waitingRetry(count): syncNotice = "\(count) \(count == 1 ? "cambio local sigue pendiente" : "cambios locales siguen pendientes") de sincronizar."
         case let .failed(message): syncNotice = "Sincronización pendiente: \(message)"
         default: break

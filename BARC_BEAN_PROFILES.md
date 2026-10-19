@@ -41,28 +41,15 @@ valor redondeado; esto no modifica el favorito preciso almacenado en el grano.
 Un método sin asociación no hereda los ajustes de otro método/grano.
 Los clics representan el molino que usa la persona, no una equivalencia universal.
 
-## AXCIS-ONLINE: pendiente, no presentar como sincronizado
+## Almacenamiento local — alcance vigente
 
-Estos perfiles son locales por ahora. Android todavía no sincroniza el inventario;
-el descriptor remoto iOS existente omite este campo y no borra la copia local.
-
-Antes de habilitar sincronización entre teléfonos:
-
-1. Completado en servidor (19 octubre 2026): public.beans.brew_profiles es JSONB
-   NOT NULL DEFAULT '{}', valida objeto/tamaño y conserva RLS por propietario.
-2. Mapear Bean.brewProfilesJSON (Android) y CoffeeBeanRecord.brewProfilesJSON (iOS)
-   a brew_profiles como objeto JSON, no como cadena JSON ni campo notes.
-3. Preservar la copia local cuando un servidor viejo omita el campo; no reemplazar
-   el mapa con '{}' accidentalmente. Resolver conflictos por versión del grano
-   o implementar merge por método, nunca sobrescribir otro método por silencio.
-4. Conectar push/pull de beans en Android y añadir el campo al descriptor iOS
-   sólo después de desplegar la migración. Un fallo remoto no borra ajustes locales.
-5. Probar Android → iPhone y viceversa, offline/reconexión, dos métodos del mismo
-   grano, dos granos, cambio de cuenta y conflictos concurrentes.
-
-La columna ya está desplegada en `qndojncusqmhoxnokgwb`; los puntos 2–5 siguen
-pendientes en los clientes. Ver `Backend/README.md` de la rama iOS. Tener la columna
-no significa que los ajustes locales ya se sincronicen entre teléfonos.
+Los ajustes por grano/método se quedan en este dispositivo. No implementar su
+sincronización en esta etapa. La columna remota histórica `beans.brew_profiles`
+existe pero su API está sellada para clientes desde la migración local-first.
+El reverso y el Almacén usan el mismo JSON local; notas no reemplaza ese campo.
+Compartir una técnica sólo publica los ajustes explícitos de esa técnica, no
+el café completo ni el mapa de preferencias de otros métodos.
+Ver `Backend/README.md` de la rama iOS para la arquitectura actual.
 
 ## Verificación
 

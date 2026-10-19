@@ -69,13 +69,20 @@ extension SharePayloadSnapshot {
 
     func androidJSONObject() throws -> Any {
         if let recipe {
-            return try JSONSerialization.jsonObject(with: JSONEncoder().encode(recipe))
+            var value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(recipe)) as? [String: Any] ?? [:]
+            value["steps"] = recipe.steps.enumerated().map { index, step in
+                var item: [String: Any] = ["stepNumber": index + 1, "instruction": step.instruction]
+                if let seconds = step.durationSeconds { item["durationSeconds"] = seconds }
+                return item
+            }
+            return value
         }
         guard let technique else { throw AuthServiceError.invalidResponse }
         var value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(technique)) as? [String: Any] ?? [:]
         value["doseG"] = technique.doseGrams; value["coffeeGrams"] = technique.doseGrams
         value["temperature"] = technique.temperatureC; value["grindClicks"] = technique.grindDescription
         value["method"] = technique.methodName
+        value["totalTimeSeconds"] = technique.steps.reduce(0) { $0 + $1.durationSeconds }
         var accumulatedWater = 0
         value["steps"] = technique.steps.enumerated().map { index, step in
             accumulatedWater += step.waterAddedMl
@@ -134,8 +141,10 @@ struct SocialShare: Codable, Identifiable, Equatable {
     let targetUserId: UUID?; let visibility: String; let name: String; let subtitle: String; let message: String
     let payloadSnapshot: SharePayloadSnapshot; let originalAuthorUserId: UUID?; let originalAuthorName: String?; let originalEntityId: UUID?
     let status: String; let createdAt: String; let updatedAt: String
+    var likeCount: Int? = nil
     enum CodingKeys: String, CodingKey {
         case id, visibility, name, subtitle, message, status
+        case likeCount = "like_count"
         case ownerId = "from_user_id", entityType = "entity_type", entityId = "entity_id", fromName = "from_name", fromHandle = "from_handle"
         case targetUserId = "target_user_id", payloadSnapshot = "payload_snapshot_json"
         case originalAuthorUserId = "original_author_user_id", originalAuthorName = "original_author_name", originalEntityId = "original_entity_id"
@@ -219,7 +228,7 @@ struct SocialService {
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
 
     func feed(accessToken: String) async throws -> [SocialShare] {
-        let (data, _) = try await request(path: "rest/v1/shares", query: "select=*&visibility=eq.public&status=eq.active&order=created_at.desc&limit=50", method: "GET", body: nil, accessToken: accessToken, prefer: nil)
+        let (data, _) = try await request(path: "rest/v1/shares", query: "select=*&visibility=eq.public&status=eq.active&order=created_at.desc&limit=30", method: "GET", body: nil, accessToken: accessToken, prefer: nil)
         return try JSONDecoder().decode([SocialShare].self, from: data)
     }
     func likedShareIds(userId: UUID, accessToken: String) async throws -> Set<UUID> {
@@ -240,12 +249,12 @@ struct SocialService {
         return Set(try JSONDecoder().decode([Reference].self, from: data).map(\.blockedUserId))
     }
     func inbox(userId: UUID, accessToken: String) async throws -> [SocialInboxItem] {
-        let query = "select=id,share_id,target_user_id,read_at,created_at,share:shares(*)&target_user_id=eq.\(userId.uuidString)&order=created_at.desc&limit=50"
+        let query = "select=id,share_id,target_user_id,read_at,created_at,share:shares(*)&target_user_id=eq.\(userId.uuidString)&order=created_at.desc&limit=30"
         let (data, _) = try await request(path: "rest/v1/inbox_items", query: query, method: "GET", body: nil, accessToken: accessToken, prefer: nil)
         return try JSONDecoder().decode([SocialInboxItem].self, from: data)
     }
     func activity(userId: UUID, accessToken: String) async throws -> [SocialActivity] {
-        let query = "select=*&user_id=eq.\(userId.uuidString)&order=created_at.desc&limit=100"
+        let query = "select=*&user_id=eq.\(userId.uuidString)&order=created_at.desc&limit=30"
         let (data, _) = try await request(path: "rest/v1/activity_log", query: query, method: "GET", body: nil, accessToken: accessToken, prefer: nil)
         return try JSONDecoder().decode([SocialActivity].self, from: data)
     }
@@ -272,11 +281,12 @@ struct SocialService {
         if let shareId { body["share_id"] = shareId.uuidString }; if let note { body["note"] = note }
         _ = try await request(path: "rest/v1/activity_log", query: nil, method: "POST", body: try JSONSerialization.data(withJSONObject: body), accessToken: accessToken, prefer: "return=minimal")
     }
-    func publish(entityType: String, entityId: UUID, fromName: String, fromHandle: String, name: String, subtitle: String, message: String, payload: SharePayloadSnapshot, visibility: String = "PUBLIC", targetUserId: UUID? = nil, originalAuthorUserId: UUID? = nil, originalAuthorName: String? = nil, originalEntityId: UUID? = nil, accessToken: String) async throws {
+    func publish(entityType: String, entityId: UUID, fromName: String, fromHandle: String, name: String, subtitle: String, message: String, payload: SharePayloadSnapshot, visibility: String = "PUBLIC", targetUserId: UUID? = nil, originalAuthorUserId: UUID? = nil, originalAuthorName: String? = nil, originalEntityId: UUID? = nil, sourceShareId: UUID? = nil, accessToken: String) async throws {
         try SocialContentPolicy.validate(fromName: fromName, fromHandle: fromHandle, name: name, subtitle: subtitle, message: message, payload: payload)
         guard visibility == "PUBLIC" || (visibility == "DIRECT" && targetUserId != nil) else { throw AuthServiceError.invalidResponse }
         let remoteVisibility = visibility == "DIRECT" ? "direct" : "public"
         var body: [String: Any] = ["entity_type": entityType, "entity_id": entityId.uuidString, "from_name": fromName, "from_handle": fromHandle, "visibility": remoteVisibility, "name": name, "subtitle": subtitle, "message": message, "payload_snapshot_json": try payload.androidJSONObject(), "original_entity_id": (originalEntityId ?? entityId).uuidString]
+        if let sourceShareId { body["source_share_id"] = sourceShareId.uuidString }
         if let targetUserId { body["target_user_id"] = targetUserId.uuidString }
         if let originalAuthorUserId { body["original_author_user_id"] = originalAuthorUserId.uuidString }
         if let originalAuthorName, !originalAuthorName.isEmpty { body["original_author_name"] = originalAuthorName }

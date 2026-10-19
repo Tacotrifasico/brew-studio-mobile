@@ -227,8 +227,8 @@ struct LabGoldenVerifier {
         await verifyAtomicTechniquePullRollback()
         await verifySafeSyncCheckpoint()
         await verifyConditionalUpdateContract()
-        await verifyStaleWriteProtection()
-        await verifyUnresolvedConflictRetention()
+        await verifyPrivateOutboxNeverSent()
+        // Whole-library conflict sync is deliberately disabled in local-first mode.
         verifyAndroidBackendContract()
         verifyLocalDataIsolation()
         verifyLocalAccountDeletion()
@@ -281,12 +281,12 @@ struct LabGoldenVerifier {
 
         await coordinator.sync(ownerId: owner, accessToken: "jwt")
 
-        guard case .failed = coordinator.state else { preconditionFailure("El pull incompleto no debió completarse") }
+        guard case .completed = coordinator.state else { preconditionFailure("El perfil no debió descargar técnicas privadas") }
         let request = NSFetchRequest<TechniqueRecord>(entityName: "TechniqueRecord")
         request.predicate = NSPredicate(format: "id == %@", techniqueId as CVarArg)
         precondition((try! context.count(for: request)) == 0)
-        precondition(defaults.object(forKey: "sync.lastSuccessfulAt.v2.\(owner.uuidString.lowercased())") == nil)
-        precondition(transport.requests.filter { $0.httpMethod == "GET" }.count == CoreSyncSchema.descriptors.count)
+        precondition(transport.requests.allSatisfy { $0.url?.path.hasSuffix("/profiles") == true })
+        precondition(transport.requests.filter { $0.httpMethod == "GET" }.count == CoreSyncSchema.cloudDescriptors.count)
     }
 
     private static func verify(name: String, input: LabState, extraction: Float, scores: [Int]) {
@@ -1043,9 +1043,11 @@ struct LabGoldenVerifier {
         let bean = CoffeeBeanRecord(context: context, name: "Local", brand: "Tostador", remainingQuantityGrams: 200); try! context.save()
         let defaults = UserDefaults(suiteName: "CupaEntitySyncVerifier.\(UUID().uuidString)")!
         let coordinator = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: nil, supabaseAnonKey: nil), defaults: defaults)
-        try! coordinator.enqueuePending(ownerId: owner); precondition(bean.ownerId == owner)
-        let outbox = try! context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")); precondition(outbox.count == 1)
-        let data = outbox[0].payloadJSON.data(using: .utf8)!; var row = (try! JSONSerialization.jsonObject(with: data) as! [[String: Any]])[0]
+        try! coordinator.enqueuePending(ownerId: owner); precondition(bean.ownerId == nil)
+        let outbox = try! context.fetch(NSFetchRequest<SyncOperationRecord>(entityName: "SyncOperationRecord")); precondition(outbox.isEmpty)
+        precondition(CoreSyncSchema.cloudDescriptors.map(\.table) == ["profiles"])
+        let beanDescriptor = CoreSyncSchema.descriptors.first { $0.entityName == "CoffeeBeanRecord" }!
+        let data = try! coordinator.encode(bean, descriptor: beanDescriptor, ownerId: owner); var row = (try! JSONSerialization.jsonObject(with: data) as! [[String: Any]])[0]
         precondition(row["user_id"] as? String == owner.uuidString)
         precondition(row["roaster"] as? String == "Tostador" && row["stock_grams"] as? Double == 200)
         precondition(row["owner_id"] == nil && row["brand"] == nil && row["remaining_quantity_grams"] == nil)
@@ -1069,7 +1071,26 @@ struct LabGoldenVerifier {
         await coordinator.sync(ownerId: owner, accessToken: "jwt")
         let key = "sync.lastSuccessfulAt.v2.\(owner.uuidString.lowercased())"
         precondition(defaults.object(forKey: key) as? Date == serverDate.addingTimeInterval(-300))
-        precondition(transport.requests.filter { $0.httpMethod == "GET" }.count == CoreSyncSchema.descriptors.count)
+        precondition(transport.requests.filter { $0.httpMethod == "GET" }.count == CoreSyncSchema.cloudDescriptors.count)
+    }
+
+    @MainActor private static func verifyPrivateOutboxNeverSent() async {
+        let persistence = PersistenceController(inMemory: true); let context = persistence.container.viewContext; let owner = UUID()
+        let bean = CoffeeBeanRecord(context: context, ownerId: owner, name: "Sólo local", brand: "Casa")
+        try! context.save()
+        let queue = SyncOutboxRepository(context: context)
+        try! queue.enqueue(entityName: "beans", entityId: bean.id, ownerId: owner, operation: .pendingCreate, payloadJSON: "[{}]")
+        let transport = VerifierTransport(responseData: Data("[]".utf8))
+        let coordinator = EntitySyncCoordinator(context: context, configuration: .init(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon"), transport: transport)
+        await coordinator.sync(ownerId: owner, accessToken: "jwt")
+        precondition(transport.requests.allSatisfy { $0.url?.path.hasSuffix("/profiles") == true && $0.httpMethod == "GET" })
+        precondition(bean.syncStatus != .synced && bean.name == "Sólo local")
+        precondition(try! queue.pendingCount(ownerId: owner) == 1)
+        // More than a page of old private operations must never starve profile sync.
+        for _ in 0..<110 { try! queue.enqueue(entityName: "beans", entityId: UUID(), ownerId: owner, operation: .pendingCreate, payloadJSON: "[{}]") }
+        try! queue.enqueue(entityName: "profiles", entityId: owner, ownerId: owner, operation: .pendingUpdate, payloadJSON: "[{}]")
+        precondition(try! queue.ready(ownerId: owner, tables: ["profiles"]).count == 1)
+        precondition(try! queue.pendingCount(ownerId: owner, tables: ["profiles"]) == 1)
     }
 
     @MainActor private static func verifyStaleWriteProtection() async {
@@ -1293,6 +1314,10 @@ struct LabGoldenVerifier {
         await pending.resendSignUpConfirmation()
         precondition(pending.state == .signedOut && pending.sessionNotice?.contains("Enviamos de nuevo") == true)
         precondition(pendingTransport.requests.allSatisfy { $0.value(forHTTPHeaderField: "apikey") == "sb_publishable_test_only" && $0.value(forHTTPHeaderField: "Authorization") == nil })
+        precondition(pendingTransport.requests[0].url?.absoluteString.contains("confirmed") == true)
+        let confirmation = configuration.authRedirectURL!.deletingLastPathComponent().appendingPathComponent("confirmed")
+        precondition(pending.handleAuthCallback(confirmation))
+        precondition(pending.tokens == nil && pending.passwordRecoveryState == .idle)
 
         let recoveryTransport = VerifierTransport(responseData: Data("{}".utf8))
         let recovery = AccountModel(configuration: configuration, transport: recoveryTransport, store: VerifierTokenStore(nil))

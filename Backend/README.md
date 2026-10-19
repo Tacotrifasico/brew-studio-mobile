@@ -1,105 +1,97 @@
-# Backend compartido · Cupa
+# Cupa · backend mínimo, biblioteca local
 
-## Estado verificado: 19 octubre 2026
+## Alcance vigente — 19 octubre 2026
 
-Proyecto autorizado: `qndojncusqmhoxnokgwb` (Cupa). Se confirmó vacío antes del
-despliegue: cero tablas públicas, cero usuarios, historial de migraciones vacío.
-Ahora tiene **23 tablas públicas, todas con RLS**, sin permisos de tabla anónimos,
-sin tablas ni funciones de IA. El asesor de seguridad de Supabase terminó sin
-hallazgos. No equivale a una auditoría exhaustiva ni a una prueba entre teléfonos.
+La biblioteca vive en Room (Android) y Core Data/SQLite (iOS). Guardar, editar,
+preparar, catar y abrir la app **no sube el Almacén**. No hay respaldo de la
+biblioteca en Supabase. Perder/desinstalar el almacenamiento local puede perder
+esos datos: exportar archivos antes; los respaldos del sistema operativo son
+independientes y no son un servicio de Cupa.
 
-Las claves están en configuración local ignorada por Git. Nunca copiar una
-`service_role`, clave secreta o contraseña a las apps. La publishable key se manda
-en `apikey`; `Authorization: Bearer` contiene el JWT de la persona, no esa clave.
+La nube sólo mantiene cuentas/perfiles y comunidad: publicaciones explícitas de
+recetas/técnicas, registro de creadores, likes, guardados, recibidos y seguridad
+social (bloqueos/reportes). Importar o crear variante guarda una copia profunda
+local con UUID nuevos, pasos completos y atribución; NO crea otra biblioteca remota.
+No implementar las antiguas RPC de copia remota: contradicen este alcance.
 
-### Migraciones reales de ESTE proyecto
+## Despliegue real
+
+Proyecto: `qndojncusqmhoxnokgwb`. Fuente única de migraciones:
+`Backend/supabase/migrations` en `ios-production-migration`.
 
 1. `20261019221912_initial_no_ai_schema.sql`
 2. `20261019221935_permissions_and_ownership.sql`
 3. `20261019222024_private_alias_lookup.sql`
+4. `20261019224346_local_first_community.sql`
+5. `20261019231331_snapshot_type_contract.sql`
 
-`Backend/supabase/migrations` es la fuente de verdad del nuevo proyecto compartido.
-Se generaron con Supabase CLI oficial **2.121.0**, se probaron en PostgreSQL efímero
-y se desplegaron mediante el conector administrativo autorizado. Los prefijos se
-reconciliaron con las versiones que ese conector registró en el servidor.
-La primera migración consolida los contratos históricos, omitiendo los artefactos
-de IA. La segunda cierra permisos y propiedad; la tercera deja la implementación
-privilegiada de búsqueda exacta de alias en el esquema privado, no en la API.
+Las primeras tres prepararon el esquema general; la cuarta cierra toda API de
+biblioteca privada sin borrar tablas ni datos. Existen 24 tablas públicas con
+RLS; sólo nueve tienen uso de cuenta/comunidad: `profiles`, `shares`,
+`community_creations`, `share_likes`, `share_saves`, `inbox_items`,
+`activity_log`, `blocked_users` y `content_reports`.
+Las 14 tablas de inventario/preparación quedan selladas para clientes;
+`brew_shares` es legado sellado. No hay buckets, Realtime ni IA activados por
+esta integración. No se creó otro proyecto ni se cambió de plan.
 
-**No ejecutar otra vez `supabase/migrations` de la raíz ni `001_brew_studio_schema.sql`
-de Android sobre este proyecto.** Esos archivos son historia/ensayos de actualización,
-no una segunda cola que deba aplicarse después del baseline. Tampoco editar o borrar
-el historial remoto para intentar sincronizarlo. Las próximas migraciones se crean
-con `supabase migration new <nombre> --workdir Backend` y se revisan antes de aplicar.
-No usar `db reset` contra un servidor con datos. No existe otro proyecto Staging
-aislado todavía; no confundir una configuración de compilación con otro servidor.
+No reaplicar `supabase/migrations` de la raíz ni el SQL inicial Android:
+son historial de upgrades, no una segunda cola tras este baseline.
+CLI oficial usado: 2.121.0. Generar cambios con
+`supabase migration new <nombre> --workdir Backend`. Los prefijos locales se
+reconciliaron con las versiones reales del conector administrativo.
+No usar reset, borrar tablas o reescribir migraciones ya aplicadas.
 
-## Datos y privacidad
+## Intercambio y autoría
 
-- Cuenta/perfil: `auth.users` y `profiles`. El alta crea perfil privado por defecto.
-  La metadata sólo propone nombre/alias; nunca permisos. Alias inválido o duplicado
-  recibe un alias de respaldo para no romper el registro.
-- Inventario: `beans`, `grinders`, `equipment`; café y ajustes por método viven en
-  `beans.brew_profiles` como JSONB (temperatura precisa en Celsius). `coffee_beans`
-  es un espejo interno para referencias iOS: el cliente no puede escribirlo.
-- Recetas: `recipes`, `recipe_ingredients`, `recipe_steps`.
-- Técnicas: `techniques`, `technique_steps`.
-- Preparación/cata: `brew_sessions`, `tastings`, `tasting_observations`, `cup_sessions`.
-  Una taza puede existir sin cata. Los campos precisos no fuerzan redondeo a °C entero.
-- Laboratorio: `lab_experiments`.
-- Comunidad: `shares`, `share_likes`, `share_saves`, `inbox_items`, `activity_log`,
-  `blocked_users`, `content_reports`. `brew_shares` queda sellada por compatibilidad;
-  las apps actuales usan `shares`, no ambas tablas.
+`shares.entity_id` identifica el registro LOCAL de origen: no necesita fila en
+`recipes`/`techniques` remotas. El snapshot es plano y autónomo; no contiene
+granos, equipo, catas ni el inventario. Cada receta incluye ingredientes/pasos;
+cada técnica incluye cantidades, tiempos, acumulados y ajustes de preparación.
 
-El inventario y los hijos de recetas/técnicas son privados incluso si hay una
-publicación. Compartir entrega un snapshot separado, no acceso al inventario.
-Los envíos directos sólo los leen emisor y destinatario. Los bloqueos se respetan
-en ambos sentidos sin exponer la lista privada de bloqueos. Volver privado un perfil
-oculta también sus publicaciones públicas anteriores. Guardados y reportes son
-privados; un usuario no puede moderar sus propios reportes. El buzón sólo permite
-al destinatario editar `read_at`. Las referencias entre entidades exigen mismo dueño.
-`resolve_profile_alias(alias_input)` resuelve un alias exacto con sesión, no enumera
-perfiles y no revela correos. Implementación privilegiada en `private`, API invoker.
+El servidor valida el agregado, deriva publicador/alias desde su perfil y registra
+una creación inmutable en `community_creations`. No confía en el nombre/autor que
+mande el cliente. Una copia compartida incluye `source_share_id`; el servidor
+comprueba acceso al origen y conserva el creador original. El publicador de una
+variante sigue identificado por su propia cuenta. No puede falsificarse otro
+creador sin una publicación accesible. Si el origen fue retirado o bloqueado,
+volver a publicarlo puede rechazarse; la copia local no se borra.
 
-## Pruebas reproducibles
+Los likes son idempotentes, con contador mantenido por trigger. La identidad de
+quienes dieron like no se expone a otros usuarios. Un envío directo no aparece a
+terceros. Bloqueos simétricos, perfiles privados, reportes privados y buzón con
+edición restringida a `read_at` siguen protegidos por RLS y grants explícitos.
 
-Desde `Tools`: `npm run verify-production-backend` (PGlite 0.3.14 ya fijado).
-Prueba instalación limpia y **31 comprobaciones** sin regalar permisos a los roles
-de prueba: perfil automático, propietarios falsos, hijos ajenos, temperaturas
-precisas, taza sin cata, público/directo, buzón, guardados, bloqueos, privacidad y
-acceso anónimo. No sustituye las pruebas históricas de upgrades.
+## Contención de consumo
 
-`verify-live-rls.sql` se ejecutó contra el proyecto real: aprobado. Simula tres
-identidades con roles SQL; crea datos dentro de una transacción y hace **ROLLBACK**.
-No manda correos ni deja cuentas ficticias. También comprueba eliminación de
-destinatario sin romper las referencias. La consulta posterior confirmó cero
-usuarios y cero perfiles de prueba. No es una prueba de Auth con JWT reales.
+- Sólo publicación explícita; nunca sincronización de biblioteca al ingresar.
+- Máximo 64 KiB de snapshot, 80 pasos/ingredientes y 30 publicaciones por hora/cuenta.
+- Consultas de comunidad acotadas a 30 elementos por carga; no descarga ilimitada.
+- Likes con índice único y contador: no descargar todas las personas para contarlos.
+- No fotos/archivos en Storage, suscripciones Realtime ni servicios de generación.
+- Las copias importadas y los ajustes BARC por grano/método permanecen locales.
 
-## Aún NO significa «apps completamente online»
+Estas medidas NO son un límite monetario del proveedor. Antes de beta pública
+revisar tráfico real, tamaño de snapshots, retención, límites/alertas del plan y SMTP.
+No prometer costo cero o un importe fijo sin medir usuarios y transferencia.
 
-Pendientes explícitos para ambas plataformas:
+## Evidencia y pendientes reales
 
-1. Configurar/verificar confirmación de correo, recuperación y redirects nativos.
-   No se desactivó confirmación ni se contrató SMTP. No hay cuentas reales creadas.
-2. Android: renovación/almacenamiento seguro de sesión, push/pull y outbox completos
-   para inventario, recetas con hijos, tazas, catas y laboratorio. iOS conserva su
-   coordinador, pero necesita ensayo real de sesión/conflictos y agregados completos.
-3. Mapear `brew_profiles` en ambos clientes; la columna existe, pero los ajustes
-   por grano/método todavía se conservan localmente y no deben anunciarse sincronizados.
-4. Las cuatro RPC de importar/crear variante con padre+hijos **no están desplegadas**.
-   Deben validar snapshots y realizar copia profunda transaccional; nunca éxito parcial.
-5. Desplegar/verificar `delete-account` (no se desplegó ninguna Edge Function aquí).
-   Storage de fotos/archivos tampoco se configuró ni se publicó un bucket abierto.
-6. Dos cuentas reales, Android ↔ iPhone, registro/login, confirmación, intercambio,
-   importación/variante, reinicio, offline, cambio de cuenta y conflictos.
+`npm run verify-production-backend` desde Tools: 31 pruebas del baseline histórico
+más 33 del alcance local-first, sin regalar grants a roles de prueba.
+`verify-live-rls.sql`: aprobado contra el servidor real con roles A/B/C;
+todos los usuarios/publicaciones de prueba se revierten con ROLLBACK, sin emails.
+Asesor de seguridad sin hallazgos tras la migración.
 
-No se cambió UI en esta fase ni se realizó validación visual física. Compilar los
-clientes con la configuración local ya pasó en la fase anterior; eso no demuestra
-que los flujos remotos pendientes funcionen. Ver `AXCIS_BACKEND_HANDOFF.md`.
+iOS sólo encola/transfiere `profiles`; operaciones antiguas de inventario quedan
+intactas, no se envían ni se marcan sincronizadas. Android no sube/descarga técnicas
+privadas; publicar acepta el UUID local. Los estados internos heredados PENDING no
+implican una futura subida ni se muestran como error de almacenamiento.
 
-## Operación
-
-No quitar índices porque el asesor los marque «sin uso» en una base recién creada:
-todavía no hay tráfico real para medirlos. Antes de una beta pública, revisar copias
-de seguridad/restauración, límites del plan, SMTP, moderación y política de privacidad.
-Mantener las dos apps contra el mismo contrato y evitar cambios destructivos.
+Pendiente operativo, no confundir con un resultado probado:
+- Auth: cinco redirects nativos exactos ya guardados con aprobación del propietario,
+  sin localhost ni comodines. Falta proveedor/remitente SMTP. No se desactivó
+  confirmación ni se contrató un servicio. La sesión del panel caducó tras revisar SMTP.
+- Registro/login real con correos confirmados, JWT renovado y prueba en dos teléfonos.
+  No se crearon contraseñas ni se enviaron correos al propietario.
+- Función delete-account desplegada (SDK 2.118.0 fijado): rechaza sin JWT o JWT inválido con 401. Falta ensayo autenticado de eliminación antes de beta pública.
+- No hay validación visual física de esta fase; compilar no demuestra UX real.

@@ -1114,7 +1114,7 @@ struct LabView: View {
         .confirmationDialog("¿Eliminar este experimento?", isPresented: Binding(get: { deletingExperiment != nil }, set: { if !$0 { deletingExperiment = nil } }), titleVisibility: .visible) {
             Button("Eliminar experimento", role: .destructive) { if let experiment = deletingExperiment { deleteExperiment(experiment) }; deletingExperiment = nil }
             Button("Cancelar", role: .cancel) { deletingExperiment = nil }
-        } message: { Text("Se retirará del historial local y la eliminación se sincronizará cuando haya conexión.") }
+        } message: { Text("Se retirará del historial de este dispositivo.") }
     }
 
     private var baseDataCard: some View {

@@ -1,66 +1,55 @@
--- SQL role simulation against the deployed project. No email is sent and ALL
--- fixtures are rolled back, including auth.users. Not a substitute for JWT/device tests.
+-- Local-first contract. Disposable fixtures are ALL rolled back; no email is sent.
 begin;
 do $$
 declare a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid(); c uuid:=gen_random_uuid();
-  bean uuid:=gen_random_uuid(); recipe uuid:=gen_random_uuid(); shared uuid:=gen_random_uuid();
-  direct uuid:=gen_random_uuid(); rejected boolean;
+ publication uuid:=gen_random_uuid(); direct uuid:=gen_random_uuid(); replica uuid:=gen_random_uuid();
+ payload jsonb:='{"name":"Prueba","recipeKind":"BLACK_COFFEE","ingredients":[{"name":"Café","amount":15,"unit":"g"}],"steps":[{"stepNumber":1,"instruction":"Preparar"}]}';
+ t text; rejected boolean;
 begin
-  insert into auth.users(id,email,raw_user_meta_data) values
-    (a,a::text||'@example.invalid',jsonb_build_object('display_name','Test A','handle','test_'||replace(a::text,'-',''))),
-    (b,b::text||'@example.invalid',jsonb_build_object('display_name','Test B','handle','test_'||replace(b::text,'-',''))),
-    (c,c::text||'@example.invalid',jsonb_build_object('display_name','Test C','handle','test_'||replace(c::text,'-','')));
-  if (select count(*) from public.profiles where id in(a,b,c) and is_private)<>3 then raise exception 'Profile provisioning failed'; end if;
-  perform set_config('request.jwt.claim.sub',a::text,true);
-  set local role authenticated;
-  insert into public.beans(id,name,stock_grams,brew_profiles) values(bean,'Test grain',250,'{"v60":{"clicks":22,"temperatureC":90.5555555556}}');
-  insert into public.recipes(id,name) values(recipe,'Test recipe');
-  insert into public.recipe_steps(recipe_id,instruction,step_number) values(recipe,'Test step',1);
-  insert into public.cup_sessions(precise_temperature_c) values(90.5555555556);
-  update public.profiles set is_private=false where id=a;
-  insert into public.shares(id,entity_type,entity_id,from_name,from_handle,name,payload_snapshot_json)
-    values(shared,'recipe',recipe,'Test A','test_'||replace(a::text,'-',''),'Test public','{}');
-  insert into public.shares(id,entity_type,entity_id,from_name,from_handle,name,payload_snapshot_json,visibility,target_user_id)
-    values(direct,'recipe',recipe,'Test A','test_'||replace(a::text,'-',''),'Test direct','{}','direct',b);
-  perform set_config('request.jwt.claim.sub',b::text,true);
-  if exists(select 1 from public.beans where id=bean) then raise exception 'Private bean leaked'; end if;
-  if exists(select 1 from public.recipe_steps where recipe_id=recipe) then raise exception 'Private steps leaked'; end if;
-  update public.beans set name='Intrusion' where id=bean;
-  if found then raise exception 'Cross-account update allowed'; end if;
-  rejected:=false;
-  begin insert into public.recipe_steps(recipe_id,instruction,step_number) values(recipe,'Intrusion',2);
-  exception when foreign_key_violation then rejected:=true; end;
-  if not rejected then raise exception 'Cross-account parent accepted'; end if;
-  if (select count(*) from public.shares where id in(shared,direct))<>2 then raise exception 'Share visibility failed'; end if;
-  if (select count(*) from public.inbox_items where share_id=direct and target_user_id=b)<>1 then raise exception 'Inbox trigger failed'; end if;
-  update public.inbox_items set read_at=now() where share_id=direct;
-  rejected:=false;
-  begin update public.inbox_items set target_user_id=c where share_id=direct;
-  exception when insufficient_privilege then rejected:=true; end;
-  if not rejected then raise exception 'Inbox retargeting allowed'; end if;
-  insert into public.share_saves(share_id) values(shared);
-  perform set_config('request.jwt.claim.sub',c::text,true);
-  if exists(select 1 from public.shares where id=direct) then raise exception 'Direct share leaked to third party'; end if;
-  if exists(select 1 from public.share_saves where share_id=shared) then raise exception 'Private save leaked'; end if;
-  perform set_config('request.jwt.claim.sub',b::text,true);
-  insert into public.blocked_users(blocked_user_id) values(a);
-  if exists(select 1 from public.shares where id in(shared,direct)) then raise exception 'Block did not hide shares'; end if;
-  perform set_config('request.jwt.claim.sub',a::text,true);
-  if exists(select 1 from public.resolve_profile_alias('test_'||replace(b::text,'-',''))) then raise exception 'Reverse block bypassed in alias lookup'; end if;
-  update public.profiles set is_private=true where id=a;
-  perform set_config('request.jwt.claim.sub',c::text,true);
-  if exists(select 1 from public.shares where id=shared) then raise exception 'Private profile public share leaked'; end if;
-  reset role;
-  -- Account deletion must preserve FK integrity (still inside rollback-only fixtures).
-  delete from auth.users where id=b;
-  if exists(select 1 from public.shares where id=direct) then raise exception 'Deleted recipient direct share orphaned'; end if;
-  perform set_config('request.jwt.claim.sub','',true);
-  set local role anon;
-  rejected:=false;
-  begin perform 1 from public.beans limit 1;
-  exception when insufficient_privilege then rejected:=true; end;
-  if not rejected then raise exception 'Anonymous inventory access allowed'; end if;
-  reset role;
+ insert into auth.users(id,email,raw_user_meta_data) values
+ (a,a::text||'@example.invalid',jsonb_build_object('display_name','Test A','handle','test_'||replace(a::text,'-',''))),
+ (b,b::text||'@example.invalid',jsonb_build_object('display_name','Test B','handle','test_'||replace(b::text,'-',''))),
+ (c,c::text||'@example.invalid',jsonb_build_object('display_name','Test C','handle','test_'||replace(c::text,'-','')));
+ perform set_config('request.jwt.claim.sub',a::text,true); set local role authenticated;
+ foreach t in array array['beans','coffee_beans','grinders','equipment','recipes','recipe_ingredients','recipe_steps','techniques','technique_steps','brew_sessions','tastings','tasting_observations','cup_sessions','lab_experiments'] loop
+   rejected:=false;
+   begin execute format('select 1 from public.%I limit 1',t);
+   exception when insufficient_privilege then rejected:=true; end;
+   if not rejected then raise exception 'Library table % still exposed',t; end if;
+ end loop;
+ update public.profiles set is_private=false where id=a;
+ insert into public.shares(id,entity_type,entity_id,from_name,from_handle,name,payload_snapshot_json)
+ values(publication,'recipe',gen_random_uuid(),'Fake','fake','Prueba',payload);
+ if not exists(select 1 from public.shares where id=publication and from_name='Test A' and original_author_user_id=a) then raise exception 'Creator not derived from account'; end if;
+ insert into public.shares(id,entity_type,entity_id,from_name,from_handle,name,payload_snapshot_json,visibility,target_user_id)
+ values(direct,'recipe',gen_random_uuid(),'Fake','fake','Directo',payload,'direct',b);
+ perform set_config('request.jwt.claim.sub',b::text,true);
+ insert into public.share_likes(share_id) values(publication) on conflict do nothing;
+ insert into public.share_likes(share_id) values(publication) on conflict do nothing;
+ if not exists(select 1 from public.shares where id=publication and like_count=1) then raise exception 'Duplicate likes changed count'; end if;
+ insert into public.shares(id,entity_type,entity_id,from_name,from_handle,name,payload_snapshot_json,visibility,target_user_id,source_share_id)
+ values(replica,'recipe',gen_random_uuid(),'Fake','fake','Variante',payload,'direct',a,publication);
+ if not exists(select 1 from public.shares where id=replica and original_author_user_id=a and original_author_name='Test A' and from_user_id=b) then raise exception 'Copy lost original author'; end if;
+ if (select count(*) from public.inbox_items where share_id=direct)<>1 then raise exception 'Direct inbox missing'; end if;
+ update public.inbox_items set read_at=now() where share_id=direct;
+ rejected:=false;
+ begin update public.shares set like_count=500 where id=publication;
+ exception when insufficient_privilege then rejected:=true; end;
+ if not rejected then raise exception 'Like counter write allowed'; end if;
+ perform set_config('request.jwt.claim.sub',c::text,true);
+ if exists(select 1 from public.shares where id in(direct,replica)) then raise exception 'Third party sees direct share'; end if;
+ perform set_config('request.jwt.claim.sub',b::text,true);
+ insert into public.blocked_users(blocked_user_id) values(a);
+ if exists(select 1 from public.shares where id in(direct,publication)) then raise exception 'Block bypassed'; end if;
+ perform set_config('request.jwt.claim.sub',a::text,true);
+ if exists(select 1 from public.resolve_profile_alias('test_'||replace(b::text,'-',''))) then raise exception 'Reverse block bypassed'; end if;
+ update public.profiles set is_private=true where id=a;
+ perform set_config('request.jwt.claim.sub',b::text,true);
+ delete from public.share_likes where share_id=publication;
+ reset role;
+ if (select like_count from public.shares where id=publication)<>0 then raise exception 'Unlike hidden share failed'; end if;
+ if exists(select 1 from public.recipes where owner_id in(a,b,c)) then raise exception 'Private recipe copied into cloud'; end if;
+ if (select count(*) from public.community_creations where creator_id=a)<>2 then raise exception 'Creator registry mismatch'; end if;
 end $$;
-select 'PASS: deployed RLS, profile trigger, cups, precision, child ownership, public/direct shares, inbox, private saves, symmetric blocks, profile privacy, deletion, anonymous denial' as verification;
+select 'PASS: local-only library, account-derived creator, public/direct snapshots, original attribution, inbox, idempotent likes, protected counts, symmetric blocks; all fixtures rolled back' as verification;
 rollback;

@@ -11,7 +11,7 @@ await db.exec(`create role authenticated; create role anon; create schema auth;
   create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');
   create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
   grant usage on schema auth to authenticated,anon; grant execute on function auth.uid() to authenticated,anon;`);
-for(const f of (await readdir(path.join(root,'Backend/supabase/migrations'))).filter(f=>f.endsWith('.sql')).sort()) {
+for(const f of (await readdir(path.join(root,'Backend/supabase/migrations'))).filter(f=>f.endsWith('.sql')&&!f.includes('local_first_community')&&!f.includes('snapshot_type_contract')).sort()) {
   const sql=await readFile(path.join(root,'Backend/supabase/migrations',f),'utf8');
   assert(!/ai_request|consume_ai|gemini/i.test(sql),'No AI artifacts in the production schema');
   await db.exec(sql.replace(/create extension if not exists pgcrypto;/gi,''));
@@ -79,5 +79,7 @@ await deny(`select * from public.resolve_profile_alias('ana')`,'Anonymous alias 
 await db.exec('reset role');
 await ok(`select count(*)::int as n from pg_tables where schemaname='public' and not rowsecurity`,[{n:0}],'Every public table has RLS');
 await ok(`select count(*)::int as n from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private') and p.prosecdef and has_function_privilege('anon',p.oid,'execute')`,[{n:0}],'No anonymous SECURITY DEFINER function');
-await db.exec('rollback'); await db.close();
+await db.exec('rollback');
+await import('./LocalFirstBackendChecks.mjs').then(m=>m.verifyLocalFirst(db,root));
+await db.close();
 console.log(`PASS ${checks} production-contract checks (fresh PostgreSQL, actual grants; no remote writes)`);

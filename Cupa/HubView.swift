@@ -250,7 +250,7 @@ struct HubView: View {
                         .disabled(copyOperationsInFlight.contains(copyOperationKey(share, mode: .forked)))
                 } label: { Label("Añadir", systemImage: "square.and.arrow.down") }
                 if inboxItem == nil {
-                    Button { toggleLike(share) } label: { Image(systemName: likedShareIds.contains(share.id) ? "heart.fill" : "heart").accessibilityLabel(likedShareIds.contains(share.id) ? "Quitar Me gusta" : "Me gusta") }
+                    Button { toggleLike(share) } label: { Label("\(share.likeCount ?? 0)", systemImage: likedShareIds.contains(share.id) ? "heart.fill" : "heart").font(.caption).accessibilityLabel("\(share.likeCount ?? 0) Me gusta") }
                         .frame(minWidth: 44, minHeight: 44)
                 }
                 Menu {
@@ -302,7 +302,7 @@ struct HubView: View {
         do {
             let repository = ProfileRepository(context: context)
             _ = try repository.save(ownerId: tokens.userId, displayName: displayName, alias: alias, biography: biography, avatarColor: avatarColor, favoriteMethods: favoriteMethods, isPrivate: isPrivate)
-            message = "Perfil guardado; se sincronizará con protección de conflictos."
+            message = "Perfil guardado. Tu biblioteca sigue en este dispositivo."
             synchronize()
         } catch { context.rollback(); message = error.localizedDescription }
     }
@@ -320,6 +320,7 @@ struct HubView: View {
                 async let blocks = SocialService(configuration: account.configuration).blockedUserIds(userId: userId, accessToken: token)
                 return try await (feed, inbox, activity, likes, saves, blocks)
             }
+            guard account.tokens?.userId == userId else { return }
             feed = result.0; inbox = result.1; activity = result.2; likedShareIds = result.3; savedShareIds = result.4; blockedUserIds = result.5
         } catch {
             socialLoadError = account.configuration.isSupabaseConfigured
@@ -344,7 +345,7 @@ struct HubView: View {
             let snapshot = SharedRecipeSnapshot(name: draft.name, recipeKind: draft.recipeKind, intention: draft.intention, suggestedMethodName: draft.suggestedMethodName, tags: draft.tags, ingredients: draft.ingredients.map { .init(name: $0.name, amount: $0.amount, unit: $0.unit) }, steps: draft.steps.map { .init(instruction: $0.instruction, durationSeconds: $0.durationSeconds) })
             let payload = SharePayloadSnapshot(kind: "recipe", recipe: snapshot, technique: nil)
             socialAction(successMessage: visibility == "DIRECT" ? "Fórmula enviada al buzón." : "Receta publicada.") { service, token in
-                try await service.publish(entityType: "recipe", entityId: recipe.id, fromName: displayName, fromHandle: alias, name: recipe.name, subtitle: recipe.intention, message: message, payload: payload, visibility: visibility, targetUserId: targetUserId, originalAuthorUserId: recipe.originalAuthorUserId, originalAuthorName: recipe.originalAuthorName, originalEntityId: recipe.originalEntityId, accessToken: token)
+                try await service.publish(entityType: "recipe", entityId: recipe.id, fromName: displayName, fromHandle: alias, name: recipe.name, subtitle: recipe.intention, message: message, payload: payload, visibility: visibility, targetUserId: targetUserId, originalAuthorUserId: recipe.originalAuthorUserId, originalAuthorName: recipe.originalAuthorName, originalEntityId: recipe.originalEntityId, sourceShareId: recipe.importedFromShareId, accessToken: token)
                 try? await service.logActivity(action: "share_recipe", entityType: "recipe", entityId: recipe.id, note: visibility == "DIRECT" ? "Enviaste \(recipe.name) directamente" : "Publicaste \(recipe.name)", accessToken: token)
             }
         } catch { self.message = error.localizedDescription }
@@ -355,12 +356,15 @@ struct HubView: View {
             let snapshot = SharedTechniqueSnapshot(name: draft.name, methodName: draft.methodName, doseGrams: draft.doseGrams, waterMl: draft.waterMl, ratio: draft.ratio, temperatureC: draft.temperatureC, executionMode: draft.executionMode, grindValue: draft.grindValue, grindDescription: draft.grindDescription, grindUnit: draft.grindUnit, notes: draft.notes, techniqueDescription: draft.techniqueDescription, steps: draft.steps.map { .init(title: $0.title, durationSeconds: $0.durationSeconds, waterAddedMl: $0.waterAddedMl, intensity: $0.intensity, gesture: $0.gesture, note: $0.note) })
             let payload = SharePayloadSnapshot(kind: "technique", recipe: nil, technique: snapshot)
             socialAction(successMessage: visibility == "DIRECT" ? "Técnica enviada al buzón." : "Técnica publicada.") { service, token in
-                try await service.publish(entityType: "technique", entityId: technique.id, fromName: displayName, fromHandle: alias, name: technique.name, subtitle: technique.methodName, message: message, payload: payload, visibility: visibility, targetUserId: targetUserId, originalAuthorUserId: technique.originalAuthorUserId, originalAuthorName: technique.originalAuthorName, originalEntityId: technique.originalEntityId, accessToken: token)
+                try await service.publish(entityType: "technique", entityId: technique.id, fromName: displayName, fromHandle: alias, name: technique.name, subtitle: technique.methodName, message: message, payload: payload, visibility: visibility, targetUserId: targetUserId, originalAuthorUserId: technique.originalAuthorUserId, originalAuthorName: technique.originalAuthorName, originalEntityId: technique.originalEntityId, sourceShareId: technique.importedFromShareId, accessToken: token)
                 try? await service.logActivity(action: "share_technique", entityType: "technique", entityId: technique.id, note: visibility == "DIRECT" ? "Enviaste \(technique.name) directamente" : "Publicaste \(technique.name)", accessToken: token)
             }
         } catch { self.message = error.localizedDescription }
     }
     private func copyShare(_ share: SocialShare, mode: SocialCopyMode) {
+        guard let uid = account.tokens?.userId, share.visibility.lowercased() != "direct" || share.ownerId == uid || share.targetUserId == uid else {
+            message = "Esta publicación no pertenece a la cuenta actual."; return
+        }
         let operationKey = copyOperationKey(share, mode: mode)
         guard copyOperationsInFlight.insert(operationKey).inserted else {
             message = mode == .forked ? "Esta variante ya se está guardando." : "Esta copia ya se está guardando."
@@ -369,8 +373,8 @@ struct HubView: View {
         do {
             try SocialService(configuration: account.configuration).importShare(share, mode: mode, context: context)
             message = mode == .forked
-                ? "Variante guardada en este iPhone. Sincronizando…"
-                : "Fórmula guardada en este iPhone. Sincronizando…"
+                ? "Variante guardada en este dispositivo con su autoría."
+                : "Copia guardada en este dispositivo con su autoría."
             Task {
                 do {
                     try await account.authenticated { token in
@@ -379,12 +383,12 @@ struct HubView: View {
                         try await service.logActivity(action: mode == .forked ? "fork_share" : "import_share", entityType: share.entityType, entityId: share.entityId, shareId: share.id, note: mode == .forked ? "Creaste una variante de \(share.name)" : "Registraste una copia de \(share.name)", accessToken: token)
                     }
                     message = mode == .forked
-                        ? "Variante guardada y sincronizada con atribución."
-                        : "Fórmula guardada y sincronizada con atribución."
+                        ? "Variante guardada en este dispositivo con su autoría."
+                        : "Copia guardada en este dispositivo con su autoría."
                 } catch {
                     message = mode == .forked
-                        ? "Variante guardada en este iPhone; quedó pendiente de sincronizar."
-                        : "Fórmula guardada en este iPhone; quedó pendiente de sincronizar."
+                        ? "Variante guardada en este dispositivo. No se pudo marcar la publicación como guardada."
+                        : "Copia guardada en este dispositivo. No se pudo marcar la publicación como guardada."
                 }
                 copyOperationsInFlight.remove(operationKey)
                 await loadSocialData()
@@ -448,7 +452,7 @@ struct HubView: View {
                 await coordinator.sync(ownerId: refreshed.userId, accessToken: refreshed.accessToken)
             }
             switch coordinator.state {
-            case .completed: message = "Datos sincronizados."
+            case .completed: message = "Perfil actualizado. Tu biblioteca sigue en este dispositivo."
             case .offline: message = "Sin backend: los cambios siguen guardados offline."
             case let .waitingRetry(count): message = "\(count) \(count == 1 ? "cambio local sigue pendiente" : "cambios locales siguen pendientes") de sincronizar."
             case let .failed(error): message = error

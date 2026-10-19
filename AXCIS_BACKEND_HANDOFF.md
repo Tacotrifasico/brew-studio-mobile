@@ -6,6 +6,12 @@ Actualización 2026-10-19: Codex realizará la integración solicitada por el pr
 Los nombres históricos de esta guía y de los marcadores no implican que se deba
 esperar a Axcis. Tener el proyecto Supabase creado no significa que las apps estén
 online: faltan configuración, despliegue y las verificaciones P0/P1 de abajo.
+Servidor inicial desplegado el 19 de octubre de 2026 en `qndojncusqmhoxnokgwb`:
+23 tablas con RLS y pruebas SQL reales aprobadas. [Backend/README.md](Backend/README.md)
+detalla el historial aplicado y los pendientes; esto NO declara las apps online.
+La cola para este nuevo proyecto está en `Backend/supabase/migrations`; no volver
+a aplicar la cola histórica de la raíz ni la inicial de Android sobre ese servidor.
+
 No usar IA: las recomendaciones son deterministas y locales. No desplegar ni
 activar funciones de Gemini que permanezcan como archivos históricos.
 
@@ -15,7 +21,7 @@ activar funciones de Gemini que permanezcan como archivos históricos.
 - Android vigente: rama `main`.
 - iOS vigente: rama `ios-production-migration`.
 - Contrato canónico: `profiles`, `beans`, `grinders`, `equipment`, `recipes`, `recipe_ingredients`, `recipe_steps`, `techniques`, `technique_steps`, `shares`, `share_likes`, `share_saves`, `inbox_items`, `activity_log`, `blocked_users` y `content_reports`.
-- Migraciones canónicas: `supabase/migrations` de `ios-production-migration`, en orden lexicográfico. No aplicar únicamente el SQL inicial de Android sobre producción.
+- Migraciones del proyecto nuevo: `Backend/supabase/migrations` de `ios-production-migration`. La carpeta raíz `supabase/migrations` conserva los upgrades históricos y sus ensayos, no se reaplica sobre el nuevo baseline.
 - Identidad compartida: `auth.users.id`; propiedad privada mediante `user_id`; UUID estable por entidad.
 - Las técnicas pertenecen al **Almacén**. Preparar y Laboratorio son puntos de creación/uso, no almacenes alternos.
 
@@ -39,7 +45,7 @@ activar funciones de Gemini que permanezcan como archivos históricos.
 
 ## P1 — núcleo social antes de beta pública
 
-- Desplegar y conectar en Android la resolución de destinatarios por alias; el usuario no debe copiar UUID. La RPC `resolve_profile_id_by_alias` ya existe en la migración `202609050008_direct_recipient_alias.sql` y está verificada en PostgreSQL efímero; falta validarla en Staging con JWT reales.
+- Conectar en Android la resolución de destinatarios por alias; el usuario no debe copiar UUID. La RPC real es `resolve_profile_alias(alias_input)` (no `resolve_profile_id_by_alias`). Ya está desplegada y probada con roles SQL en el proyecto nuevo; falta el ensayo con JWT reales y teléfonos.
 - Muro público: publicar receta y técnica, ver autor, atribución y snapshot completo.
 - Envío directo: crear `share` de visibilidad `direct`, generar `inbox_item` y permitir al receptor marcarlo leído.
 - Importar crea una copia profunda con UUID nuevos y `copy_mode=IMPORT`.

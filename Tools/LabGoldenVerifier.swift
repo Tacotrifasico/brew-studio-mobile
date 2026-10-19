@@ -1264,7 +1264,8 @@ struct LabGoldenVerifier {
     }
 
     @MainActor private static func verifySessionRecovery() async {
-        let configuration = AppConfiguration(supabaseURL: URL(string: "https://project.supabase.co")!, supabaseAnonKey: "public-anon")
+        let configuration = AppConfiguration(environment: ["SUPABASE_URL": "https://project.supabase.co", "SUPABASE_ANON_KEY": "sb_publishable_test_only"])
+        precondition(configuration.isSupabaseConfigured)
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let expired = AuthTokens(accessToken: "old", refreshToken: "refresh", expiresAt: now.addingTimeInterval(-1), userId: UUID(), email: "brew@example.com")
 
@@ -1283,18 +1284,22 @@ struct LabGoldenVerifier {
 
         let pendingData = Data("{\"id\":\"33333333-3333-4333-8333-333333333333\",\"email\":\"new@example.com\"}".utf8)
         let pendingStore = VerifierTokenStore(nil)
-        let pending = AccountModel(configuration: configuration, transport: VerifierTransport(responseData: pendingData), store: pendingStore)
+        let pendingTransport = VerifierTransport(responseData: pendingData)
+        let pending = AccountModel(configuration: configuration, transport: pendingTransport, store: pendingStore)
         await pending.signUp(email: "new@example.com", password: "password123")
         precondition(pending.state == .signedOut && pendingStore.value == nil)
         precondition(pending.sessionNotice?.contains("confirma tu correo") == true)
         precondition(pending.pendingConfirmationEmail == "new@example.com")
         await pending.resendSignUpConfirmation()
         precondition(pending.state == .signedOut && pending.sessionNotice?.contains("Enviamos de nuevo") == true)
+        precondition(pendingTransport.requests.allSatisfy { $0.value(forHTTPHeaderField: "apikey") == "sb_publishable_test_only" && $0.value(forHTTPHeaderField: "Authorization") == nil })
 
         let recoveryTransport = VerifierTransport(responseData: Data("{}".utf8))
         let recovery = AccountModel(configuration: configuration, transport: recoveryTransport, store: VerifierTokenStore(nil))
         await recovery.recover(email: "maybe@example.com")
         precondition(recovery.state == .signedOut)
+        precondition(recoveryTransport.requests[0].value(forHTTPHeaderField: "apikey") == "sb_publishable_test_only")
+        precondition(recoveryTransport.requests[0].value(forHTTPHeaderField: "Authorization") == nil)
         precondition(recovery.sessionNotice?.contains("Si existe una cuenta") == true)
         precondition(URLComponents(url: recoveryTransport.requests[0].url!, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "redirect_to" && $0.value == "com.tacotrifasico.cupa://auth/recovery" }) == true)
         let callback = URL(string: "com.tacotrifasico.cupa://auth/recovery#access_token=recovery-jwt&refresh_token=refresh&expires_in=3600&type=recovery")!

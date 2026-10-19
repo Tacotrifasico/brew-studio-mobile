@@ -9,3 +9,4 @@ node_modules/
 !.env.example
 Config/*.local.xcconfig
 supabase/.temp/
+Backend/supabase/.temp/

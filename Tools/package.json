@@ -3,6 +3,7 @@
   "type": "module",
   "scripts": {
     "verify-backend": "node BackendMigrationVerifier.mjs",
+    "verify-production-backend": "node ProductionBackendVerifier.mjs",
     "verify-gemini": "node GeminiPolicyVerifier.mjs"
   },
   "devDependencies": {

@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify-backend": "node BackendMigrationVerifier.mjs",
+    "verify-production-backend": "node ProductionBackendVerifier.mjs",
+    "verify-gemini": "node GeminiPolicyVerifier.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.14"
+  }
+}

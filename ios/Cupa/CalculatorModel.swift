@@ -1,0 +1,302 @@
+import Foundation
+
+enum RatioCategory {
+    case espresso, intense, balance, clarity
+
+    var label: String {
+        switch self {
+        case .espresso: "Espresso · Corto e intenso"
+        case .intense: "Intenso · Dulce y marcado"
+        case .balance: "Balance · Redondo y dulce"
+        case .clarity: "Claridad · Té y notas limpias"
+        }
+    }
+}
+
+struct BrewPreset: Identifiable, Codable, Equatable {
+    let id: String
+    let method: String
+    let methodId: UUID?
+    let coffee: Double
+    let ratio: Double
+    let isCustom: Bool
+
+    var label: String {
+        let coffeeText = coffee.formatted(.number.precision(.fractionLength(0...1)))
+        let ratioText = ratio.formatted(.number.precision(.fractionLength(0...1)))
+        return "\(method) · \(coffeeText)g · 1:\(ratioText)"
+    }
+}
+
+private struct CalculatorStateSnapshot: Codable {
+    let method: String
+    let methodId: UUID?
+    let coffee: Double
+    let ratio: Double
+    let water: Int
+}
+
+@MainActor
+final class CalculatorModel: ObservableObject {
+    static let coffeeRange = 1.0...100.0
+    static let ratioRange = 1.0...40.0
+    static let waterRange = 10...2_000
+    @Published var method = "V60" { didSet { selectedBeanProfile = selectedBean?.effectiveBrewProfile(for: method) } }
+    private weak var selectedBean: CoffeeBeanRecord?
+    @Published private(set) var selectedMethodId: UUID?
+    @Published var coffee = 15.0
+    @Published var ratio = 16.0
+    @Published var water = 240
+    @Published var coffeeInput = "15.0"
+    @Published var ratioInput = "16.0"
+    @Published var waterInput = "240"
+    @Published var microcopy = "Listo para preparar."
+    @Published private(set) var selectedBeanId: UUID?
+    @Published private(set) var selectedBeanProfile: BeanBrewProfile?
+    @Published private(set) var savedPresets: [BrewPreset] = []
+    @Published private(set) var pinnedMethodNames: Set<String> = []
+    @Published private(set) var transferVersion = 0
+    private var customMethodRatios: [String: Double] = [:]
+
+    let methods = ["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"]
+    private let defaultPinnedMethods: Set<String> = ["V60", "AeroPress", "Espresso", "Prensa francesa"]
+
+    private let baseRatios: [String: Double] = [
+        "V60": 16, "AeroPress": 13, "Prensa francesa": 15,
+        "Chemex": 16, "Espresso": 2, "Moka": 10, "Cold brew": 8
+    ]
+
+    private let builtInPresets = [
+        BrewPreset(id: "default_1", method: "V60", methodId: nil, coffee: 15, ratio: 16, isCustom: false),
+        BrewPreset(id: "default_2", method: "AeroPress", methodId: nil, coffee: 18, ratio: 13, isCustom: false),
+        BrewPreset(id: "default_3", method: "Prensa francesa", methodId: nil, coffee: 20, ratio: 15, isCustom: false),
+        BrewPreset(id: "default_4", method: "Chemex", methodId: nil, coffee: 24, ratio: 16, isCustom: false),
+        BrewPreset(id: "default_5", method: "Espresso", methodId: nil, coffee: 18, ratio: 2, isCustom: false),
+        BrewPreset(id: "default_6", method: "Moka", methodId: nil, coffee: 18, ratio: 10, isCustom: false),
+        BrewPreset(id: "default_7", method: "Cold brew", methodId: nil, coffee: 50, ratio: 8, isCustom: false)
+    ]
+
+    private let userDefaults: UserDefaults
+    private var scopeOwnerId: UUID?
+    private let stateKeyBase = "cupa.calculatorState.v1"
+    private let pinnedMethodsKeyBase = "cupa.pinnedCalculatorMethods.v1"
+    private let savedRatiosKeyBase = "cupa.savedRatios"
+    private let selectedFavoriteKeyBase = "cupa.selectedCalculatorFavorite.v1"
+    private let customRatiosKeyBase = "cupa.customMethodRatios.v1"
+    private var stateKey: String { LocalDataScope.scopedKey(stateKeyBase, ownerId: scopeOwnerId) }
+    private var pinnedMethodsKey: String { LocalDataScope.scopedKey(pinnedMethodsKeyBase, ownerId: scopeOwnerId) }
+    private var savedRatiosKey: String { LocalDataScope.scopedKey(savedRatiosKeyBase, ownerId: scopeOwnerId) }
+    private var selectedFavoriteKey: String { LocalDataScope.scopedKey(selectedFavoriteKeyBase, ownerId: scopeOwnerId) }
+    private var customRatiosKey: String { LocalDataScope.scopedKey(customRatiosKeyBase, ownerId: scopeOwnerId) }
+
+    var presets: [BrewPreset] { savedPresets + builtInPresets }
+
+    var category: RatioCategory {
+        if ratio <= 3 { return .espresso }
+        if ratio <= 10 { return .intense }
+        if ratio <= 16 { return .balance }
+        return .clarity
+    }
+
+    var isCurrentFavorite: Bool {
+        savedPresets.contains {
+            $0.method == method && abs($0.coffee - coffee) < 0.2 && abs($0.ratio - ratio) < 0.2
+        }
+    }
+
+    init(defaults: UserDefaults = .standard) {
+        userDefaults = defaults; scopeOwnerId = LocalDataScope.activeOwnerId
+        restoreScope()
+    }
+
+    func selectBean(_ bean: CoffeeBeanRecord?) {
+        let nextProfile = bean?.effectiveBrewProfile(for: method)
+        let changed = selectedBeanId != bean?.id || selectedBeanProfile != nextProfile
+        selectedBean = bean
+        selectedBeanId = bean?.id
+        selectedBeanProfile = nextProfile
+        userDefaults.set(selectedBeanId?.uuidString ?? "", forKey: LocalDataScope.scopedKey("cupa.calculatorBean.v1", ownerId: scopeOwnerId))
+        if changed { transferVersion += 1 }
+    }
+
+    var needsInitialBeanSelection: Bool {
+        userDefaults.object(forKey: LocalDataScope.scopedKey("cupa.calculatorBean.v1", ownerId: scopeOwnerId)) == nil
+    }
+
+    func switchScope(to ownerId: UUID?) {
+        guard scopeOwnerId != ownerId else { return }
+        scopeOwnerId = ownerId; restoreScope()
+    }
+
+    private func restoreScope() {
+        selectedBean = nil
+        selectedBeanId = userDefaults.string(forKey: LocalDataScope.scopedKey("cupa.calculatorBean.v1", ownerId: scopeOwnerId)).flatMap(UUID.init(uuidString:))
+        selectedBeanProfile = nil
+        method = "V60"; selectedMethodId = nil; coffee = 15; ratio = 16; water = 240
+        coffeeInput = "15.0"; ratioInput = "16.0"; waterInput = "240"; microcopy = "Listo para preparar."
+        savedPresets = []
+        customMethodRatios = userDefaults.dictionary(forKey: customRatiosKey) as? [String: Double] ?? [:]
+        let storedPins = userDefaults.object(forKey: pinnedMethodsKey) ?? LocalDataScope.migrateLegacyObject(in: userDefaults, baseKey: pinnedMethodsKeyBase, ownerId: scopeOwnerId)
+        if let stored = storedPins as? [String] {
+            pinnedMethodNames = Set(stored)
+        } else {
+            pinnedMethodNames = defaultPinnedMethods
+        }
+        let storedRatios = userDefaults.object(forKey: savedRatiosKey) ?? LocalDataScope.migrateLegacyObject(in: userDefaults, baseKey: savedRatiosKeyBase, ownerId: scopeOwnerId)
+        if let data = storedRatios as? Data,
+           let decoded = try? JSONDecoder().decode([BrewPreset].self, from: data) {
+            savedPresets = decoded
+        }
+        let storedState = userDefaults.object(forKey: stateKey) ?? LocalDataScope.migrateLegacyObject(in: userDefaults, baseKey: stateKeyBase, ownerId: scopeOwnerId)
+        if let data = storedState as? Data,
+           let restored = try? JSONDecoder().decode(CalculatorStateSnapshot.self, from: data),
+           !restored.method.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           Self.coffeeRange.contains(restored.coffee), Self.ratioRange.contains(restored.ratio), Self.waterRange.contains(restored.water) {
+            method = restored.method; selectedMethodId = restored.methodId
+            coffee = restored.coffee; ratio = restored.ratio; water = restored.water
+            coffeeInput = format(restored.coffee, forceDecimal: true)
+            ratioInput = format(restored.ratio, forceDecimal: true); waterInput = String(restored.water)
+            microcopy = "Se restauró tu última preparación."
+        }
+        let storedFavoriteId = userDefaults.string(forKey: selectedFavoriteKey)
+            ?? (LocalDataScope.migrateLegacyObject(in: userDefaults, baseKey: selectedFavoriteKeyBase, ownerId: scopeOwnerId) as? String)
+        if let storedFavoriteId,
+           let selected = savedPresets.first(where: { $0.id == storedFavoriteId }) {
+            restore(selectedFavorite: selected)
+        } else if storedFavoriteId != nil {
+            userDefaults.removeObject(forKey: selectedFavoriteKey)
+        }
+    }
+
+    func changeCoffee(_ input: String) {
+        coffeeInput = input
+        guard let parsed = parseDecimal(input), Self.coffeeRange.contains(parsed) else { return }
+        coffee = parsed
+        water = Int(parsed * ratio)
+        waterInput = String(water)
+        microcopy = "Listo para preparar con \(format(parsed)) g de café."
+        persistState()
+    }
+
+    func changeRatio(_ input: String) {
+        ratioInput = input
+        guard let parsed = parseDecimal(input), Self.ratioRange.contains(parsed) else { return }
+        ratio = parsed
+        water = Int(coffee * parsed)
+        waterInput = String(water)
+        microcopy = "Proporción ajustada a 1:\(format(parsed))."
+        persistState()
+    }
+
+    func changeWater(_ input: String) {
+        waterInput = input
+        guard let parsed = Int(input), Self.waterRange.contains(parsed) else { return }
+        water = parsed
+        coffee = ((Double(parsed) / ratio) * 10).rounded() / 10
+        coffeeInput = format(coffee, forceDecimal: true)
+        microcopy = "Agua total ajustada a \(parsed) ml."
+        persistState()
+    }
+
+    func selectMethod(_ selected: String, methodId: UUID? = nil, defaultRatio: Double? = nil) {
+        method = selected
+        selectedMethodId = methodId
+        ratio = defaultRatio ?? baseRatios[selected] ?? customMethodRatios[selected] ?? 16
+        ratioInput = format(ratio, forceDecimal: true)
+        water = Int(coffee * ratio)
+        waterInput = String(water)
+        microcopy = "Método cambiado a \(selected). Proporción sugerida 1:\(format(ratio))."
+        persistState()
+    }
+
+    func registerCustomMethod(_ name: String, methodId: UUID, defaultRatio: Double) {
+        customMethodRatios[name] = defaultRatio
+        userDefaults.set(customMethodRatios, forKey: customRatiosKey)
+        selectMethod(name, methodId: methodId, defaultRatio: defaultRatio)
+    }
+
+    func apply(_ preset: BrewPreset) {
+        method = preset.method
+        selectedMethodId = preset.methodId
+        coffee = preset.coffee
+        ratio = preset.ratio
+        water = Int(coffee * ratio)
+        coffeeInput = format(coffee, forceDecimal: true)
+        ratioInput = format(ratio, forceDecimal: true)
+        waterInput = String(water)
+        microcopy = "Se cargó: \(preset.label)."
+        if preset.isCustom { userDefaults.set(preset.id, forKey: selectedFavoriteKey) }
+        persistState()
+    }
+
+    func adjustCoffee(_ amount: Double) { changeCoffee(format(min(Self.coffeeRange.upperBound, max(Self.coffeeRange.lowerBound, coffee + amount)), forceDecimal: true)) }
+    func adjustRatio(_ amount: Double) { changeRatio(format(min(Self.ratioRange.upperBound, max(Self.ratioRange.lowerBound, ratio + amount)), forceDecimal: true)) }
+    func adjustWater(_ amount: Int) { changeWater(String(min(Self.waterRange.upperBound, max(Self.waterRange.lowerBound, water + amount)))) }
+
+    func resetRatio() {
+        changeRatio(format(baseRatios[method] ?? customMethodRatios[method] ?? 16, forceDecimal: true))
+        microcopy = "Se restauró la proporción base de \(method)."
+    }
+
+    func validateInputs() {
+        if parseDecimal(coffeeInput).map(Self.coffeeRange.contains) != true {
+            coffeeInput = format(coffee, forceDecimal: true); microcopy = "Usa entre 1 y 100 g de café."
+        }
+        if parseDecimal(ratioInput).map(Self.ratioRange.contains) != true {
+            ratioInput = format(ratio, forceDecimal: true); microcopy = "Usa una proporción entre 1:1 y 1:40."
+        }
+        if Int(waterInput).map(Self.waterRange.contains) != true {
+            waterInput = String(water); microcopy = "Usa entre 10 y 2000 ml de agua."
+        }
+    }
+
+    func toggleFavorite() {
+        if let index = savedPresets.firstIndex(where: {
+            $0.method == method && abs($0.coffee - coffee) < 0.2 && abs($0.ratio - ratio) < 0.2
+        }) {
+            let removed = savedPresets.remove(at: index)
+            if userDefaults.string(forKey: selectedFavoriteKey) == removed.id {
+                userDefaults.removeObject(forKey: selectedFavoriteKey)
+            }
+            microcopy = "Proporción eliminada de favoritos."
+        } else {
+            let favorite = BrewPreset(id: UUID().uuidString, method: method, methodId: selectedMethodId, coffee: coffee, ratio: ratio, isCustom: true)
+            savedPresets.insert(favorite, at: 0)
+            userDefaults.set(favorite.id, forKey: selectedFavoriteKey)
+            microcopy = "Proporción guardada en favoritos."
+        }
+        if let data = try? JSONEncoder().encode(savedPresets) {
+            userDefaults.set(data, forKey: savedRatiosKey)
+        }
+    }
+
+    func isMethodPinned(_ name: String) -> Bool { pinnedMethodNames.contains(name) }
+
+    func setMethodPinned(_ name: String, pinned: Bool) {
+        if pinned { pinnedMethodNames.insert(name) } else { pinnedMethodNames.remove(name) }
+        userDefaults.set(Array(pinnedMethodNames).sorted(), forKey: pinnedMethodsKey)
+    }
+
+    private func parseDecimal(_ value: String) -> Double? {
+        Double(value.replacingOccurrences(of: ",", with: "."))
+    }
+
+    private func persistState() {
+        let snapshot = CalculatorStateSnapshot(method: method, methodId: selectedMethodId, coffee: coffee, ratio: ratio, water: water)
+        if let data = try? JSONEncoder().encode(snapshot) { userDefaults.set(data, forKey: stateKey) }
+        transferVersion &+= 1
+    }
+
+    private func restore(selectedFavorite preset: BrewPreset) {
+        method = preset.method; selectedMethodId = preset.methodId
+        coffee = preset.coffee; ratio = preset.ratio; water = Int(preset.coffee * preset.ratio)
+        coffeeInput = format(coffee, forceDecimal: true)
+        ratioInput = format(ratio, forceDecimal: true); waterInput = String(water)
+        microcopy = "Se restauró tu favorito seleccionado."
+    }
+
+    private func format(_ value: Double, forceDecimal: Bool = false) -> String {
+        if !forceDecimal && value.rounded() == value { return String(Int(value)) }
+        return String(format: "%.1f", value)
+    }
+}

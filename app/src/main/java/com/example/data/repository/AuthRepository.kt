@@ -13,6 +13,35 @@ class AuthRepository(
 ) {
     private val refreshLock = Mutex()
 
+    fun beginGoogle(): String {
+        check(com.example.data.remote.SupabaseClientProvider.isConfigured) { "El acceso no está configurado en esta versión." }
+        val verifier = sessionManager.beginGoogleOAuth()
+        return com.example.data.remote.GoogleOAuthFlow.authorizationURL(
+            com.example.data.remote.SupabaseClientProvider.supabaseUrl,
+            com.example.BuildConfig.APPLICATION_ID + "://auth/confirmed", verifier)
+    }
+    fun cancelGoogle() = sessionManager.cancelGoogleOAuth()
+    suspend fun finishGoogle(callback: String): Result<SupabaseUser> = refreshLock.withLock {
+        val pending = sessionManager.consumeGoogleOAuth()
+            ?: return@withLock Result.failure(Exception("Este acceso terminó. Toca Continuar con Google otra vez."))
+        try {
+            val code = com.example.data.remote.GoogleOAuthFlow.code(callback, com.example.BuildConfig.APPLICATION_ID + "://auth/confirmed")
+            val auth = remoteSource.exchangeGoogle(code, pending.second).getOrThrow()
+            val user = requireNotNull(auth.user)
+            require(runCatching { java.util.UUID.fromString(user.id) }.isSuccess && user.email.isNotBlank())
+            require(auth.expiresIn > 0)
+            check(sessionManager.isCurrentGoogleOAuth(pending.first)) { "Acceso cancelado." }
+            sessionManager.saveSession(requireNotNull(auth.accessToken), user.id, user.email,
+                user.email.substringBefore('@'), null, null, auth.refreshToken,
+                System.currentTimeMillis() + auth.expiresIn * 1000)
+            sessionManager.cancelGoogleOAuth()
+            Result.success(user)
+        } catch (error: Exception) {
+            if (sessionManager.isCurrentGoogleOAuth(pending.first)) sessionManager.cancelGoogleOAuth()
+            Result.failure(error)
+        }
+    }
+
     suspend fun ensureSession(): Result<Unit> = refreshLock.withLock {
         if (!sessionManager.isLoggedIn() || getUserId()?.let { runCatching { java.util.UUID.fromString(it) }.isFailure } != false) return@withLock Result.failure(Exception("Inicia sesión para usar Comunidad."))
         if (sessionManager.getExpiresAt() > System.currentTimeMillis() + 60_000) return@withLock Result.success(Unit)
@@ -29,6 +58,7 @@ class AuthRepository(
     }
 
     suspend fun signUp(email: String, password: String, displayName: String, handle: String): Result<SupabaseUser> {
+        cancelGoogle()
         val result = remoteSource.signUp(email, password, displayName, handle)
         return if (result.isSuccess) {
             val auth = result.getOrThrow()
@@ -55,6 +85,7 @@ class AuthRepository(
     }
 
     suspend fun signIn(email: String, password: String): Result<SupabaseUser> {
+        cancelGoogle()
         val result = remoteSource.signIn(email, password)
         return if (result.isSuccess) {
             val auth = result.getOrThrow()
@@ -84,18 +115,8 @@ class AuthRepository(
         sessionManager.clearSession()
     }
 
-    fun loginDemo() {
-        sessionManager.saveSession(
-            token = "local_demo_token_xyz",
-            userId = "local_demo_id_001",
-            email = "demo@brewstudio.app",
-            displayName = "Barista Demo",
-            handle = "brewther_local",
-            avatarColor = "#3F7A63"
-        )
-    }
-
-    fun isLoggedIn(): Boolean = sessionManager.isLoggedIn()
+    fun isLoggedIn(): Boolean = com.example.data.remote.AccountAccess.canEnter(
+        sessionManager.isLoggedIn(), getUserId(), getCachedEmail())
     fun getUserId(): String? = sessionManager.getUserId()
     fun getCachedDisplayName(): String = sessionManager.getDisplayName()
     fun getCachedHandle(): String = sessionManager.getHandle()

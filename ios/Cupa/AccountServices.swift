@@ -1,0 +1,522 @@
+import Foundation
+import Security
+import CryptoKit
+
+/// One attempt, bound to this process/device. Never consume URL fragment tokens.
+struct GooglePKCERequest {
+    let id = UUID()
+    let verifier: String
+    let redirectURL: URL
+    let authorizationURL: URL
+    let createdAt: Date
+
+    static func challenge(_ verifier: String) -> String {
+        Data(SHA256.hash(data: Data(verifier.utf8))).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+    }
+    init(configuration: AppConfiguration, now: Date = .now) throws {
+        guard let base = configuration.supabaseURL, base.scheme == "https",
+              configuration.isSupabaseConfigured,
+              let redirect = configuration.authRedirectURL?.deletingLastPathComponent().appendingPathComponent("confirmed") else { throw AuthServiceError.notConfigured }
+        var bytes = [UInt8](repeating: 0, count: 32)
+        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw AuthServiceError.invalidResponse }
+        verifier = Data(bytes).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        redirectURL = redirect; createdAt = now
+        var components = URLComponents(url: base.appendingPathComponent("auth/v1/authorize"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "provider", value: "google"),
+            URLQueryItem(name: "redirect_to", value: redirect.absoluteString),
+            URLQueryItem(name: "code_challenge", value: Self.challenge(verifier)),
+            URLQueryItem(name: "code_challenge_method", value: "s256"),
+            URLQueryItem(name: "scopes", value: "openid email profile"),
+            URLQueryItem(name: "prompt", value: "select_account")]
+        guard let url = components.url else { throw AuthServiceError.invalidResponse }
+        authorizationURL = url
+    }
+    func code(from callback: URL, now: Date = .now) throws -> String {
+        guard (0...600).contains(now.timeIntervalSince(createdAt)) else {
+            throw AuthServiceError.invalidRecoveryLink("Este intento venció. Toca Continuar con Google otra vez. (G01)")
+        }
+        guard AuthCallbackParser.matches(callback, expectedRedirectURL: redirectURL),
+              callback.user == nil, callback.password == nil, callback.port == nil else {
+            throw AuthServiceError.invalidRecoveryLink("El enlace de regreso no corresponde a esta app. (G02)")
+        }
+        // Browser redirects may retain an empty fragment or a harmless Supabase
+        // marker. They are not credentials. Non-empty token fragments stay rejected.
+        let fields = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        guard Set(fields.map(\.name)).count == fields.count else {
+            throw AuthServiceError.invalidRecoveryLink("El enlace de regreso está duplicado. Inicia de nuevo. (G04)")
+        }
+        if fields.contains(where: { ["error", "error_code"].contains($0.name) }) {
+            let code = fields.first(where: { $0.name == "error_code" })?.value ?? ""
+            let message: String
+            switch code {
+            case "flow_state_expired", "flow_state_not_found", "bad_oauth_state": message = "Este intento de Google terminó. Toca Continuar con Google otra vez. (G05)"
+            case "provider_disabled", "oauth_provider_not_supported": message = "El acceso con Google no está disponible. (G06)"
+            default: message = "Google no pudo completar el acceso. Puedes intentarlo de nuevo. (G07)"
+            }
+            throw AuthServiceError.invalidRecoveryLink(message)
+        }
+        guard ["", "_", "sb", "sb="].contains(callback.fragment ?? "") else {
+            throw AuthServiceError.invalidRecoveryLink("El enlace de regreso no es válido. Inicia de nuevo. (G03)")
+        }
+        guard !fields.contains(where: { ["access_token", "refresh_token"].contains($0.name) }),
+              let code = fields.first(where: { $0.name == "code" })?.value, !code.isEmpty, code.count <= 4096 else {
+            throw AuthServiceError.invalidRecoveryLink("No llegó el código de acceso. Toca Continuar con Google otra vez. (G08)")
+        }
+        return code
+    }
+}
+
+struct AppConfiguration: Equatable {
+    let supabaseURL: URL?; let supabaseAnonKey: String?; let authRedirectURL: URL?
+    var isSupabaseConfigured: Bool { supabaseURL != nil && !(supabaseAnonKey ?? "").isEmpty }
+
+    init(bundle: Bundle = .main, environment: [String: String] = ProcessInfo.processInfo.environment) {
+        let rawURL = environment["SUPABASE_URL"] ?? bundle.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
+        let rawKey = environment["SUPABASE_ANON_KEY"] ?? bundle.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String
+        let rawAuthScheme = environment["AUTH_URL_SCHEME"] ?? bundle.object(forInfoDictionaryKey: "AUTH_URL_SCHEME") as? String
+        supabaseURL = Self.validatedSupabaseURL(rawURL)
+        let cleanKey = rawKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+        supabaseAnonKey = cleanKey?.isEmpty == false ? cleanKey : nil
+        authRedirectURL = Self.authRedirectURL(for: rawAuthScheme ?? "com.tacotrifasico.cupa")
+    }
+
+    init(supabaseURL: URL?, supabaseAnonKey: String?, authRedirectURL: URL? = URL(string: "com.tacotrifasico.cupa://auth/recovery")) {
+        self.supabaseURL = supabaseURL; self.supabaseAnonKey = supabaseAnonKey; self.authRedirectURL = authRedirectURL
+    }
+
+    private static func validatedSupabaseURL(_ rawValue: String?) -> URL? {
+        guard let value = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              let host = url.host?.lowercased() else { return nil }
+        let isLocalDevelopment = scheme == "http" && (host == "localhost" || host == "127.0.0.1")
+        return scheme == "https" || isLocalDevelopment ? url : nil
+    }
+
+    private static func authRedirectURL(for rawScheme: String) -> URL? {
+        let scheme = rawScheme.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789+.-")
+        guard !scheme.isEmpty, scheme.unicodeScalars.allSatisfy(allowed.contains) else { return nil }
+        return URL(string: "\(scheme)://auth/recovery")
+    }
+}
+
+struct AuthTokens: Codable, Equatable {
+    let accessToken: String; let refreshToken: String; let expiresAt: Date; let userId: UUID; let email: String
+    var needsRefresh: Bool { needsRefresh(at: .now) }
+    func needsRefresh(at date: Date) -> Bool { expiresAt.timeIntervalSince(date) < 60 }
+    func hasValidAccessToken(at date: Date = .now) -> Bool { expiresAt > date }
+}
+
+enum SignUpResult: Equatable {
+    case signedIn(AuthTokens)
+    case confirmationRequired(email: String)
+}
+
+struct PasswordRecoveryCredential: Equatable {
+    let accessToken: String
+    let expiresAt: Date
+}
+
+enum PasswordRecoveryState: Equatable {
+    case idle, ready, updating, completed, error(String)
+    var isPresented: Bool { self != .idle }
+}
+
+protocol TokenStore {
+    func load() throws -> AuthTokens?
+    func save(_ tokens: AuthTokens) throws
+    func clear() throws
+}
+
+enum KeychainError: Error { case unexpectedStatus(OSStatus) }
+
+struct KeychainTokenStore: TokenStore {
+    private let service = "com.tacotrifasico.cupa.auth"; private let account = "supabase-session"
+    func load() throws -> AuthTokens? {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
+        var result: AnyObject?; let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }; guard status == errSecSuccess else { throw KeychainError.unexpectedStatus(status) }
+        return try JSONDecoder().decode(AuthTokens.self, from: result as? Data ?? Data())
+    }
+    func save(_ tokens: AuthTokens) throws {
+        let data = try JSONEncoder().encode(tokens)
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
+        let attributes: [String: Any] = [kSecValueData as String: data, kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var insert = query; attributes.forEach { insert[$0.key] = $0.value }
+            let insertStatus = SecItemAdd(insert as CFDictionary, nil); guard insertStatus == errSecSuccess else { throw KeychainError.unexpectedStatus(insertStatus) }
+        } else if status != errSecSuccess { throw KeychainError.unexpectedStatus(status) }
+    }
+    func clear() throws {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
+        let status = SecItemDelete(query as CFDictionary); guard status == errSecSuccess || status == errSecItemNotFound else { throw KeychainError.unexpectedStatus(status) }
+    }
+}
+
+protocol NetworkTransport {
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse)
+}
+
+struct URLSessionTransport: NetworkTransport {
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        return (data, http)
+    }
+}
+
+enum AuthServiceError: LocalizedError, Equatable {
+    case notConfigured, invalidResponse, invalidRecoveryLink(String), server(Int, String)
+    var errorDescription: String? {
+        switch self {
+        case .notConfigured: "Supabase todavía no está configurado en este build."
+        case .invalidResponse: "El servidor devolvió una respuesta inválida."
+        case let .invalidRecoveryLink(message): message
+        case let .server(_, message): message
+        }
+    }
+}
+
+enum AuthCallbackParser {
+    static func matches(_ url: URL, expectedRedirectURL: URL) -> Bool {
+        url.scheme?.caseInsensitiveCompare(expectedRedirectURL.scheme ?? "") == .orderedSame
+            && url.host?.caseInsensitiveCompare(expectedRedirectURL.host ?? "") == .orderedSame
+            && normalizedPath(url.path) == normalizedPath(expectedRedirectURL.path)
+    }
+
+    static func passwordRecovery(from url: URL, expectedRedirectURL: URL, now: Date = .now) throws -> PasswordRecoveryCredential {
+        guard matches(url, expectedRedirectURL: expectedRedirectURL) else {
+            throw AuthServiceError.invalidRecoveryLink("Este enlace no pertenece a la recuperación de cUpa.")
+        }
+        var values: [String: String] = [:]
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.forEach { values[$0.name] = $0.value }
+        if let fragment = url.fragment {
+            var fragmentComponents = URLComponents(); fragmentComponents.query = fragment
+            fragmentComponents.queryItems?.forEach { values[$0.name] = $0.value }
+        }
+        if let message = values["error_description"] ?? values["error"] {
+            throw AuthServiceError.invalidRecoveryLink(message.replacingOccurrences(of: "+", with: " "))
+        }
+        guard values["type"]?.lowercased() == "recovery",
+              let accessToken = values["access_token"], !accessToken.isEmpty else {
+            throw AuthServiceError.invalidRecoveryLink("El enlace de recuperación está incompleto o ya no es válido.")
+        }
+        let expiresAt = values["expires_at"].flatMap(TimeInterval.init).map(Date.init(timeIntervalSince1970:))
+            ?? values["expires_in"].flatMap(TimeInterval.init).map(now.addingTimeInterval)
+        guard let expiresAt, expiresAt > now else {
+            throw AuthServiceError.invalidRecoveryLink("El enlace de recuperación venció. Solicita uno nuevo.")
+        }
+        return PasswordRecoveryCredential(accessToken: accessToken, expiresAt: expiresAt)
+    }
+
+    private static func normalizedPath(_ path: String) -> String { path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+}
+
+enum RemoteFailureClassifier {
+    static func isUnauthorized(_ error: Error) -> Bool {
+        guard case let AuthServiceError.server(status, _) = error else { return false }
+        return status == 401
+    }
+
+    static func isTerminalSessionFailure(_ error: Error) -> Bool {
+        guard case let AuthServiceError.server(status, _) = error else { return false }
+        return status == 400 || status == 401
+    }
+
+    static func isOffline(_ error: Error) -> Bool {
+        let code = (error as? URLError)?.code
+        return [.notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost,
+                .dnsLookupFailed, .timedOut, .internationalRoamingOff, .dataNotAllowed].contains(code)
+    }
+}
+
+struct SupabaseAuthService {
+    let configuration: AppConfiguration; let transport: NetworkTransport
+    init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
+
+    func signIn(email: String, password: String) async throws -> AuthTokens { try await token(path: "/auth/v1/token?grant_type=password", payload: ["email": email, "password": password]) }
+    func signUp(email: String, password: String) async throws -> SignUpResult {
+        let payload = ["email": email, "password": password]
+        var path = URLComponents(); path.path = "/auth/v1/signup"
+        if let callback = configuration.authRedirectURL?.deletingLastPathComponent().appendingPathComponent("confirmed") {
+            path.queryItems = [URLQueryItem(name: "redirect_to", value: callback.absoluteString)]
+        }
+        let (data, _) = try await request(path: path.string ?? "/auth/v1/signup", method: "POST", payload: payload, bearer: nil)
+        if let tokens = try? decodeTokens(data, fallbackEmail: email) { return .signedIn(tokens) }
+
+        struct PendingUser: Decodable { let id: UUID; let email: String? }
+        guard let user = try? JSONDecoder().decode(PendingUser.self, from: data) else { throw AuthServiceError.invalidResponse }
+        let confirmedEmail = user.email.flatMap { $0.isEmpty ? nil : $0 } ?? email
+        return .confirmationRequired(email: confirmedEmail)
+    }
+    func refresh(_ refreshToken: String) async throws -> AuthTokens { try await token(path: "/auth/v1/token?grant_type=refresh_token", payload: ["refresh_token": refreshToken]) }
+    func exchangeGoogle(code: String, verifier: String) async throws -> AuthTokens {
+        try await token(path: "/auth/v1/token?grant_type=pkce", payload: ["auth_code": code, "code_verifier": verifier])
+    }
+    func sendPasswordRecovery(email: String) async throws {
+        guard let redirectURL = configuration.authRedirectURL else { throw AuthServiceError.notConfigured }
+        var components = URLComponents(); components.path = "/auth/v1/recover"
+        components.queryItems = [URLQueryItem(name: "redirect_to", value: redirectURL.absoluteString)]
+        _ = try await request(path: components.string ?? "/auth/v1/recover", method: "POST", payload: ["email": email], bearer: nil)
+    }
+    func resendSignUpConfirmation(email: String) async throws { _ = try await request(path: "/auth/v1/resend", method: "POST", payload: ["email": email, "type": "signup"], bearer: nil) }
+    func updatePassword(_ password: String, recoveryAccessToken: String) async throws {
+        _ = try await request(path: "/auth/v1/user", method: "PUT", payload: ["password": password], bearer: recoveryAccessToken)
+    }
+    func signOut(accessToken: String) async throws { _ = try await request(path: "/auth/v1/logout", method: "POST", payload: nil, bearer: accessToken) }
+
+    private func token(path: String, payload: [String: String]) async throws -> AuthTokens {
+        let (data, _) = try await request(path: path, method: "POST", payload: payload, bearer: nil)
+        return try decodeTokens(data, fallbackEmail: payload["email"] ?? "")
+    }
+
+    private func decodeTokens(_ data: Data, fallbackEmail: String) throws -> AuthTokens {
+        struct Response: Decodable {
+            struct User: Decodable { let id: UUID; let email: String? }
+            let access_token: String; let refresh_token: String; let expires_in: Double; let user: User
+        }
+        guard let decoded = try? JSONDecoder().decode(Response.self, from: data) else { throw AuthServiceError.invalidResponse }
+        return .init(accessToken: decoded.access_token, refreshToken: decoded.refresh_token, expiresAt: .now.addingTimeInterval(decoded.expires_in), userId: decoded.user.id, email: decoded.user.email ?? fallbackEmail)
+    }
+
+    private func request(path: String, method: String, payload: [String: String]?, bearer: String?) async throws -> (Data, HTTPURLResponse) {
+        guard let base = configuration.supabaseURL, let key = configuration.supabaseAnonKey, !key.isEmpty,
+              let url = URL(string: path, relativeTo: base) else { throw AuthServiceError.notConfigured }
+        var request = URLRequest(url: url); request.httpMethod = method; request.timeoutInterval = 20
+        request.setValue(key, forHTTPHeaderField: "apikey"); request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
+        if let payload { request.httpBody = try JSONEncoder().encode(payload) }
+        let (data, response) = try await transport.data(for: request)
+        guard (200..<300).contains(response.statusCode) else {
+            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let message = object?["msg"] as? String ?? object?["message"] as? String ?? object?["error_description"] as? String ?? "Error de autenticación (\(response.statusCode))."
+            throw AuthServiceError.server(response.statusCode, message)
+        }
+        return (data, response)
+    }
+}
+
+struct SupabaseAccountService {
+    let configuration: AppConfiguration; let transport: NetworkTransport
+    init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport()) { self.configuration = configuration; self.transport = transport }
+    func deleteAccount(accessToken: String, confirmation: String) async throws {
+        guard let base = configuration.supabaseURL, let key = configuration.supabaseAnonKey, !key.isEmpty else { throw AuthServiceError.notConfigured }
+        var request = URLRequest(url: base.appendingPathComponent("functions/v1/delete-account")); request.httpMethod = "POST"; request.timeoutInterval = 30
+        request.setValue(key, forHTTPHeaderField: "apikey"); request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type"); request.httpBody = try JSONEncoder().encode(["confirmation": confirmation])
+        let (data, response) = try await transport.data(for: request)
+        guard (200..<300).contains(response.statusCode) else {
+            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            throw AuthServiceError.server(response.statusCode, object?["error"] as? String ?? "No se pudo eliminar la cuenta.")
+        }
+    }
+}
+
+@MainActor
+final class AccountModel: ObservableObject {
+    enum State: Equatable { case unavailable, signedOut, loading, signedIn(AuthTokens), error(String) }
+    @Published private(set) var state: State = .signedOut {
+        didSet { LocalDataScope.activeOwnerId = tokens?.userId }
+    }
+    @Published private(set) var sessionNotice: String?
+    @Published private(set) var pendingConfirmationEmail: String?
+    @Published private(set) var passwordRecoveryState: PasswordRecoveryState = .idle
+    @Published private(set) var isRefreshing = false
+    let configuration: AppConfiguration; private let service: SupabaseAuthService; private let store: TokenStore
+    private let accountDeletionHandler: (UUID) throws -> Void
+    private var recoveryCredential: PasswordRecoveryCredential?
+    private var googleRequest: GooglePKCERequest?
+    private var googleAttempt: UUID?
+
+    func beginGoogleSignIn() throws -> GooglePKCERequest {
+        guard tokens == nil else { throw AuthServiceError.invalidResponse }
+        let request = try GooglePKCERequest(configuration: configuration)
+        googleRequest = request; googleAttempt = request.id; sessionNotice = nil
+        return request
+    }
+    func cancelGoogleSignIn() {
+        let wasExchanging = googleAttempt != nil && googleRequest == nil
+        googleRequest = nil; googleAttempt = nil
+        if wasExchanging, state == .loading { state = .signedOut }
+    }
+    func completeGoogleSignIn(_ callback: URL) async {
+        guard let request = googleRequest, googleAttempt == request.id else { return }
+        googleRequest = nil // Single-use, even when the request fails.
+        state = .loading; sessionNotice = nil
+        do {
+            let code = try request.code(from: callback)
+            let value = try await service.exchangeGoogle(code: code, verifier: request.verifier)
+            guard googleAttempt == request.id else { return }
+            guard !value.accessToken.isEmpty, !value.refreshToken.isEmpty, !value.email.isEmpty,
+                  value.expiresAt > .now else { throw AuthServiceError.invalidResponse }
+            try store.save(value); googleAttempt = nil; pendingConfirmationEmail = nil; state = .signedIn(value)
+        } catch {
+            guard googleAttempt == request.id else { return }
+            googleAttempt = nil; state = .error(error.localizedDescription)
+        }
+    }
+
+    init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), store: TokenStore = KeychainTokenStore(), accountDeletionHandler: @escaping (UUID) throws -> Void = { _ in }) {
+        self.configuration = configuration; self.service = SupabaseAuthService(configuration: configuration, transport: transport); self.store = store
+        self.accountDeletionHandler = accountDeletionHandler
+        LocalDataScope.activeOwnerId = nil
+        guard configuration.isSupabaseConfigured else { state = .unavailable; return }
+        do { state = try store.load().map(State.signedIn) ?? .signedOut } catch { state = .error(error.localizedDescription) }
+    }
+
+    var tokens: AuthTokens? { if case let .signedIn(tokens) = state { tokens } else { nil } }
+    // Keep local tools available offline after a real login; sign-out/revocation closes the gate.
+    var canEnterApp: Bool {
+        guard let value = tokens else { return false }
+        return !value.accessToken.isEmpty && !value.refreshToken.isEmpty && !value.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    var localScopeKey: String { tokens?.userId.uuidString ?? "guest" }
+    var canRetryPasswordRecovery: Bool { recoveryCredential != nil }
+    func signIn(email: String, password: String) async { await perform { try await self.service.signIn(email: email, password: password) } }
+    func signUp(email: String, password: String) async {
+        cancelGoogleSignIn()
+        state = .loading; sessionNotice = nil
+        do {
+            switch try await service.signUp(email: email, password: password) {
+            case let .signedIn(tokens):
+                try store.save(tokens); pendingConfirmationEmail = nil; state = .signedIn(tokens)
+            case let .confirmationRequired(confirmedEmail):
+                pendingConfirmationEmail = confirmedEmail; state = .signedOut
+                sessionNotice = "Revisa \(confirmedEmail) y confirma tu correo. Después vuelve para iniciar sesión."
+            }
+        } catch { state = .error(error.localizedDescription) }
+    }
+    func resendSignUpConfirmation() async {
+        guard let email = pendingConfirmationEmail else { return }
+        state = .loading; sessionNotice = nil
+        do {
+            try await service.resendSignUpConfirmation(email: email); state = .signedOut
+            sessionNotice = "Enviamos de nuevo la confirmación a \(email)."
+        } catch { state = .error(error.localizedDescription) }
+    }
+    func recover(email: String) async {
+        state = .loading
+        do {
+            try await service.sendPasswordRecovery(email: email); state = .signedOut
+            sessionNotice = "Si existe una cuenta con ese correo, recibirás instrucciones para restablecer la contraseña."
+        }
+        catch { state = .error(error.localizedDescription) }
+    }
+    @discardableResult
+    func handleAuthCallback(_ url: URL, now: Date = .now) -> Bool {
+        if let callback = configuration.authRedirectURL?.deletingLastPathComponent().appendingPathComponent("confirmed"),
+           AuthCallbackParser.matches(url, expectedRedirectURL: callback) {
+            // A deep link is not proof of authentication. Do not store fragment tokens.
+            sessionNotice = "Vuelve a iniciar sesión para continuar."
+            return true
+        }
+        guard let expectedURL = configuration.authRedirectURL,
+              AuthCallbackParser.matches(url, expectedRedirectURL: expectedURL) else { return false }
+        do {
+            recoveryCredential = try AuthCallbackParser.passwordRecovery(from: url, expectedRedirectURL: expectedURL, now: now)
+            passwordRecoveryState = .ready; sessionNotice = nil
+        } catch {
+            recoveryCredential = nil; passwordRecoveryState = .error(error.localizedDescription)
+        }
+        return true
+    }
+    func completePasswordRecovery(newPassword: String) async {
+        guard let credential = recoveryCredential, credential.expiresAt > .now else {
+            recoveryCredential = nil; passwordRecoveryState = .error("El enlace de recuperación venció. Solicita uno nuevo.")
+            return
+        }
+        guard newPassword.count >= 8 else {
+            passwordRecoveryState = .error("La contraseña debe tener al menos 8 caracteres.")
+            return
+        }
+        passwordRecoveryState = .updating
+        do {
+            try await service.updatePassword(newPassword, recoveryAccessToken: credential.accessToken)
+            try? await service.signOut(accessToken: credential.accessToken)
+            recoveryCredential = nil; passwordRecoveryState = .completed
+            sessionNotice = "Contraseña actualizada. Ya puedes iniciar sesión con la nueva contraseña."
+        } catch { passwordRecoveryState = .error(error.localizedDescription) }
+    }
+    func retryPasswordRecovery() {
+        guard let credential = recoveryCredential, credential.expiresAt > .now else {
+            recoveryCredential = nil; passwordRecoveryState = .error("El enlace de recuperación venció. Solicita uno nuevo.")
+            return
+        }
+        passwordRecoveryState = .ready
+    }
+    func dismissPasswordRecovery() { recoveryCredential = nil; passwordRecoveryState = .idle }
+    @discardableResult
+    func validTokens(forceRefresh: Bool = false, now: Date = .now) async -> AuthTokens? {
+        guard let current = tokens else { return nil }
+        guard forceRefresh || current.needsRefresh(at: now) else { return current }
+        guard !isRefreshing else { return current.hasValidAccessToken(at: now) ? current : nil }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        do {
+            let refreshed = try await service.refresh(current.refreshToken)
+            try store.save(refreshed)
+            state = .signedIn(refreshed)
+            sessionNotice = nil
+            return refreshed
+        } catch {
+            if RemoteFailureClassifier.isTerminalSessionFailure(error) {
+                try? store.clear()
+                state = .signedOut
+                sessionNotice = "Tu sesión venció. Inicia sesión otra vez para sincronizar."
+            } else {
+                state = .signedIn(current)
+                sessionNotice = RemoteFailureClassifier.isOffline(error)
+                    ? "Sin conexión. Puedes seguir trabajando; sincronizaremos al volver internet."
+                    : "No pudimos renovar la sesión. Tus datos locales siguen seguros."
+            }
+            return current.hasValidAccessToken(at: now) ? current : nil
+        }
+    }
+    func restoreAndRefreshIfNeeded() async { _ = await validTokens() }
+    func authenticated<Value>(_ operation: (String) async throws -> Value) async throws -> Value {
+        guard let current = await validTokens() else { throw URLError(.userAuthenticationRequired) }
+        do { return try await operation(current.accessToken) }
+        catch {
+            guard RemoteFailureClassifier.isUnauthorized(error),
+                  let refreshed = await validTokens(forceRefresh: true) else { throw error }
+            return try await operation(refreshed.accessToken)
+        }
+    }
+    func signOut() async {
+        cancelGoogleSignIn()
+        let access = tokens?.accessToken; state = .loading; sessionNotice = nil; pendingConfirmationEmail = nil
+        if let access { try? await service.signOut(accessToken: access) }
+        do { try store.clear(); state = configuration.isSupabaseConfigured ? .signedOut : .unavailable }
+        catch { state = .error(error.localizedDescription) }
+    }
+    func deleteAccount(confirmation: String) async {
+        guard let ownerId = tokens?.userId else { sessionNotice = "Necesitas una sesión activa y conexión para eliminar la cuenta."; return }
+        do {
+            try await authenticated { access in
+                try await SupabaseAccountService(configuration: self.configuration, transport: self.service.transport).deleteAccount(accessToken: access, confirmation: confirmation)
+            }
+        } catch {
+            sessionNotice = error.localizedDescription
+            return
+        }
+
+        var cleanupMessages: [String] = []
+        do { try accountDeletionHandler(ownerId) }
+        catch { cleanupMessages.append("No fue posible limpiar por completo la caché local: \(error.localizedDescription)") }
+        do { try store.clear() }
+        catch { cleanupMessages.append("No fue posible borrar las credenciales locales: \(error.localizedDescription)") }
+        state = .signedOut
+        sessionNotice = cleanupMessages.isEmpty ? "Tu cuenta y sus datos fueron eliminados." : cleanupMessages.joined(separator: " ")
+    }
+
+    private func perform(_ operation: () async throws -> AuthTokens) async {
+        cancelGoogleSignIn()
+        state = .loading; sessionNotice = nil
+        do { let value = try await operation(); try store.save(value); pendingConfirmationEmail = nil; state = .signedIn(value); sessionNotice = nil }
+        catch { state = .error(error.localizedDescription) }
+    }
+}

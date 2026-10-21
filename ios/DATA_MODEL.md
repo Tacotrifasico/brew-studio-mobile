@@ -1,0 +1,61 @@
+# Modelo de datos
+
+Todas las entidades sincronizables incluyen `id`, `ownerId`, `createdAt`, `updatedAt`, `version`, `syncStatus` y `deletedAt` cuando corresponda.
+
+En Core Data la propiedad se llama siempre `ownerId`. En Supabase, las entidades que ya existen en Android (`beans`, `grinders`, `equipment`, `recipes`, `techniques`, `technique_steps` y `lab_experiments`) usan `user_id`; los agregados exclusivos de iOS usan `owner_id`. El descriptor de sincronización hace esa traducción explícita y RLS comprueba la columna remota correspondiente.
+
+Entidades independientes:
+
+- `UserProfile`
+- `CoffeeBean`
+- `Grinder`
+- `Equipment`
+- `Recipe`
+- `RecipeIngredient`
+- `RecipeStep`
+- `BrewTechnique`
+- `TechniqueStep`
+- `BrewSession`
+- `Tasting`
+- `TastingObservation`
+- `CupSession`
+- `LabExperiment`
+- `SocialShare`, `InboxItem`, `ShareLike`, `ShareSave`, `ActivityItem`
+
+Relaciones por UUID estables. Una sesión histórica conserva identificadores y snapshots mínimos de nombres/valores para sobrevivir al borrado lógico de inventario.
+
+`LabExperiment` conserva referencias opcionales por UUID a método/equipo, receta, técnica, grano y molino; también método, dosis, agua, ratio, temperatura Celsius, clicks, frescura, duración, altitud, ciudad, notas, índice de extracción y resumen calculado. Incluye fechas, versión, estado de sincronización y borrado lógico.
+
+`Grinder` conserva identidad, marca, modelo, tipo manual/eléctrico, unidad de escala, límites, calibración y notas. No se fusiona con `Equipment`. El ajuste concreto vive en `Technique.grindValue/grindDescription/grindUnit` y se copia a `BrewSession`, de modo que el número interno siempre viaja con su descripción histórica.
+
+`CoffeeBean` conserva fechas de tueste y apertura; `CoffeeFreshnessEngine` deriva en tiempo real días, etapa, progreso, recomendación y advertencia de apertura con las reglas de Android. Cerrado/abierto/terminado también se deriva de fecha de apertura y existencias, evitando estados contradictorios. El resultado no se sincroniza porque depende de datos ya sincronizados y, en el caso de frescura, de la fecha actual.
+
+El historial de uso de `CoffeeBean` se deriva por su UUID estable: `BrewSession.beanId` aporta las preparaciones y `CupSession.beanId` las tazas/catas. No existe una relación duplicada ni un contador persistido. El borrado lógico del café no borra esas sesiones; sus snapshots mantienen nombres y parámetros históricos.
+
+`Equipment` conserva tipo canónico, nombre, marca, modelo, capacidad, configuración, notas, favorito y estado activo. Cuando el tipo es `BREWER_METHOD`, activo determina si pertenece al catálogo de la calculadora y favorito si está fijado en sus accesos rápidos. Su UUID viaja por Calculadora, Laboratorio, Preparación y las sesiones históricas; no existe una segunda copia del método.
+
+La Calculadora conserva por propietario el último estado válido, sus presets y el UUID del favorito seleccionado. Ese UUID hace que el favorito elegido prevalezca al reabrir la app; eliminarlo retira también la selección. El borrador de Preparación recibe dosis, agua, ratio, método y pasos rápidos cuando cambia la Calculadora, pero una sesión iniciada queda inmutable frente a ediciones posteriores.
+
+`Recipe` → `RecipeIngredient` y `RecipeStep` por `recipeId`. La receta conserva tipo, intención, método sugerido, favorito, etiquetas, visibilidad y procedencia de copias. `isShared`, `originalAuthorUserId`, `originalAuthorName`, `originalEntityId`, `rootEntityId`, `importedFromShareId` y `copyMode` preservan la cadena de atribución Android al importar, bifurcar, sincronizar o volver a publicar. Ingredientes y pasos mantienen orden y UUID independientes.
+
+`Technique` → `TechniqueStep` por `techniqueId`; puede referenciar receta, grano, molino y método sin absorber esas entidades y conserva los mismos campos de procedencia que `Recipe`. Los pasos guardan duración, agua agregada y acumulada, gesto, intensidad, cobertura, flujo, acción secundaria y notas. `visibility` y `copyMode` permanecen en mayúsculas en el modelo local y el descriptor los convierte a los valores minúsculos exigidos por PostgreSQL.
+
+`BrewSession` registra una ejecución terminada sin fusionarse con la técnica. Conserva referencias opcionales a técnica, receta, método/equipo, café y molino; snapshots de nombres de técnica, receta, método, café y molino, además de dosis, agua, ratio, temperatura, molienda, tiempo ejecutado y la secuencia completa de pasos en JSON. Incluye los mismos metadatos de propiedad, versión, sincronización y borrado lógico que el resto de entidades sincronizables.
+
+`Tasting` guarda familia y notas de sabor, textura, limpieza, persistencia, seis atributos sensoriales, valoración, NPS, notas libres, etapa térmica y vínculo opcional con una preparación. `TastingObservation` conserva cada lectura durante el enfriamiento por `tastingId`. `CupSession` relaciona una cata con una preparación sin impedir catas independientes y congela referencias, nombres, dosis, agua, proporción, temperatura, molienda, duración, estado térmico, valoración, NPS, comentario y fecha. Así, la pestaña Tazas conserva significado aunque cambie o se borre lógicamente el inventario original.
+
+`UserProfile` usa el UUID de Auth como identidad y conserva nombre, alias, biografía, color de avatar, métodos favoritos y privacidad. Las estadísticas del Hub se derivan de recetas, técnicas, preparaciones y catas activas; no son campos almacenados ni valores simulados.
+
+`SocialShare` se almacena en la tabla Android `shares` y conserva tipo/UUID de la entidad, autor público, visibilidad, destino opcional, mensaje y snapshot plano interoperable. El modelo iOS normaliza ese snapshot a una receta o técnica tipada y también acepta el envoltorio usado por versiones iOS anteriores. `InboxItem` enlaza una publicación directa con destinatario, lectura y fecha sin duplicar el snapshot. El usuario elige ese destino mediante su alias público; una RPC autenticada hace la resolución exacta, excluye la propia cuenta y mantiene el UUID fuera de la interfaz. Los alias activos son únicos sin distinguir mayúsculas. `ActivityItem` registra acciones sociales reales del usuario. `ShareLike`, `ShareSave`, `BlockedUser` y `ContentReport` son tablas separadas con claves compuestas o unicidad para impedir duplicados. El motivo de reporte conserva una categoría estable y detalles limitados; `BlockedUser` puede eliminarse para desbloquear. Una copia o variante crea un agregado local con UUID nuevo, `IMPORT` o `FORK`, y conserva atribución; nunca adopta el UUID editable del autor. `profiles.is_private` prohíbe crear publicaciones públicas tanto en iOS como mediante trigger de base de datos.
+
+`SyncOperation` es una outbox local compactada por `tableName` y UUID. Conserva operación, payload, intentos, próximo reintento y último error. `tableName` reemplaza con migración ligera al antiguo `entityName`, que colisionaba con un identificador de Core Data; las filas heredadas vacías se reparan por UUID y tipo local antes de compactar o enviar. No se sincroniza a Supabase: coordina el envío de todas las entidades privadas y desaparece lógicamente sólo después de una escritura aceptada o de adoptar determinísticamente una fila remota más reciente.
+
+Cada propietario tiene un checkpoint incremental. Su valor procede de la cabecera `Date` del primer response de cada barrido exitoso menos cinco minutos, no del final de la sincronización. Los pulls usan comparación inclusiva y el merge es idempotente, por lo que volver a leer el límite y la ventana solapada es seguro.
+
+El almacén físico puede contener la caché de varias cuentas, pero ninguna consulta funcional es global: el ámbito activo acepta sólo `ownerId` coincidente y, durante adopción inicial, filas sin propietario. Las filas nuevas reciben propietario desde el contexto. Outbox y checkpoints se particionan por UUID; Calculadora, Laboratorio, Preparación, Cata y preferencias de trabajo se particionan en `UserDefaults`. Al salir, las filas permanecen como caché cifrada por la protección de archivos de iOS, pero dejan de ser visibles para la aplicación.
+
+Cerrar sesión conserva esa caché para permitir volver a entrar offline. Eliminar la cuenta es distinto: después de que la Edge Function confirma la eliminación remota, `LocalAccountDataPurger` elimina físicamente todas las entidades Core Data cuyo `ownerId` corresponde a esa cuenta y todas sus claves `UserDefaults` con ámbito. Los datos de invitado y de otras cuentas permanecen intactos.
+
+`syncStatus`: `synced`, `pendingCreate`, `pendingUpdate`, `pendingDelete`, `conflict`, `error`.
+
+`AIRequestLog` es exclusivamente telemetría de cuota: propietario, versión de prompt, fecha y `outcome_code` cerrado (`started`, `success`, `invalid_output`, `quota_exhausted`, `upstream_error`, `timeout`, `unavailable`). No almacena parámetros de preparación, texto generado ni secretos. La reserva se crea dentro de la misma transacción que cuenta las solicitudes recientes del propietario.

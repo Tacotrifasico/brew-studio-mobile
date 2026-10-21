@@ -143,7 +143,7 @@ object BrewTechniqueCatalog {
             doseG = dose, waterMl = water, ratio = method.defaultRatio,
             temperatureC = template.temperatureC, grindValue = template.grindValue,
             grindDescription = template.grindDescription, notes = template.description,
-            totalTimeSeconds = template.steps.sumOf { it.durationSeconds }, author = "Cupa",
+            totalTimeSeconds = template.steps.sumOf { it.durationSeconds }, author = "cUpa",
             description = template.description, visibility = "PUBLIC"
         )
     }

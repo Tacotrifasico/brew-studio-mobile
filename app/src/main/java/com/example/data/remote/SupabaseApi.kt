@@ -24,6 +24,9 @@ interface SupabaseApi {
     @POST("auth/v1/token?grant_type=refresh_token")
     suspend fun refresh(@Body request: Map<String, String>): Response<AuthResponse>
 
+    @POST("auth/v1/token?grant_type=pkce")
+    suspend fun exchangeGoogle(@Body request: Map<String, String>): Response<AuthResponse>
+
     @POST("auth/v1/logout?scope=local")
     suspend fun logout(): Response<Unit>
 

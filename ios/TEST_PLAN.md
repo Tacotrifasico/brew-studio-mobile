@@ -1,0 +1,97 @@
+# Plan de pruebas
+
+## Unitarias
+
+- Calculadora: las tres direcciones, ratios base, decimales, coma, mínimos, truncamiento y redondeo.
+- Laboratorio: extracción, altitud, hervor, tiempo, seis puntuaciones y límites.
+- Frescura, temporizadores, mapeadores, conflictos y repositorios.
+
+## Integración
+
+- CRUD Core Data tras cerrar/reabrir.
+- Login, recuperación de sesión y CRUD Supabase.
+- Outbox offline, reconexión y conflicto.
+- RLS con dos usuarios.
+- Gemini, timeout, cuota, ausencia de red y fallback.
+
+## Interfaz
+
+- Cuenta, café, receta, técnica, preparación, Laboratorio, cata y enfriamiento.
+- Reapertura, edición, eliminación, estados vacíos, errores y offline.
+- El target `CupaUITests` arranca con Core Data en memoria y cubre navegación principal, Calculadora completa desde Taller y Preparar, estado real del taller, acceso a preparación, Laboratorio, Almacén, Cata, Configuración y Brew Hub.
+
+## Distribución
+
+- Build Debug/Release, Archive, permisos, secretos, accesibilidad y ejecución sin red.
+
+## Evidencia ejecutada
+
+- `LabGoldenVerifier`: cuatro perfiles dorados aprobados (nivel del mar, CDMX/hervor, subextracción y sobreextracción).
+- Calculadora: favorito personalizado guardado, elegido de forma persistente, restaurado con prioridad aunque exista un borrador posterior y eliminado junto con su selección: prueba Android aprobada + XCTest compilado.
+- Calculadora: restauración de método/café/ratio/agua y pasos rápidos V60, AeroPress y Espresso; continuidad automática hacia Preparar y protección de una extracción iniciada: prueba Android aprobada + XCTest compilado.
+- Calculadora: cuatro métodos fijados iniciales, personalización persistente, método de equipo con ratio de respaldo 1:15 y conservación de su UUID en favorito, Laboratorio y Preparación: verificador ejecutado + XCTest y recorrido del gestor compilados.
+- Restauración de altitud, unidad y tiempo mediante `UserDefaults`: aprobada.
+- Laboratorio geográfico: las 12 ciudades y su orden/altitud coinciden con `LabAltitudeHeaderCard.kt`; selección ciudad frente a manual, límites negativos/superiores a 5,000 m y hervor de 83 °C a 5,000 m ejecutados.
+- Laboratorio térmico: conversión reversible, hervor CDMX mostrado como 198 °F, migración de la preferencia anterior y clave compartida con Configuración ejecutados; recorrido UI de ciudad personalizada y selector °C/°F compilado.
+- Frescura de café: cortes exactos en 7/21/35/60 días, interpolación hasta 100%, fecha futura, ausencia de fecha y alerta tras 14 días abierta: aprobados.
+- Alta, consulta y borrado lógico de café y molino; alta y actualización de equipo; alta de experimento en Core Data en memoria: aprobados.
+- Persistencia local real: café con UUID, fecha, origen y existencias guardado en SQLite, store desmontado y recuperado desde un segundo `NSPersistentContainer`: aprobado.
+- Receta: alta, edición por UUID, reordenamiento, favorita, duplicación profunda y borrado lógico de hijos: aprobados.
+- Recetario: importación local de texto libre, inferencia de categoría/método, unidades, pasos y valores de respaldo equivalentes al contrato Android: verificador ejecutado + XCTest compilado.
+- Recetario: detalle legible con intención, etiquetas, cantidades, unidades, duraciones y acciones de favorita/duplicar/editar/eliminar; acceso a alta e importación cubierto por el target UI compilado.
+- Técnica: alta, detalle completo, edición, reordenamiento, eliminación de pasos, duración total, agua acumulada, gesto, intensidad, cobertura, flujo, acción secundaria, borrado lógico y carga directa en Preparación: verificador ejecutado + XCTest y acceso UI compilados.
+- Preparación: carga desde técnica, avance guiado tras 46 segundos, cierre en tiempo total, recuperación pendiente de guardado, prevención de duplicados, nuevo UUID y snapshot persistente de `BrewSession`: aprobados.
+- Cata: cortes térmicos exactos a 0/239/240/599/600/959/960 segundos, pausa, recuperación a 601 segundos, reinicio, alta/baja de observaciones, cierre inmutable, vínculo opcional con `BrewSession`, detalle/historial íntegro, edición con el mismo UUID, reconciliación sin duplicar `CupSession`, alta posterior con UUID nuevo y borrado lógico conjunto: verificador ejecutado + XCTest y UI compilados.
+- Molinos y equipos: alta, lectura íntegra, edición conservando UUID, validación de rango/capacidad, reapertura desde un contenedor SQLite nuevo, estados de sincronización, borrado lógico y conservación de referencias/snapshots en preparaciones históricas: verificador ejecutado + XCTest y recorridos UI compilados.
+- Tazas: referencias, dosis, agua, ratio, temperatura, molienda, duración, cinco nombres congelados, vida térmica, valoración, NPS, comentario y fecha verificados contra la preparación/cata de origen; detalle completo y eliminación conjunta confirmada compilados: aprobados.
+- Cuenta: estado seguro sin configuración, login GoTrue, registro con sesión inmediata o confirmación pendiente, reenvío, recuperación no enumerable con `redirect_to`, recepción del enlace profundo, rechazo de esquema ajeno/error/vencimiento y cambio `PUT /auth/v1/user` con el token temporal sin crear sesión persistente; sesión vencida sin red conservada y refresh rechazado limpiado: casos críticos ejecutados en el verificador + XCTest compilado.
+- Eliminación de cuenta: ruta autenticada, confirmación explícita y ausencia de credenciales administrativas en el request iOS; tras éxito remoto se eliminan caché y preferencias sólo del propietario confirmado, conservando invitado y otra cuenta: verificador ejecutado + XCTest compilado.
+- Sincronización: elección por fecha/versión, rechazo de propietario distinto, compactación de outbox, reparación de filas heredadas sin tabla, reintento exponencial y finalización: verificador ejecutado.
+- Sincronización integral: asignación de propietario a datos offline, JSON/JSONB, escritura condicional sin `merge-duplicates`, creación sin sobrescritura, adopción de una edición remota más reciente, conservación de la edición local ante una respuesta incoherente, push, pull incremental, merge, checkpoint fijado con la fecha HTTP inicial menos cinco minutos, fallback local con el mismo solapamiento, outbox preservada sin red y reintento automático al reconectar: verificador ejecutado + XCTest compilado.
+- Compatibilidad Android/iOS: iOS escribe café en `beans` con `user_id`, `roaster` y `stock_grams`; rechaza columnas paralelas, decodifica snapshots sociales planos Android y publica el mismo formato en `shares`. Los nueve archivos SQL fueron ejecutados en PostgreSQL efímero sobre un esquema Android poblado y sobre un esquema iOS anterior; se verificó conservación, propagación en ambas direcciones, atribución completa de recetas y que una cuenta sintética no pueda leer ni modificar el café privado de la otra. Falta repetir con JWT reales en un clon Supabase.
+- Integridad del pull de técnicas: el verificador ejecutable acepta un agregado ordenado aunque los pasos lleguen desordenados y rechaza agua acumulada incoherente; el coordinador descarga todas las tablas antes de aplicar, valida agua/proporción/duración y revierte el lote completo ante error.
+- Aislamiento multiusuario local: cuenta A, cuenta B e invitado se separan en consultas Core Data, altas, outbox, checkpoints y estados recuperables de Calculadora, Laboratorio, Preparación y Cata; la migración del valor legado ocurre una sola vez: verificador ejecutado + XCTest compilado.
+- Gemini: llamada autenticada a Edge Function, modelo GA configurado por secreto, validación simétrica de entrada, salida máxima de 90 palabras, rechazo de controles/prompt obsoleto, fallback local determinista, cuota PostgreSQL atómica de cinco solicitudes por minuto y aislamiento de cuota entre dos usuarios: verificadores ejecutados + XCTest compilado.
+- Perfil: creación, edición con UUID estable, normalización de alias, aislamiento entre dos propietarios y DTO sin correo: verificador ejecutado.
+- Configuración: restauración de tema oscuro y Fahrenheit aprobada; eliminado el control métrico sin efecto que no existe en Android.
+- Navegación: las cinco secciones mantienen el orden Taller, Preparar, Cata, Laboratorio y Almacén; el modelo compartido conserva los 18 g introducidos en Calculadora al recorrerlas todas: XCTest y recorrido UI compilados.
+- Taller: la Calculadora completa reutiliza el mismo modelo y persistencia de Preparar; café, ratio, agua, presets, métodos del inventario, favoritos y acciones Lab/Preparar están disponibles desde Inicio. Los contadores y últimos recursos provienen de Core Data filtrado por propietario y desaparecen en vacío en vez de mostrar datos ficticios: target UI compilado.
+- Tema y accesibilidad: paletas clara y oscura verificadas matemáticamente con contraste WCAG AA mínimo 4.5:1 para texto, secundarios, acentos y categorías; lienzo claro `#F7F5F0`, superficie secundaria `#EFECE6`, tarjetas `#FFFFFF`, borde `#E6DFD5`, terracota `#C26638`, texto terracota accesible y sombra café al 8%; formularios/listas heredan el lienzo cálido: XCTest compilado.
+- Inventario: fallos de guardado de café, molino y equipo hacen rollback, mantienen el editor abierto y muestran alerta; flujo compilado.
+- Café: altitud fuera de rango, cantidades vacías/no numéricas/negativas, existencias mayores al lote y fechas futuras o invertidas son rechazadas antes de guardar; decimal con coma aceptado: verificador ejecutado + XCTest compilado.
+- Recuperación de Core Data: un destino SQLite imposible activa un store temporal visible, permite guardar durante la sesión y no termina la app ni destruye el archivo original: verificador ejecutado + XCTest compilado.
+- Acciones destructivas: café, taza/cata, experimento, receta, técnica y reinicios con progreso sólo se ejecutan después de una confirmación explícita; se retiraron borrados por deslizamiento que la omitían: targets UI compilados.
+- Historial por café: consulta de preparación y taza por `beanId`, conteos, calificación/comentario y conservación de ambas sesiones después del borrado lógico del café: verificador ejecutado + XCTest compilado.
+- Acciones de café: transición cerrado/abierto/terminado, fecha de apertura, separación de lotes terminados, UUID recuperable en Preparación y carga de frescura/proceso/notas al Laboratorio: verificador ejecutado + XCTest compilado.
+- Social: feed público en `shares`, publicación sin correo y con snapshot plano compatible con Android, resumen visible de receta/técnica, lectura de snapshots Android, límite común de 280 caracteres, envío directo por alias sin UUID visible, buzón/lectura, actividad, Me gusta/guardados, reporte, bloqueo y filtro preventivo: contratos XCTest compilados. La RPC de alias normaliza `@`, resuelve sin distinguir mayúsculas, excluye la propia cuenta y se ejecutó con RLS A/B en PostgreSQL efímero. Los fallos de carga y publicaciones eliminadas tienen estados explícitos. Copia y variante profundas con UUID nuevos, autor original, publicación fuente, raíz, atribución y modos `IMPORT`/`FORK`: verificador ejecutado.
+- Target `CupaTests`: compilación para iOS Simulator aprobada. La ejecución XCTest queda pendiente hasta reparar CoreSimulator local.
+- Target `CupaUITests`: cinco recorridos XCTest UI compilados para arm64 y x86_64. La ejecución queda pendiente hasta reparar CoreSimulator local.
+- Build Release para iPhone genérico sin firma: aprobado.
+- Accesibilidad estática: controles de sólo icono etiquetados, áreas táctiles de 44 puntos e identificadores para flujos críticos: compilado.
+- Privacidad: `PrivacyInfo.xcprivacy` válido con `plutil` e incluido en el bundle Release; consentimiento Gemini explícito y revocable: compilado.
+- Archive técnico Release: aprobado sin firma, excluyendo únicamente AppIcon por fallo de `CoreSimulatorService/simdiskimaged` que afecta a `actool` en esta Mac.
+- Metadatos Release: bundle `com.tacotrifasico.cupa`, versión `1.0` y `ITSAppUsesNonExemptEncryption=false` comprobados en el `Info.plist` construido; enlaces HTTPS legales aparecen sólo cuando están configurados.
+- Perfil/UGC: normalización y rechazo de entradas inválidas, política privado/directo, categorías de reporte y contratos de listar/desbloquear compilados; el verificador ejecuta persistencia, color normalizado y política de visibilidad.
+- Ambientes: Xcode detecta Debug, Staging y Release; los esquemas compartidos `Cupa` y `Cupa-Staging` están disponibles. Staging compila app, unitarias y cinco recorridos UI para ambas arquitecturas de simulador con nombre/bundle independientes; Production compila para iPhone con `APP_ENVIRONMENT=Production` dentro del bundle.
+- Configuración remota: valores vacíos e HTTP remoto se rechazan, HTTPS se normaliza y HTTP local se admite sólo para `localhost`/`127.0.0.1`: verificador ejecutado + XCTest compilado.
+- Distribución estática: launch screen nativo, español como región de desarrollo, iPhone arm64, pantalla completa y orientaciones soportadas constan en el `Info.plist`; no se importan APIs que requieran cámara, fotos, ubicación, micrófono, contactos, calendario o salud.
+
+Comando alternativo de verificación cuando CoreSimulator no inicia:
+
+```bash
+MAC_SDK=$(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun --sdk macosx --show-sdk-path)
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -target arm64-apple-macosx15.0 -sdk "$MAC_SDK" -module-cache-path /private/tmp/cupa-swift-module-cache -framework Combine -framework CoreData -framework Security Cupa/CalculatorModel.swift Cupa/LabModel.swift Cupa/PreparationModel.swift Cupa/RecipeTechniqueModels.swift Cupa/TastingModels.swift Cupa/ProfileModels.swift Cupa/AccountServices.swift Cupa/SyncEngine.swift Cupa/EntitySyncCoordinator.swift Cupa/SuggestionServices.swift Cupa/SocialModels.swift Cupa/PersistenceModels.swift Cupa/RecipeTechniqueRepository.swift Tools/LabGoldenVerifier.swift -o /private/tmp/cupa-domain-verifier
+/private/tmp/cupa-domain-verifier
+```
+
+El verificador también cubre Calculadora → Laboratorio, Receta/Técnica/Inventario → Laboratorio, Laboratorio → Preparación, Cata → Laboratorio, restauración desde `UserDefaults`, reapertura y borrado lógico de experimentos, persistencia de referencias y conservación de snapshots después del borrado lógico del inventario.
+
+Verificación ejecutable de la secuencia Supabase contra PostgreSQL efímero:
+
+```bash
+cd Tools
+npm install
+npm run verify-backend -- /ruta/al/proyecto-android/supabase/migrations/001_brew_studio_schema.sql
+```
+
+El arnés sustituye únicamente las extensiones/roles administrados que aporta Supabase; ejecuta sin modificar el resto del DDL, triggers, claves, backfills y consultas de compatibilidad.

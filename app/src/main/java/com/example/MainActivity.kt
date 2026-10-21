@@ -38,15 +38,28 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        socialViewModel.handleGoogleCallback(intent?.data)
+        intent?.data = null
         
         // Full Edge-to-Edge immersion support
         enableEdgeToEdge()
         
         setContent {
             MyApplicationTheme {
-                BrewStudioAppShell(viewModel = baristaViewModel, socialViewModel = socialViewModel)
+                val accountState by socialViewModel.uiState.collectAsState()
+                if (accountState.isLoggedIn) {
+                    BrewStudioAppShell(viewModel = baristaViewModel, socialViewModel = socialViewModel)
+                } else {
+                    com.example.ui.user.UserScreen(viewModel = socialViewModel, requiresLogin = true, onBack = {})
+                }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        socialViewModel.handleGoogleCallback(intent.data)
+        intent.data = null
     }
 }
 

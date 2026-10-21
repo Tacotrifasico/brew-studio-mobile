@@ -57,6 +57,14 @@ class AuthRemoteDataSource {
         return Result.success(Unit)
     }
 
+    suspend fun exchangeGoogle(code: String, verifier: String): Result<AuthResponse> = try {
+        val response = api.exchangeGoogle(mapOf("auth_code" to code, "code_verifier" to verifier))
+        val value = response.body()
+        if (response.isSuccessful && !value?.accessToken.isNullOrBlank() && value?.user != null && !value.refreshToken.isNullOrBlank()) {
+            Result.success(value)
+        } else Result.failure(IOException("No se pudo completar el acceso con Google. Inicia de nuevo."))
+    } catch (_: Exception) { Result.failure(IOException("No se pudo conectar. Intenta de nuevo; tu Almacén sigue en el dispositivo.")) }
+
     suspend fun refresh(refreshToken: String): Result<AuthResponse> = try {
         val response = api.refresh(mapOf("refresh_token" to refreshToken))
         if (response.isSuccessful && response.body()?.accessToken != null) Result.success(response.body()!!)

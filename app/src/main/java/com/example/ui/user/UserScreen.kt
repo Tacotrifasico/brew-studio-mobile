@@ -24,9 +24,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,14 +40,15 @@ import com.example.ui.theme.*
 import com.example.ui.viewmodel.SocialViewModel
 import com.example.ui.viewmodel.SocialUiState
 import com.example.data.remote.SupabaseClientProvider
+import com.example.ui.components.BrewOrganicBackground
 import kotlinx.coroutines.launch
 
-const val INSTAGRAM_URL = "https://instagram.com/brewstudio.app"
-const val INSTAGRAM_HANDLE = "@brewstudio.app"
+const val INSTAGRAM_URL = "https://www.instagram.com/cupa.brew/"
+const val INSTAGRAM_HANDLE = "@cupa.brew"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UserScreen(viewModel: SocialViewModel, onBack: () -> Unit) {
+fun UserScreen(viewModel: SocialViewModel, requiresLogin: Boolean = false, onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(0) }
@@ -51,10 +57,12 @@ fun UserScreen(viewModel: SocialViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Brew Studio Hub", fontWeight = FontWeight.Bold, color = TextPrincipal) },
+                title = { Text(if (state.isLoggedIn) "cUpa Hub" else "Bienvenido", fontWeight = FontWeight.Bold, color = TextPrincipal) },
                 navigationIcon = {
+                    if (!requiresLogin) {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Regresar", tint = TextPrincipal)
+                    }
                     }
                 },
                 actions = {
@@ -79,7 +87,8 @@ fun UserScreen(viewModel: SocialViewModel, onBack: () -> Unit) {
                 .padding(paddingValues)
         ) {
             if (!state.isLoggedIn) {
-                UnauthenticatedView(viewModel = viewModel)
+                BrewOrganicBackground()
+                UnauthenticatedView(viewModel = viewModel, onContinueLocal = if (requiresLogin) null else onBack)
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Profile Header card
@@ -192,63 +201,62 @@ fun UserProfileCard(state: SocialUiState, onLogout: () -> Unit) {
 }
 
 @Composable
-fun UnauthenticatedView(viewModel: SocialViewModel) {
-    var isSignUpMode by remember { mutableStateOf(false) }
-    var email by remember { mutableStateOf("") }
+fun UnauthenticatedView(viewModel: SocialViewModel, onContinueLocal: (() -> Unit)?) {
+    val authContext = LocalContext.current
+    var isSignUpMode by rememberSaveable { mutableStateOf(false) }
+    var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var displayName by remember { mutableStateOf("") }
-    var handle by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    var displayName by rememberSaveable { mutableStateOf("") }
+    var handle by rememberSaveable { mutableStateOf("") }
 
     val state by viewModel.uiState.collectAsState()
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .imePadding()
+            .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(vertical = 16.dp)
     ) {
         item {
-            Icon(
-                imageVector = Icons.Default.Groups,
-                contentDescription = "Social Hub logo",
-                modifier = Modifier.size(72.dp),
-                tint = AcentoPrincipal
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Taller del Brewther",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Black,
-                color = TextPrincipal,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = "Backend y base de datos social sincrónico.",
-                fontSize = 13.sp,
-                color = TextSecundario,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-            Spacer(modifier = Modifier.height(32.dp))
+            Column(Modifier.fillMaxWidth().heightIn(min = 140.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("cUpa", fontSize = 48.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Serif, color = AcentoPrincipal)
+                    Spacer(Modifier.weight(1f))
+                    // Reserved for the rectangular mascot; the supplied image is the launcher icon.
+                    Box(Modifier.size(84.dp).background(Color(0xFFC26638).copy(alpha = 0.10f), RoundedCornerShape(18.dp)))
+                }
+                Text("Hecha por compitas del café.", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrincipal)
+                Text("Sin cargos extras.", fontSize = 12.sp, color = TextSecundario)
+            }
         }
 
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, BordeSuave)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = if (isSignUpMode) "Regístrate en la red" else "Inicia Sesión Real",
+                        text = if (isSignUpMode) "Crear cuenta" else "Iniciar sesión",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrincipal,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
+
+                    OutlinedButton(onClick = { viewModel.startGoogle(authContext) },
+                        enabled = !state.isAuthLoading && SupabaseClientProvider.isConfigured,
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text("Continuar con Google")
+                    }
+                    Text("o con tu correo", fontSize = 12.sp, color = TextSecundario,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), textAlign = TextAlign.Center)
 
                     OutlinedTextField(
                         value = email,
@@ -256,6 +264,7 @@ fun UnauthenticatedView(viewModel: SocialViewModel) {
                         label = { Text("Correo Electrónico") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = AcentoPrincipal,
                             unfocusedBorderColor = BordeMedio
@@ -266,7 +275,7 @@ fun UnauthenticatedView(viewModel: SocialViewModel) {
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Contraseña (mín. 6 carc.)") },
+                        label = { Text(if (isSignUpMode) "Contraseña (mín. 8 caracteres)" else "Contraseña") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
@@ -277,6 +286,10 @@ fun UnauthenticatedView(viewModel: SocialViewModel) {
                     )
 
                     if (isSignUpMode) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(value = confirmation, onValueChange = { confirmation = it },
+                            label = { Text("Confirmar contraseña") }, modifier = Modifier.fillMaxWidth(),
+                            singleLine = true, visualTransformation = PasswordVisualTransformation())
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = displayName,
@@ -290,7 +303,7 @@ fun UnauthenticatedView(viewModel: SocialViewModel) {
                         OutlinedTextField(
                             value = handle,
                             onValueChange = { handle = it },
-                            label = { Text("Handle único (e.g. barista_v60)") },
+                            label = { Text("Alias (ej. barista_v60)") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AcentoPrincipal)
@@ -310,27 +323,28 @@ fun UnauthenticatedView(viewModel: SocialViewModel) {
                     Button(
                         onClick = {
                             if (isSignUpMode) {
-                                viewModel.register(email, password, displayName, handle)
+                                viewModel.register(email.trim(), password, displayName.trim(), handle.trim())
                             } else {
-                                viewModel.login(email, password)
+                                viewModel.login(email.trim(), password)
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = AcentoPrincipal),
                         shape = RoundedCornerShape(12.dp),
-                        enabled = !state.isAuthLoading
+                        enabled = !state.isAuthLoading && email.isNotBlank() && password.isNotEmpty() &&
+                            (!isSignUpMode || (password.length >= 8 && password == confirmation && displayName.isNotBlank() && handle.isNotBlank()))
                     ) {
                         if (state.isAuthLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
                         } else {
-                            Text(if (isSignUpMode) "Crear Perfil en Supabase" else "Ingresar con Supabase Auth")
+                            Text(if (isSignUpMode) "Crear cuenta" else "Iniciar sesión")
                         }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    OutlinedButton(
-                        onClick = { viewModel.loginDemo() },
+                    if (onContinueLocal != null) OutlinedButton(
+                        onClick = { viewModel.authRepo.cancelGoogle(); onContinueLocal() },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = AcentoPrincipal),
                         shape = RoundedCornerShape(12.dp),
@@ -338,7 +352,7 @@ fun UnauthenticatedView(viewModel: SocialViewModel) {
                     ) {
                         Icon(Icons.Default.PersonOutline, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Ingresar en Modo Demo (Local / Offline)")
+                        Text("Continuar sin cuenta")
                     }
                 }
             }
@@ -346,7 +360,7 @@ fun UnauthenticatedView(viewModel: SocialViewModel) {
 
         item {
             Spacer(modifier = Modifier.height(16.dp))
-            TextButton(onClick = { isSignUpMode = !isSignUpMode }) {
+            TextButton(onClick = { isSignUpMode = !isSignUpMode; confirmation = "" }) {
                 Text(
                     text = if (isSignUpMode) "¿Ya tienes un usuario? Ingresa aquí" else "¿No tienes una cuenta? Crea tu cuenta",
                     color = AcentoPrincipal,
@@ -354,6 +368,8 @@ fun UnauthenticatedView(viewModel: SocialViewModel) {
                     fontSize = 12.sp
                 )
             }
+            Text("Inicia sesión para entrar. Tus granos y preparaciones se guardan en este dispositivo.",
+                fontSize = 12.sp, color = TextSecundario, textAlign = TextAlign.Center)
         }
     }
 }

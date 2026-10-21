@@ -1,0 +1,167 @@
+import CoreData
+import Foundation
+
+protocol SyncTrackedRecord: AnyObject {
+    var updatedAt: Date { get set }
+    var version: Int64 { get set }
+    var syncStatusRaw: String { get set }
+    var deletedAt: Date? { get set }
+}
+
+extension SyncTrackedRecord {
+    var trackedSyncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .error }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+    func trackUpdate() { updatedAt = .now; version += 1; trackedSyncStatus = .pendingUpdate }
+    func trackDeletion() { deletedAt = .now; updatedAt = .now; version += 1; trackedSyncStatus = .pendingDelete }
+}
+
+@objc(RecipeRecord)
+final class RecipeRecord: NSManagedObject, SyncTrackedRecord {
+    @NSManaged var id: UUID; @NSManaged var ownerId: UUID?
+    @NSManaged var name: String; @NSManaged var recipeKind: String; @NSManaged var intention: String
+    @NSManaged var suggestedMethodId: UUID?; @NSManaged var suggestedMethodName: String
+    @NSManaged var isFavorite: Bool; @NSManaged var tags: String; @NSManaged var visibility: String
+    @NSManaged var isShared: Bool; @NSManaged var originalAuthorUserId: UUID?; @NSManaged var originalAuthorName: String?
+    @NSManaged var originalEntityId: UUID?; @NSManaged var rootEntityId: UUID?; @NSManaged var importedFromShareId: UUID?; @NSManaged var copyMode: String
+    @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
+
+    convenience init(context: NSManagedObjectContext, id: UUID = UUID(), name: String, recipeKind: String, intention: String, suggestedMethodId: UUID?, suggestedMethodName: String, isFavorite: Bool, tags: String, originalEntityId: UUID? = nil, rootEntityId: UUID? = nil, copyMode: String = "ORIGINAL") {
+        self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.name = name; self.recipeKind = recipeKind
+        self.intention = intention; self.suggestedMethodId = suggestedMethodId; self.suggestedMethodName = suggestedMethodName
+        self.isFavorite = isFavorite; self.tags = tags; visibility = "PRIVATE"
+        isShared = false; originalAuthorUserId = nil; originalAuthorName = nil
+        self.originalEntityId = originalEntityId; self.rootEntityId = rootEntityId; importedFromShareId = nil; self.copyMode = copyMode
+        createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+    var syncStatus: SyncStatus {
+        get { trackedSyncStatus }
+        set { trackedSyncStatus = newValue }
+    }
+    func markUpdated() { trackUpdate() }; func markDeleted() { trackDeletion() }
+}
+extension RecipeRecord: Identifiable {}
+
+@objc(RecipeIngredientRecord)
+final class RecipeIngredientRecord: NSManagedObject, SyncTrackedRecord {
+    @NSManaged var id: UUID; @NSManaged var ownerId: UUID?; @NSManaged var recipeId: UUID
+    @NSManaged var name: String; @NSManaged var amount: Double; @NSManaged var unit: String; @NSManaged var orderIndex: Int64
+    @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
+    convenience init(context: NSManagedObjectContext, id: UUID = UUID(), recipeId: UUID, name: String, amount: Double, unit: String, orderIndex: Int) {
+        self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.recipeId = recipeId; self.name = name
+        self.amount = amount; self.unit = unit; self.orderIndex = Int64(orderIndex)
+        createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+    func markUpdated() { trackUpdate() }; func markDeleted() { trackDeletion() }
+}
+extension RecipeIngredientRecord: Identifiable {}
+
+@objc(RecipeStepRecord)
+final class RecipeStepRecord: NSManagedObject, SyncTrackedRecord {
+    @NSManaged var id: UUID; @NSManaged var ownerId: UUID?; @NSManaged var recipeId: UUID
+    @NSManaged var instruction: String; @NSManaged var stepNumber: Int64; @NSManaged var durationSecondsValue: NSNumber?
+    @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
+    var durationSeconds: Int? {
+        get { durationSecondsValue?.intValue }
+        set { durationSecondsValue = newValue.map(NSNumber.init(value:)) }
+    }
+    convenience init(context: NSManagedObjectContext, id: UUID = UUID(), recipeId: UUID, instruction: String, stepNumber: Int, durationSeconds: Int?) {
+        self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.recipeId = recipeId; self.instruction = instruction
+        self.stepNumber = Int64(stepNumber); self.durationSeconds = durationSeconds
+        createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+    func markUpdated() { trackUpdate() }; func markDeleted() { trackDeletion() }
+}
+extension RecipeStepRecord: Identifiable {}
+
+@objc(TechniqueRecord)
+final class TechniqueRecord: NSManagedObject, SyncTrackedRecord {
+    @NSManaged var id: UUID; @NSManaged var ownerId: UUID?
+    @NSManaged var name: String; @NSManaged var methodId: UUID?; @NSManaged var methodName: String
+    @NSManaged var recipeId: UUID?; @NSManaged var beanId: UUID?; @NSManaged var grinderId: UUID?
+    @NSManaged var doseGrams: Double; @NSManaged var waterMl: Int64; @NSManaged var ratio: Double; @NSManaged var temperatureC: Int64
+    @NSManaged var executionMode: String; @NSManaged var grindValue: Double; @NSManaged var grindDescription: String; @NSManaged var grindUnit: String
+    @NSManaged var notes: String; @NSManaged var techniqueDescription: String; @NSManaged var totalTimeSeconds: Int64
+    @NSManaged var visibility: String; @NSManaged var isShared: Bool; @NSManaged var originalAuthorUserId: UUID?; @NSManaged var originalAuthorName: String?
+    @NSManaged var originalEntityId: UUID?; @NSManaged var rootEntityId: UUID?; @NSManaged var importedFromShareId: UUID?; @NSManaged var copyMode: String
+    @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
+
+    convenience init(context: NSManagedObjectContext, id: UUID = UUID(), name: String, methodId: UUID?, methodName: String, recipeId: UUID?, beanId: UUID?, grinderId: UUID?, doseGrams: Double, waterMl: Int, ratio: Double, temperatureC: Int, executionMode: String, grindValue: Double, grindDescription: String, grindUnit: String, notes: String, techniqueDescription: String, totalTimeSeconds: Int) {
+        self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.name = name; self.methodId = methodId; self.methodName = methodName
+        self.recipeId = recipeId; self.beanId = beanId; self.grinderId = grinderId
+        self.doseGrams = doseGrams; self.waterMl = Int64(waterMl); self.ratio = ratio; self.temperatureC = Int64(temperatureC)
+        self.executionMode = executionMode; self.grindValue = grindValue; self.grindDescription = grindDescription; self.grindUnit = grindUnit
+        self.notes = notes; self.techniqueDescription = techniqueDescription; self.totalTimeSeconds = Int64(totalTimeSeconds)
+        visibility = "PRIVATE"; isShared = false; originalAuthorUserId = nil; originalAuthorName = nil
+        originalEntityId = nil; rootEntityId = nil; importedFromShareId = nil; copyMode = "ORIGINAL"
+        createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+    var syncStatus: SyncStatus {
+        get { trackedSyncStatus }
+        set { trackedSyncStatus = newValue }
+    }
+    func markUpdated() { trackUpdate() }; func markDeleted() { trackDeletion() }
+}
+extension TechniqueRecord: Identifiable {}
+
+@objc(TechniqueStepRecord)
+final class TechniqueStepRecord: NSManagedObject, SyncTrackedRecord {
+    @NSManaged var id: UUID; @NSManaged var ownerId: UUID?; @NSManaged var techniqueId: UUID
+    @NSManaged var stepNumber: Int64; @NSManaged var title: String; @NSManaged var durationSeconds: Int64
+    @NSManaged var waterAddedMl: Int64; @NSManaged var waterAccumulatedMl: Int64
+    @NSManaged var intensity: String; @NSManaged var gesture: String; @NSManaged var stepNote: String
+    @NSManaged var coverageValue: NSNumber?; @NSManaged var flowValue: NSNumber?; @NSManaged var secondaryAction: String?
+    @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
+    var coverage: Double? {
+        get { coverageValue?.doubleValue }
+        set { coverageValue = newValue.map(NSNumber.init(value:)) }
+    }
+    var flow: Double? {
+        get { flowValue?.doubleValue }
+        set { flowValue = newValue.map(NSNumber.init(value:)) }
+    }
+    convenience init(context: NSManagedObjectContext, id: UUID = UUID(), techniqueId: UUID, stepNumber: Int, title: String, durationSeconds: Int, waterAddedMl: Int, waterAccumulatedMl: Int, intensity: String, gesture: String, stepNote: String, coverage: Double?, flow: Double?, secondaryAction: String?) {
+        self.init(context: context); self.id = id; ownerId = context.activeOwnerId; self.techniqueId = techniqueId
+        self.stepNumber = Int64(stepNumber); self.title = title; self.durationSeconds = Int64(durationSeconds)
+        self.waterAddedMl = Int64(waterAddedMl); self.waterAccumulatedMl = Int64(waterAccumulatedMl)
+        self.intensity = intensity; self.gesture = gesture; self.stepNote = stepNote; self.coverage = coverage; self.flow = flow; self.secondaryAction = secondaryAction
+        createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+    func markUpdated() { trackUpdate() }; func markDeleted() { trackDeletion() }
+}
+extension TechniqueStepRecord: Identifiable {}
+
+@objc(BrewSessionRecord)
+final class BrewSessionRecord: NSManagedObject, SyncTrackedRecord {
+    @NSManaged var id: UUID; @NSManaged var ownerId: UUID?
+    @NSManaged var techniqueId: UUID?; @NSManaged var recipeId: UUID?; @NSManaged var methodId: UUID?; @NSManaged var beanId: UUID?; @NSManaged var grinderId: UUID?
+    @NSManaged var techniqueNameSnapshot: String; @NSManaged var recipeNameSnapshot: String; @NSManaged var methodNameSnapshot: String; @NSManaged var beanNameSnapshot: String; @NSManaged var grinderNameSnapshot: String
+    @NSManaged var doseGrams: Double; @NSManaged var waterMl: Int64; @NSManaged var ratio: Double; @NSManaged var temperatureC: Int64
+    @NSManaged var grindDescription: String; @NSManaged var elapsedSeconds: Int64; @NSManaged var completedAt: Date; @NSManaged var stepsSnapshotJSON: String
+    @NSManaged var preciseTemperatureC: NSNumber?
+    var effectiveTemperatureC: Double { preciseTemperatureC?.doubleValue ?? Double(temperatureC) }
+    @NSManaged var createdAt: Date; @NSManaged var updatedAt: Date; @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String; @NSManaged var deletedAt: Date?
+    convenience init(context: NSManagedObjectContext, state: PreparationState, recipeName: String = "", beanName: String, grinderName: String) {
+        self.init(context: context); id = state.sessionId; ownerId = context.activeOwnerId
+        techniqueId = state.techniqueId; recipeId = state.recipeId; methodId = state.methodId; beanId = state.beanId; grinderId = state.grinderId
+        techniqueNameSnapshot = state.techniqueName; recipeNameSnapshot = recipeName; methodNameSnapshot = state.methodName; beanNameSnapshot = beanName; grinderNameSnapshot = grinderName
+        doseGrams = state.doseGrams; waterMl = Int64(state.waterMl); ratio = state.ratio; temperatureC = Int64(state.temperatureC)
+        preciseTemperatureC = NSNumber(value: state.effectiveTemperatureC)
+        grindDescription = state.grindDescription; elapsedSeconds = Int64(state.elapsedSeconds); completedAt = .now
+        stepsSnapshotJSON = String(data: (try? JSONEncoder().encode(state.steps)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
+        createdAt = state.startedAt ?? .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+    var syncStatus: SyncStatus {
+        get { trackedSyncStatus }
+        set { trackedSyncStatus = newValue }
+    }
+    func markUpdated() { trackUpdate() }; func markDeleted() { trackDeletion() }
+}
+extension BrewSessionRecord: Identifiable {}

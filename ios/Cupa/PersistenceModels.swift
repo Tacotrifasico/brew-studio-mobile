@@ -1,0 +1,866 @@
+import CoreData
+import Foundation
+
+enum LocalDataScope {
+    static var activeOwnerId: UUID?
+
+    static func contains(recordOwnerId: UUID?, activeOwnerId: UUID?) -> Bool {
+        guard let activeOwnerId else { return recordOwnerId == nil }
+        return recordOwnerId == nil || recordOwnerId == activeOwnerId
+    }
+
+    static func visiblePredicate(activeOwnerId: UUID? = activeOwnerId, additional: NSPredicate? = nil) -> NSPredicate {
+        let ownership = activeOwnerId.map { NSPredicate(format: "ownerId == nil OR ownerId == %@", $0 as CVarArg) }
+            ?? NSPredicate(format: "ownerId == nil")
+        let notDeleted = NSPredicate(format: "deletedAt == nil")
+        return NSCompoundPredicate(andPredicateWithSubpredicates: [ownership, notDeleted] + (additional.map { [$0] } ?? []))
+    }
+
+    static func scopedKey(_ base: String, ownerId: UUID?) -> String {
+        "\(base).scope.\(ownerId?.uuidString.lowercased() ?? "guest")"
+    }
+
+    static func migrateLegacyObject(in defaults: UserDefaults, baseKey: String, ownerId: UUID?) -> Any? {
+        let key = scopedKey(baseKey, ownerId: ownerId)
+        if let value = defaults.object(forKey: key) { return value }
+        guard let legacy = defaults.object(forKey: baseKey) else { return nil }
+        defaults.set(legacy, forKey: key); defaults.removeObject(forKey: baseKey)
+        return legacy
+    }
+}
+
+@MainActor
+struct LocalAccountDataPurger {
+    let context: NSManagedObjectContext
+    let defaults: UserDefaults
+
+    init(context: NSManagedObjectContext, defaults: UserDefaults = .standard) {
+        self.context = context
+        self.defaults = defaults
+    }
+
+    func purge(ownerId: UUID) throws {
+        do {
+            for entity in context.persistentStoreCoordinator?.managedObjectModel.entities ?? [] {
+                guard let entityName = entity.name, entity.attributesByName["ownerId"] != nil else { continue }
+                let request = NSFetchRequest<NSManagedObject>(entityName: entityName)
+                request.predicate = NSPredicate(format: "ownerId == %@", ownerId as CVarArg)
+                for object in try context.fetch(request) { context.delete(object) }
+            }
+            if context.hasChanges { try context.save() }
+        } catch {
+            context.rollback()
+            throw error
+        }
+
+        let suffix = ".scope.\(ownerId.uuidString.lowercased())"
+        for key in defaults.dictionaryRepresentation().keys where key.hasSuffix(suffix) {
+            defaults.removeObject(forKey: key)
+        }
+    }
+}
+
+extension NSManagedObjectContext {
+    private static let activeOwnerKey = "cupa.activeOwnerId"
+    var activeOwnerId: UUID? {
+        get { userInfo[Self.activeOwnerKey] as? UUID }
+        set { userInfo[Self.activeOwnerKey] = newValue }
+    }
+}
+
+enum SyncStatus: String, Codable, CaseIterable {
+    case synced, pendingCreate, pendingUpdate, pendingDelete, conflict, error
+}
+
+enum CoffeeFreshnessState: String, CaseIterable {
+    case noDate, veryFresh, inWindow, ideal, declining, old
+
+    var label: String {
+        switch self {
+        case .noDate: "Sin fecha"
+        case .veryFresh: "Muy fresco"
+        case .inWindow: "En ventana"
+        case .ideal: "Punto ideal"
+        case .declining: "Bajando"
+        case .old: "Viejo"
+        }
+    }
+
+    var colorHex: UInt {
+        switch self {
+        case .noDate: 0x60756A
+        case .veryFresh: 0x84AD92
+        case .inWindow: 0x3F7A63
+        case .ideal: 0xC28B46
+        case .declining: 0xB76545
+        case .old: 0x8C5A2B
+        }
+    }
+}
+
+enum CoffeeInventoryStatus: String, Equatable {
+    case closed, open, finished
+
+    var label: String {
+        switch self {
+        case .closed: "Cerrado"
+        case .open: "Abierto"
+        case .finished: "Terminado"
+        }
+    }
+}
+
+struct CoffeeFreshnessResult: Equatable {
+    let daysFromRoast: Int?
+    let daysFromOpen: Int?
+    let state: CoffeeFreshnessState
+    let progress: Double
+    let recommendation: String
+    let openStatusDetails: String
+    let openWarning: String?
+}
+
+enum CoffeeFreshnessEngine {
+    static func evaluate(
+        roastDate: Date?,
+        openedDate: Date?,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> CoffeeFreshnessResult {
+        let daysFromRoast = roastDate.map { dayDifference(from: $0, to: now, calendar: calendar) }
+        let daysFromOpen = openedDate.map { dayDifference(from: $0, to: now, calendar: calendar) }
+        guard let daysFromRoast else {
+            return .init(
+                daysFromRoast: nil, daysFromOpen: daysFromOpen, state: .noDate, progress: 0,
+                recommendation: "Agrega fecha de tostado para calcular frescura.",
+                openStatusDetails: openDetails(daysFromOpen), openWarning: nil
+            )
+        }
+
+        let state: CoffeeFreshnessState = switch daysFromRoast {
+        case ..<0: .noDate
+        case ...7: .veryFresh
+        case ...21: .inWindow
+        case ...35: .ideal
+        case ...60: .declining
+        default: .old
+        }
+        let recommendation = switch state {
+        case .noDate: "Agrega fecha de tostado para calcular frescura."
+        case .veryFresh: "Puede tener mucho gas; se sugiere preinfusión larga de 45–50 segundos (bloom)."
+        case .inWindow: "Excelente ventana de uso. El perfil de sabor es más estable y dulce."
+        case .ideal: "Punto ideal para filtrados. Buena retención de aromas y extracción equilibrada."
+        case .declining: "Va perdiendo expresión. Ajusta molienda un poco más fina o sube temperatura 1°C."
+        case .old: "Perfil más plano. Úsalo pronto o para recetas con leche/frías donde resalte intensidad."
+        }
+        return .init(
+            daysFromRoast: daysFromRoast, daysFromOpen: daysFromOpen, state: state,
+            progress: progress(days: daysFromRoast), recommendation: recommendation,
+            openStatusDetails: openDetails(daysFromOpen),
+            openWarning: daysFromOpen.map { $0 > 14 ? "Abierto hace \($0) días. Puede perder aroma más rápido." : nil } ?? nil
+        )
+    }
+
+    static func progress(days: Int) -> Double {
+        if days < 0 { return 0 }
+        switch days {
+        case ...7: return (Double(days) / 7) * 0.2
+        case ...21: return 0.2 + (Double(days - 7) / 14) * 0.2
+        case ...35: return 0.4 + (Double(days - 21) / 14) * 0.2
+        case ...60: return 0.6 + (Double(days - 35) / 25) * 0.2
+        default: return min(1, 0.8 + (Double(days - 60) / 20) * 0.2)
+        }
+    }
+
+    private static func dayDifference(from date: Date, to now: Date, calendar: Calendar) -> Int {
+        let seconds = calendar.startOfDay(for: now).timeIntervalSince(calendar.startOfDay(for: date))
+        return Int((seconds / 86_400).rounded(.towardZero))
+    }
+
+    private static func openDetails(_ days: Int?) -> String {
+        days.map { "Abierto hace \($0) días" } ?? "Sin abrir (Hermético)"
+    }
+}
+
+struct CoffeeBeanValidatedInput: Equatable {
+    let altitudeMeters: Int?
+    let initialQuantityGrams: Double
+    let remainingQuantityGrams: Double
+}
+
+enum CoffeeBeanInputError: LocalizedError, Equatable {
+    case invalidAltitude, invalidInitialQuantity, invalidRemainingQuantity, remainingExceedsInitial
+    case roastDateInFuture, openedDateInFuture, openedBeforeRoast
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidAltitude: "La altitud debe ser un número entero entre 0 y 9,000 msnm."
+        case .invalidInitialQuantity: "La cantidad inicial debe ser un número mayor que cero."
+        case .invalidRemainingQuantity: "La cantidad restante debe ser un número igual o mayor que cero."
+        case .remainingExceedsInitial: "La cantidad restante no puede superar la cantidad inicial."
+        case .roastDateInFuture: "La fecha de tueste no puede estar en el futuro."
+        case .openedDateInFuture: "La fecha de apertura no puede estar en el futuro."
+        case .openedBeforeRoast: "La bolsa no puede abrirse antes de la fecha de tueste."
+        }
+    }
+}
+
+enum CoffeeBeanInputValidator {
+    static func validate(
+        altitudeText: String,
+        initialQuantityText: String,
+        remainingQuantityText: String,
+        roastDate: Date?,
+        openedDate: Date?,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) throws -> CoffeeBeanValidatedInput {
+        let altitudeText = altitudeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let altitude: Int?
+        if altitudeText.isEmpty { altitude = nil }
+        else if let value = Int(altitudeText), (0...9_000).contains(value) { altitude = value }
+        else { throw CoffeeBeanInputError.invalidAltitude }
+
+        guard let initial = decimal(initialQuantityText), initial > 0 else { throw CoffeeBeanInputError.invalidInitialQuantity }
+        guard let remaining = decimal(remainingQuantityText), remaining >= 0 else { throw CoffeeBeanInputError.invalidRemainingQuantity }
+        guard remaining <= initial else { throw CoffeeBeanInputError.remainingExceedsInitial }
+
+        let today = calendar.startOfDay(for: now)
+        if let roastDate, calendar.startOfDay(for: roastDate) > today { throw CoffeeBeanInputError.roastDateInFuture }
+        if let openedDate, calendar.startOfDay(for: openedDate) > today { throw CoffeeBeanInputError.openedDateInFuture }
+        if let roastDate, let openedDate, calendar.startOfDay(for: openedDate) < calendar.startOfDay(for: roastDate) { throw CoffeeBeanInputError.openedBeforeRoast }
+        return .init(altitudeMeters: altitude, initialQuantityGrams: initial, remainingQuantityGrams: remaining)
+    }
+
+    private static func decimal(_ text: String) -> Double? {
+        guard let value = Double(text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")), value.isFinite else { return nil }
+        return value
+    }
+}
+
+/// Same JSON contract as Android: one entry per normalized method, owned by the bean.
+/// AXCIS: future sync maps this attribute to beans.brew_profiles (not free-form notes).
+struct BeanBrewProfile: Codable, Equatable {
+    let methodName: String
+    let clicks: Int
+    let temperatureC: Double
+    // Mirrored starting points; clicks must be calibrated to the user's grinder.
+    static func startingPoint(for method: String) -> BeanBrewProfile {
+        let values: (Int, Int)
+        switch key(method) {
+        case "v60": values = (22, 92)
+        case "aeropress": values = (18, 88)
+        case "prensa francesa": values = (28, 94)
+        case "chemex": values = (26, 93)
+        case "espresso": values = (8, 93)
+        case "moka": values = (12, 90)
+        case "cold brew": values = (32, 20)
+        default: values = (18, 93)
+        }
+        return .init(methodName: method, clicks: values.0, temperatureC: Double(values.1))
+    }
+    init(methodName: String, clicks: Int = 18, temperatureC: Double = 93) {
+        self.methodName = methodName
+        self.clicks = min(200, max(1, clicks))
+        self.temperatureC = min(100, max(1, temperatureC))
+    }
+    func displayDegrees(fahrenheit: Bool) -> Int {
+        Int((fahrenheit ? temperatureC * 1.8 + 32 : temperatureC).rounded())
+    }
+    func temperatureText(fahrenheit: Bool) -> String {
+        fahrenheit ? "\(displayDegrees(fahrenheit: true)) °F" : "\(temperatureC.formatted(.number.precision(.fractionLength(0...1)))) °C"
+    }
+    func steppedTemperature(_ direction: Int, fahrenheit: Bool) -> Double {
+        // Same wire format as Android: retain fractional Celsius for exact Fahrenheit favorites.
+        if !fahrenheit { return min(100, max(1, temperatureC + Double(direction))) }
+        let next = min(fahrenheit ? 212 : 100, max(fahrenheit ? 34 : 1, displayDegrees(fahrenheit: fahrenheit) + direction))
+        return fahrenheit ? Double(next - 32) / 1.8 : Double(next)
+    }
+    static func key(_ method: String) -> String {
+        method.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .lowercased(with: Locale(identifier: "en_US_POSIX"))
+    }
+}
+
+@objc(CoffeeBeanRecord)
+final class CoffeeBeanRecord: NSManagedObject {
+    static let sampleId = UUID(uuidString: "524f4e50-4f54-4520-8000-000000000001")!
+    var isSample: Bool { id == Self.sampleId }
+    @NSManaged var id: UUID
+    @NSManaged var ownerId: UUID?
+    @NSManaged var name: String
+    @NSManaged var brand: String
+    @NSManaged var origin: String
+    @NSManaged var producer: String
+    @NSManaged var variety: String
+    @NSManaged var process: String
+    @NSManaged var altitudeMetersValue: NSNumber?
+    @NSManaged var roastLevel: String
+    @NSManaged var roastDate: Date?
+    @NSManaged var openedDate: Date?
+    @NSManaged var initialQuantityGrams: Double
+    @NSManaged var remainingQuantityGrams: Double
+    @NSManaged var brewProfilesJSON: String
+    @NSManaged var notes: String
+    @NSManaged var createdAt: Date
+    @NSManaged var updatedAt: Date
+    @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String
+    @NSManaged var deletedAt: Date?
+
+    var altitudeMeters: Int? {
+        get { altitudeMetersValue?.intValue }
+        set { altitudeMetersValue = newValue.map(NSNumber.init(value:)) }
+    }
+
+    func brewProfile(for method: String) -> BeanBrewProfile? {
+        guard let data = brewProfilesJSON.data(using: .utf8),
+              let profiles = try? JSONDecoder().decode([String: BeanBrewProfile].self, from: data),
+              let value = profiles[BeanBrewProfile.key(method)] else { return nil }
+        return BeanBrewProfile(methodName: value.methodName, clicks: value.clicks, temperatureC: value.temperatureC)
+    }
+
+    func effectiveBrewProfile(for method: String) -> BeanBrewProfile {
+        brewProfile(for: method) ?? .startingPoint(for: method)
+    }
+
+    func setBrewProfile(_ profile: BeanBrewProfile) throws {
+        // Decode strictly: malformed JSON must not erase the other method associations.
+        var profiles = try JSONDecoder().decode([String: BeanBrewProfile].self, from: Data(brewProfilesJSON.utf8))
+        profiles[BeanBrewProfile.key(profile.methodName)] = profile
+        brewProfilesJSON = String(decoding: try JSONEncoder().encode(profiles), as: UTF8.self)
+        markUpdated()
+    }
+
+    var syncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .error }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+
+    var inventoryStatus: CoffeeInventoryStatus {
+        if isSample { return .open }
+        if remainingQuantityGrams <= 0 { return .finished }
+        return openedDate == nil ? .closed : .open
+    }
+
+    convenience init(
+        context: NSManagedObjectContext,
+        id: UUID = UUID(), ownerId: UUID? = nil,
+        name: String, brand: String, origin: String = "", producer: String = "",
+        variety: String = "", process: String = "", altitudeMeters: Int? = nil,
+        roastLevel: String = "Medio", roastDate: Date? = nil, openedDate: Date? = nil,
+        initialQuantityGrams: Double = 0, remainingQuantityGrams: Double = 0,
+        notes: String = "", createdAt: Date = .now, updatedAt: Date = .now,
+        version: Int64 = 1, syncStatus: SyncStatus = .pendingCreate, deletedAt: Date? = nil
+    ) {
+        self.init(entity: NSEntityDescription.entity(forEntityName: "CoffeeBeanRecord", in: context)!, insertInto: context)
+        self.id = id; self.ownerId = ownerId ?? context.activeOwnerId; self.name = name; self.brand = brand
+        self.origin = origin; self.producer = producer; self.variety = variety; self.process = process
+        self.altitudeMeters = altitudeMeters; self.roastLevel = roastLevel
+        self.roastDate = roastDate; self.openedDate = openedDate
+        self.initialQuantityGrams = initialQuantityGrams; self.remainingQuantityGrams = remainingQuantityGrams
+        self.notes = notes; self.createdAt = createdAt; self.updatedAt = updatedAt
+        self.version = version; self.syncStatus = syncStatus; self.deletedAt = deletedAt
+    }
+
+    func markUpdated() {
+        if isSample { name = "Ronpotrero"; ownerId = nil; deletedAt = nil }
+        updatedAt = .now; version += 1; syncStatus = isSample ? .synced : .pendingUpdate
+    }
+
+    func markDeleted() {
+        guard !isSample else { return }
+        deletedAt = .now; updatedAt = .now; version += 1; syncStatus = .pendingDelete
+    }
+}
+
+extension CoffeeBeanRecord: Identifiable {}
+
+/// Built-in, clearly fictitious bean. A stable ID prevents duplicate seeds and
+/// ownerId=nil keeps the sample available across local account changes, not synced.
+enum SampleCoffee {
+    @MainActor static func ensure(in context: NSManagedObjectContext, now: Date = .now) throws {
+        let request = NSFetchRequest<CoffeeBeanRecord>(entityName: "CoffeeBeanRecord")
+        request.predicate = NSPredicate(format: "id == %@", CoffeeBeanRecord.sampleId as CVarArg)
+        if let bean = try context.fetch(request).first {
+            // Never reset the user's saved method profiles or editable tasting notes.
+            if bean.deletedAt != nil || bean.name != "Ronpotrero" || bean.ownerId != nil {
+                bean.deletedAt = nil; bean.name = "Ronpotrero"; bean.ownerId = nil
+                try context.save()
+            }
+            return
+        }
+        let bean = CoffeeBeanRecord(context: context, id: CoffeeBeanRecord.sampleId,
+            name: "Ronpotrero", brand: "Tostadores del Potrero (muestra)", origin: "Chiapas, México",
+            producer: "Finca El Potrero (ficticia)", variety: "Bourbon", process: "Lavado", altitudeMeters: 1700,
+            roastLevel: "Medio", roastDate: Calendar.current.date(byAdding: .day, value: -7, to: now), openedDate: now,
+            initialQuantityGrams: 250, remainingQuantityGrams: 250,
+            notes: "Café de muestra · Datos ficticios. Chocolate, panela y naranja.")
+        bean.ownerId = nil
+        for profile in [BeanBrewProfile(methodName: "V60", clicks: 22, temperatureC: 92),
+                        BeanBrewProfile(methodName: "AeroPress", clicks: 18, temperatureC: 88),
+                        BeanBrewProfile(methodName: "Prensa francesa", clicks: 28, temperatureC: 94)] {
+            try bean.setBrewProfile(profile)
+        }
+        bean.syncStatus = .synced
+        do { try context.save() }
+        catch { context.delete(bean); throw error }
+    }
+}
+
+@objc(LabExperimentRecord)
+final class LabExperimentRecord: NSManagedObject {
+    @NSManaged var id: UUID
+    @NSManaged var ownerId: UUID?
+    @NSManaged var methodId: UUID?
+    @NSManaged var recipeId: UUID?
+    @NSManaged var techniqueId: UUID?
+    @NSManaged var beanId: UUID?
+    @NSManaged var grinderId: UUID?
+    @NSManaged var method: String
+    @NSManaged var coffeeGrams: Double
+    @NSManaged var waterMl: Int64
+    @NSManaged var ratio: Double
+    @NSManaged var temperatureC: Int64
+    @NSManaged var preciseTemperatureC: NSNumber?
+    var effectiveTemperatureC: Double { preciseTemperatureC?.doubleValue ?? Double(temperatureC) }
+    @NSManaged var grindClicks: Int64
+    @NSManaged var freshness: String
+    @NSManaged var timeSeconds: Int64
+    @NSManaged var altitudeMeters: Int64
+    @NSManaged var cityName: String
+    @NSManaged var notes: String
+    @NSManaged var extractionIndex: Double
+    @NSManaged var summary: String
+    @NSManaged var createdAt: Date
+    @NSManaged var updatedAt: Date
+    @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String
+    @NSManaged var deletedAt: Date?
+
+    convenience init(context: NSManagedObjectContext, state: LabState, profile: LabFlavorProfile) {
+        self.init(context: context)
+        id = UUID(); ownerId = context.activeOwnerId; methodId = state.methodId; recipeId = state.recipeId
+        techniqueId = state.techniqueId; beanId = state.beanId; grinderId = state.grinderId; method = state.method
+        coffeeGrams = Double(state.coffeeGrams); waterMl = Int64(state.waterMl)
+        ratio = state.coffeeGrams > 0 ? Double(state.waterMl) / Double(state.coffeeGrams) : Double(state.ratio)
+        temperatureC = Int64(state.temperatureC); grindClicks = Int64(state.grindClicks)
+        preciseTemperatureC = NSNumber(value: state.effectiveTemperatureC)
+        freshness = state.freshness; timeSeconds = Int64(state.timeSeconds)
+        altitudeMeters = Int64(state.altitudeMeters); cityName = state.cityName; notes = state.notes
+        extractionIndex = Double(profile.extractionIndex); summary = profile.summary
+        createdAt = .now; updatedAt = .now; version = 1
+        syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+
+    var syncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .error }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+
+    func markDeleted() {
+        deletedAt = .now; updatedAt = .now; version += 1; syncStatus = .pendingDelete
+    }
+}
+
+extension LabExperimentRecord: Identifiable {}
+
+@objc(GrinderRecord)
+final class GrinderRecord: NSManagedObject {
+    @NSManaged var id: UUID
+    @NSManaged var ownerId: UUID?
+    @NSManaged var name: String
+    @NSManaged var brand: String
+    @NSManaged var model: String
+    @NSManaged var grinderType: String
+    @NSManaged var scaleUnit: String
+    @NSManaged var minimumSetting: Int64
+    @NSManaged var maximumSetting: Int64
+    @NSManaged var calibrationNotes: String
+    @NSManaged var notes: String
+    @NSManaged var createdAt: Date
+    @NSManaged var updatedAt: Date
+    @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String
+    @NSManaged var deletedAt: Date?
+
+    convenience init(context: NSManagedObjectContext, name: String, brand: String, model: String, grinderType: String, scaleUnit: String, minimumSetting: Int, maximumSetting: Int, calibrationNotes: String, notes: String) {
+        self.init(context: context)
+        id = UUID(); ownerId = context.activeOwnerId; self.name = name; self.brand = brand; self.model = model
+        self.grinderType = grinderType; self.scaleUnit = scaleUnit
+        self.minimumSetting = Int64(minimumSetting); self.maximumSetting = Int64(maximumSetting)
+        self.calibrationNotes = calibrationNotes; self.notes = notes
+        createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+
+    var syncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .error }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+    func markUpdated() { updatedAt = .now; version += 1; syncStatus = .pendingUpdate }
+    func markDeleted() { deletedAt = .now; updatedAt = .now; version += 1; syncStatus = .pendingDelete }
+}
+
+extension GrinderRecord: Identifiable {}
+
+@objc(EquipmentRecord)
+final class EquipmentRecord: NSManagedObject {
+    @NSManaged var id: UUID
+    @NSManaged var ownerId: UUID?
+    @NSManaged var name: String
+    @NSManaged var equipmentType: String
+    @NSManaged var brand: String
+    @NSManaged var model: String
+    @NSManaged var capacityMlValue: NSNumber?
+    @NSManaged var configuration: String
+    @NSManaged var notes: String
+    @NSManaged var isFavorite: Bool
+    @NSManaged var isActive: Bool
+    @NSManaged var createdAt: Date
+    @NSManaged var updatedAt: Date
+    @NSManaged var version: Int64
+    @NSManaged var syncStatusRaw: String
+    @NSManaged var deletedAt: Date?
+
+    var capacityMl: Int? {
+        get { capacityMlValue?.intValue }
+        set { capacityMlValue = newValue.map(NSNumber.init(value:)) }
+    }
+    var isBrewingMethod: Bool {
+        let normalized = equipmentType.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        return normalized == "brewer_method" || normalized == "brew_method" || normalized.contains("metodo")
+    }
+    convenience init(context: NSManagedObjectContext, name: String, equipmentType: String, brand: String, model: String, capacityMl: Int?, configuration: String, notes: String, isFavorite: Bool, isActive: Bool) {
+        self.init(context: context)
+        id = UUID(); ownerId = context.activeOwnerId; self.name = name; self.equipmentType = equipmentType
+        self.brand = brand; self.model = model; self.capacityMl = capacityMl
+        self.configuration = configuration; self.notes = notes; self.isFavorite = isFavorite; self.isActive = isActive
+        createdAt = .now; updatedAt = .now; version = 1; syncStatusRaw = SyncStatus.pendingCreate.rawValue; deletedAt = nil
+    }
+
+    var syncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .error }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+    func markUpdated() { updatedAt = .now; version += 1; syncStatus = .pendingUpdate }
+    func markDeleted() { deletedAt = .now; updatedAt = .now; version += 1; syncStatus = .pendingDelete }
+}
+
+extension EquipmentRecord: Identifiable {}
+
+struct PersistenceController {
+    static let shared = PersistenceController()
+    private static let sharedModel = makeModel()
+    let container: NSPersistentContainer
+    let storageRecoveryMessage: String?
+
+    init(inMemory: Bool = false, storeURL: URL? = nil, enablePersistentHistory: Bool = true) {
+        let requestedContainer = NSPersistentContainer(name: "Cupa", managedObjectModel: Self.sharedModel)
+        let description = NSPersistentStoreDescription()
+        if inMemory {
+            description.type = NSInMemoryStoreType
+        } else {
+            description.type = NSSQLiteStoreType
+            description.url = storeURL ?? NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("Cupa.sqlite")
+        }
+        description.shouldMigrateStoreAutomatically = true
+        description.shouldInferMappingModelAutomatically = true
+        if enablePersistentHistory {
+            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        }
+        requestedContainer.persistentStoreDescriptions = [description]
+        var requestedError: Error?
+        if !inMemory, let url = description.url {
+            do { try Self.migrateBeanProfilesIfNeeded(at: url, enablePersistentHistory: enablePersistentHistory) }
+            catch { requestedError = error }
+        }
+        if requestedError == nil { requestedContainer.loadPersistentStores { _, error in requestedError = error } }
+
+        if let requestedError, !inMemory {
+            NSLog("Cupa: no se pudo abrir el almacén persistente; se usará una sesión temporal. %@", requestedError.localizedDescription)
+            let fallback = NSPersistentContainer(name: "Cupa", managedObjectModel: Self.sharedModel)
+            let fallbackDescription = NSPersistentStoreDescription()
+            fallbackDescription.type = NSInMemoryStoreType
+            fallback.persistentStoreDescriptions = [fallbackDescription]
+            var fallbackError: Error?
+            fallback.loadPersistentStores { _, error in fallbackError = error }
+            if let fallbackError { NSLog("Cupa: tampoco se pudo abrir el almacén temporal. %@", fallbackError.localizedDescription) }
+            container = fallback
+            storageRecoveryMessage = "No se pudo abrir el almacenamiento permanente. Los cambios de esta sesión serán temporales; reinicia la app antes de continuar con información importante."
+        } else {
+            container = requestedContainer
+            storageRecoveryMessage = requestedError == nil ? nil : "No se pudo iniciar el almacenamiento local."
+        }
+        container.viewContext.automaticallyMergesChangesFromParent = true
+        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+    }
+
+    /// Programmatic models are not discoverable in a .momd bundle. Retain the exact
+    /// previous model and explicitly infer this additive migration before opening.
+    /// Never delete the original store or silently reset the user's inventory.
+    private static func migrateBeanProfilesIfNeeded(at url: URL, enablePersistentHistory: Bool) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url)
+        guard !sharedModel.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
+        let previousModels = [makeModel(includeExactTemperature: false), makeModel(includeBeanProfiles: false, includeExactTemperature: false)]
+        guard let previous = previousModels.first(where: { $0.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) }) else { return }
+        let mapping = try NSMappingModel.inferredMappingModel(forSourceModel: previous, destinationModel: sharedModel)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cupa-bean-migration-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let migrated = directory.appendingPathComponent("Cupa.sqlite")
+        let manager = NSMigrationManager(sourceModel: previous, destinationModel: sharedModel)
+        // Production stores track persistent history. Omitting this option while opening
+        // the source can cause Core Data to try to rewrite history on a read-only store.
+        let historyOptions: [AnyHashable: Any]? = enablePersistentHistory ? [NSPersistentHistoryTrackingKey: true] : nil
+        try manager.migrateStore(from: url, sourceType: NSSQLiteStoreType, options: historyOptions, with: mapping,
+                                 toDestinationURL: migrated, destinationType: NSSQLiteStoreType, destinationOptions: historyOptions)
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: sharedModel)
+        try coordinator.replacePersistentStore(at: url, destinationOptions: historyOptions, withPersistentStoreFrom: migrated, sourceOptions: historyOptions, ofType: NSSQLiteStoreType)
+    }
+
+    static func makeModel(includeBeanProfiles: Bool = true, includeExactTemperature: Bool = true) -> NSManagedObjectModel {
+        let model = NSManagedObjectModel()
+        let coffeeEntity = NSEntityDescription()
+        coffeeEntity.name = "CoffeeBeanRecord"
+        coffeeEntity.managedObjectClassName = NSStringFromClass(CoffeeBeanRecord.self)
+
+        func attribute(_ name: String, _ type: NSAttributeType, optional: Bool = false, defaultValue: Any? = nil) -> NSAttributeDescription {
+            let item = NSAttributeDescription()
+            item.name = name; item.attributeType = type; item.isOptional = optional; item.defaultValue = defaultValue
+            return item
+        }
+        coffeeEntity.properties = [
+            attribute("id", .UUIDAttributeType), attribute("ownerId", .UUIDAttributeType, optional: true),
+            attribute("name", .stringAttributeType, defaultValue: ""), attribute("brand", .stringAttributeType, defaultValue: ""),
+            attribute("origin", .stringAttributeType, defaultValue: ""), attribute("producer", .stringAttributeType, defaultValue: ""),
+            attribute("variety", .stringAttributeType, defaultValue: ""), attribute("process", .stringAttributeType, defaultValue: ""),
+            attribute("altitudeMetersValue", .integer64AttributeType, optional: true), attribute("roastLevel", .stringAttributeType, defaultValue: "Medio"),
+            attribute("roastDate", .dateAttributeType, optional: true), attribute("openedDate", .dateAttributeType, optional: true),
+            attribute("initialQuantityGrams", .doubleAttributeType, defaultValue: 0), attribute("remainingQuantityGrams", .doubleAttributeType, defaultValue: 0),
+            attribute("notes", .stringAttributeType, defaultValue: ""), attribute("createdAt", .dateAttributeType),
+            attribute("updatedAt", .dateAttributeType), attribute("version", .integer64AttributeType, defaultValue: 1),
+            attribute("syncStatusRaw", .stringAttributeType, defaultValue: SyncStatus.pendingCreate.rawValue),
+            attribute("deletedAt", .dateAttributeType, optional: true)
+        ]
+        if includeBeanProfiles { coffeeEntity.properties.append(attribute("brewProfilesJSON", .stringAttributeType, defaultValue: "{}")) }
+        coffeeEntity.uniquenessConstraints = [["id"]]
+
+        let experimentEntity = NSEntityDescription()
+        experimentEntity.name = "LabExperimentRecord"
+        experimentEntity.managedObjectClassName = NSStringFromClass(LabExperimentRecord.self)
+        experimentEntity.properties = [
+            attribute("id", .UUIDAttributeType), attribute("ownerId", .UUIDAttributeType, optional: true),
+            attribute("methodId", .UUIDAttributeType, optional: true), attribute("recipeId", .UUIDAttributeType, optional: true),
+            attribute("techniqueId", .UUIDAttributeType, optional: true), attribute("beanId", .UUIDAttributeType, optional: true),
+            attribute("grinderId", .UUIDAttributeType, optional: true),
+            attribute("method", .stringAttributeType, defaultValue: "V60"), attribute("coffeeGrams", .doubleAttributeType, defaultValue: 15),
+            attribute("waterMl", .integer64AttributeType, defaultValue: 240), attribute("ratio", .doubleAttributeType, defaultValue: 16),
+            attribute("temperatureC", .integer64AttributeType, defaultValue: 92), attribute("grindClicks", .integer64AttributeType, defaultValue: 24),
+            attribute("freshness", .stringAttributeType, defaultValue: "en ventana"), attribute("timeSeconds", .integer64AttributeType, defaultValue: 180),
+            attribute("altitudeMeters", .integer64AttributeType, defaultValue: 0), attribute("cityName", .stringAttributeType, defaultValue: "Nivel del mar (0m)"),
+            attribute("notes", .stringAttributeType, defaultValue: ""), attribute("extractionIndex", .doubleAttributeType, defaultValue: 1),
+            attribute("summary", .stringAttributeType, defaultValue: ""), attribute("createdAt", .dateAttributeType),
+            attribute("updatedAt", .dateAttributeType), attribute("version", .integer64AttributeType, defaultValue: 1),
+            attribute("syncStatusRaw", .stringAttributeType, defaultValue: SyncStatus.pendingCreate.rawValue),
+            attribute("deletedAt", .dateAttributeType, optional: true)
+        ]
+        experimentEntity.uniquenessConstraints = [["id"]]
+
+        let grinderEntity = NSEntityDescription()
+        grinderEntity.name = "GrinderRecord"
+        grinderEntity.managedObjectClassName = NSStringFromClass(GrinderRecord.self)
+        grinderEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("name", .stringAttributeType, defaultValue: ""), attribute("brand", .stringAttributeType, defaultValue: ""),
+            attribute("model", .stringAttributeType, defaultValue: ""), attribute("grinderType", .stringAttributeType, defaultValue: "MANUAL"),
+            attribute("scaleUnit", .stringAttributeType, defaultValue: "CLICKS"), attribute("minimumSetting", .integer64AttributeType, defaultValue: 0),
+            attribute("maximumSetting", .integer64AttributeType, defaultValue: 40), attribute("calibrationNotes", .stringAttributeType, defaultValue: ""),
+            attribute("notes", .stringAttributeType, defaultValue: "")
+        ]
+        grinderEntity.uniquenessConstraints = [["id"]]
+
+        let equipmentEntity = NSEntityDescription()
+        equipmentEntity.name = "EquipmentRecord"
+        equipmentEntity.managedObjectClassName = NSStringFromClass(EquipmentRecord.self)
+        equipmentEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("name", .stringAttributeType, defaultValue: ""), attribute("equipmentType", .stringAttributeType, defaultValue: "BREWER_METHOD"),
+            attribute("brand", .stringAttributeType, defaultValue: ""), attribute("model", .stringAttributeType, defaultValue: ""),
+            attribute("capacityMlValue", .integer64AttributeType, optional: true), attribute("configuration", .stringAttributeType, defaultValue: ""),
+            attribute("notes", .stringAttributeType, defaultValue: ""), attribute("isFavorite", .booleanAttributeType, defaultValue: false),
+            attribute("isActive", .booleanAttributeType, defaultValue: true)
+        ]
+        equipmentEntity.uniquenessConstraints = [["id"]]
+
+        let recipeEntity = NSEntityDescription()
+        recipeEntity.name = "RecipeRecord"; recipeEntity.managedObjectClassName = NSStringFromClass(RecipeRecord.self)
+        recipeEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("name", .stringAttributeType, defaultValue: ""), attribute("recipeKind", .stringAttributeType, defaultValue: "BLACK_COFFEE"),
+            attribute("intention", .stringAttributeType, defaultValue: ""), attribute("suggestedMethodId", .UUIDAttributeType, optional: true),
+            attribute("suggestedMethodName", .stringAttributeType, defaultValue: ""), attribute("isFavorite", .booleanAttributeType, defaultValue: false),
+            attribute("tags", .stringAttributeType, defaultValue: ""), attribute("visibility", .stringAttributeType, defaultValue: "PRIVATE"),
+            attribute("isShared", .booleanAttributeType, defaultValue: false),
+            attribute("originalAuthorUserId", .UUIDAttributeType, optional: true), attribute("originalAuthorName", .stringAttributeType, optional: true),
+            attribute("originalEntityId", .UUIDAttributeType, optional: true), attribute("rootEntityId", .UUIDAttributeType, optional: true),
+            attribute("importedFromShareId", .UUIDAttributeType, optional: true),
+            attribute("copyMode", .stringAttributeType, defaultValue: "ORIGINAL")
+        ]
+        recipeEntity.uniquenessConstraints = [["id"]]
+
+        let ingredientEntity = NSEntityDescription()
+        ingredientEntity.name = "RecipeIngredientRecord"; ingredientEntity.managedObjectClassName = NSStringFromClass(RecipeIngredientRecord.self)
+        ingredientEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("recipeId", .UUIDAttributeType), attribute("name", .stringAttributeType, defaultValue: ""),
+            attribute("amount", .doubleAttributeType, defaultValue: 0), attribute("unit", .stringAttributeType, defaultValue: "GRAMS"),
+            attribute("orderIndex", .integer64AttributeType, defaultValue: 0)
+        ]
+        ingredientEntity.uniquenessConstraints = [["id"]]
+
+        let recipeStepEntity = NSEntityDescription()
+        recipeStepEntity.name = "RecipeStepRecord"; recipeStepEntity.managedObjectClassName = NSStringFromClass(RecipeStepRecord.self)
+        recipeStepEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("recipeId", .UUIDAttributeType), attribute("instruction", .stringAttributeType, defaultValue: ""),
+            attribute("stepNumber", .integer64AttributeType, defaultValue: 1), attribute("durationSecondsValue", .integer64AttributeType, optional: true)
+        ]
+        recipeStepEntity.uniquenessConstraints = [["id"]]
+
+        let techniqueEntity = NSEntityDescription()
+        techniqueEntity.name = "TechniqueRecord"; techniqueEntity.managedObjectClassName = NSStringFromClass(TechniqueRecord.self)
+        techniqueEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("name", .stringAttributeType, defaultValue: ""), attribute("methodId", .UUIDAttributeType, optional: true),
+            attribute("methodName", .stringAttributeType, defaultValue: "V60"), attribute("recipeId", .UUIDAttributeType, optional: true),
+            attribute("beanId", .UUIDAttributeType, optional: true), attribute("grinderId", .UUIDAttributeType, optional: true),
+            attribute("doseGrams", .doubleAttributeType, defaultValue: 15), attribute("waterMl", .integer64AttributeType, defaultValue: 240),
+            attribute("ratio", .doubleAttributeType, defaultValue: 16), attribute("temperatureC", .integer64AttributeType, defaultValue: 93),
+            attribute("executionMode", .stringAttributeType, defaultValue: "GUIDED"), attribute("grindValue", .doubleAttributeType, defaultValue: 18),
+            attribute("grindDescription", .stringAttributeType, defaultValue: "18 clics"), attribute("grindUnit", .stringAttributeType, defaultValue: "CLICKS"),
+            attribute("notes", .stringAttributeType, defaultValue: ""), attribute("techniqueDescription", .stringAttributeType, defaultValue: ""),
+            attribute("totalTimeSeconds", .integer64AttributeType, defaultValue: 180), attribute("visibility", .stringAttributeType, defaultValue: "PRIVATE"),
+            attribute("isShared", .booleanAttributeType, defaultValue: false),
+            attribute("originalAuthorUserId", .UUIDAttributeType, optional: true), attribute("originalAuthorName", .stringAttributeType, optional: true),
+            attribute("originalEntityId", .UUIDAttributeType, optional: true), attribute("rootEntityId", .UUIDAttributeType, optional: true),
+            attribute("importedFromShareId", .UUIDAttributeType, optional: true),
+            attribute("copyMode", .stringAttributeType, defaultValue: "ORIGINAL")
+        ]
+        techniqueEntity.uniquenessConstraints = [["id"]]
+
+        let techniqueStepEntity = NSEntityDescription()
+        techniqueStepEntity.name = "TechniqueStepRecord"; techniqueStepEntity.managedObjectClassName = NSStringFromClass(TechniqueStepRecord.self)
+        techniqueStepEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("techniqueId", .UUIDAttributeType), attribute("stepNumber", .integer64AttributeType, defaultValue: 1),
+            attribute("title", .stringAttributeType, defaultValue: ""), attribute("durationSeconds", .integer64AttributeType, defaultValue: 30),
+            attribute("waterAddedMl", .integer64AttributeType, defaultValue: 0), attribute("waterAccumulatedMl", .integer64AttributeType, defaultValue: 0),
+            attribute("intensity", .stringAttributeType, defaultValue: "MEDIUM"), attribute("gesture", .stringAttributeType, defaultValue: "CIRCULAR_POUR"),
+            attribute("stepNote", .stringAttributeType, defaultValue: ""), attribute("coverageValue", .doubleAttributeType, optional: true),
+            attribute("flowValue", .doubleAttributeType, optional: true), attribute("secondaryAction", .stringAttributeType, optional: true)
+        ]
+        techniqueStepEntity.uniquenessConstraints = [["id"]]
+
+        let brewSessionEntity = NSEntityDescription()
+        brewSessionEntity.name = "BrewSessionRecord"; brewSessionEntity.managedObjectClassName = NSStringFromClass(BrewSessionRecord.self)
+        brewSessionEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("techniqueId", .UUIDAttributeType, optional: true), attribute("recipeId", .UUIDAttributeType, optional: true),
+            attribute("methodId", .UUIDAttributeType, optional: true),
+            attribute("beanId", .UUIDAttributeType, optional: true), attribute("grinderId", .UUIDAttributeType, optional: true),
+            attribute("techniqueNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("recipeNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("methodNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("beanNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("grinderNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("doseGrams", .doubleAttributeType, defaultValue: 15), attribute("waterMl", .integer64AttributeType, defaultValue: 240),
+            attribute("ratio", .doubleAttributeType, defaultValue: 16), attribute("temperatureC", .integer64AttributeType, defaultValue: 92),
+            attribute("grindDescription", .stringAttributeType, defaultValue: ""), attribute("elapsedSeconds", .integer64AttributeType, defaultValue: 0),
+            attribute("completedAt", .dateAttributeType), attribute("stepsSnapshotJSON", .stringAttributeType, defaultValue: "[]")
+        ]
+        brewSessionEntity.uniquenessConstraints = [["id"]]
+        if includeExactTemperature {
+            for entity in [experimentEntity, brewSessionEntity] {
+                entity.properties.append(attribute("preciseTemperatureC", .doubleAttributeType, optional: true))
+            }
+        }
+
+        let tastingEntity = NSEntityDescription()
+        tastingEntity.name = "TastingRecord"; tastingEntity.managedObjectClassName = NSStringFromClass(TastingRecord.self)
+        tastingEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("brewSessionId", .UUIDAttributeType, optional: true), attribute("recipeId", .UUIDAttributeType, optional: true),
+            attribute("techniqueId", .UUIDAttributeType, optional: true), attribute("beanId", .UUIDAttributeType, optional: true),
+            attribute("activeFlavorFamily", .stringAttributeType, defaultValue: "FRUITY"), attribute("selectedFlavorNotesJSON", .stringAttributeType, defaultValue: "[]"),
+            attribute("expectedNotes", .stringAttributeType, defaultValue: ""), attribute("texture", .stringAttributeType, defaultValue: "sedosa"),
+            attribute("cleanliness", .stringAttributeType, defaultValue: "alta"), attribute("persistence", .stringAttributeType, defaultValue: "media"),
+            attribute("aroma", .doubleAttributeType, defaultValue: 3), attribute("acidity", .doubleAttributeType, defaultValue: 3),
+            attribute("sweetness", .doubleAttributeType, defaultValue: 3), attribute("body", .doubleAttributeType, defaultValue: 3),
+            attribute("bitterness", .doubleAttributeType, defaultValue: 3), attribute("finishScore", .doubleAttributeType, defaultValue: 3),
+            attribute("rating", .doubleAttributeType, defaultValue: 4), attribute("nps", .integer64AttributeType, defaultValue: 8),
+            attribute("evaluatorNotes", .stringAttributeType, defaultValue: ""), attribute("coolingElapsedSeconds", .integer64AttributeType, defaultValue: 0),
+            attribute("cupLifeState", .stringAttributeType, defaultValue: "FRESH"), attribute("evaluatedAt", .dateAttributeType)
+        ]
+        tastingEntity.uniquenessConstraints = [["id"]]
+
+        let tastingObservationEntity = NSEntityDescription()
+        tastingObservationEntity.name = "TastingObservationRecord"; tastingObservationEntity.managedObjectClassName = NSStringFromClass(TastingObservationRecord.self)
+        tastingObservationEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("tastingId", .UUIDAttributeType), attribute("elapsedSeconds", .integer64AttributeType, defaultValue: 0),
+            attribute("stage", .stringAttributeType, defaultValue: "HOT"), attribute("notes", .stringAttributeType, defaultValue: ""),
+            attribute("aroma", .doubleAttributeType, defaultValue: 3), attribute("acidity", .doubleAttributeType, defaultValue: 3),
+            attribute("sweetness", .doubleAttributeType, defaultValue: 3), attribute("body", .doubleAttributeType, defaultValue: 3),
+            attribute("bitterness", .doubleAttributeType, defaultValue: 3), attribute("finishScore", .doubleAttributeType, defaultValue: 3)
+        ]
+        tastingObservationEntity.uniquenessConstraints = [["id"]]
+
+        let cupSessionEntity = NSEntityDescription()
+        cupSessionEntity.name = "CupSessionRecord"; cupSessionEntity.managedObjectClassName = NSStringFromClass(CupSessionRecord.self)
+        cupSessionEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("brewSessionId", .UUIDAttributeType, optional: true), attribute("tastingId", .UUIDAttributeType, optional: includeExactTemperature),
+            attribute("recipeId", .UUIDAttributeType, optional: true), attribute("beanId", .UUIDAttributeType, optional: true),
+            attribute("techniqueId", .UUIDAttributeType, optional: true), attribute("methodId", .UUIDAttributeType, optional: true), attribute("grinderId", .UUIDAttributeType, optional: true),
+            attribute("executedDoseGrams", .doubleAttributeType, defaultValue: 0), attribute("executedWaterMl", .integer64AttributeType, defaultValue: 0),
+            attribute("executedRatio", .doubleAttributeType, defaultValue: 0), attribute("executedTemperatureC", .integer64AttributeType, defaultValue: 0),
+            attribute("executedGrindSetting", .stringAttributeType, defaultValue: ""), attribute("executedDurationSeconds", .integer64AttributeType, defaultValue: 0),
+            attribute("beanNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("recipeNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("techniqueNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("methodNameSnapshot", .stringAttributeType, defaultValue: ""),
+            attribute("grinderNameSnapshot", .stringAttributeType, defaultValue: ""), attribute("cupLifeSeconds", .integer64AttributeType, defaultValue: 0),
+            attribute("cupLifeState", .stringAttributeType, defaultValue: "FRESH"), attribute("nps", .integer64AttributeType, defaultValue: 0),
+            attribute("rating", .doubleAttributeType, defaultValue: 0), attribute("comment", .stringAttributeType, defaultValue: ""), attribute("brewDate", .dateAttributeType, optional: true),
+            attribute("recipeSnapshotJSON", .stringAttributeType, defaultValue: "{}"), attribute("techniqueSnapshotJSON", .stringAttributeType, defaultValue: "{}"),
+            attribute("beanSnapshotJSON", .stringAttributeType, defaultValue: "{}"), attribute("grinderSnapshotJSON", .stringAttributeType, defaultValue: "{}")
+        ]
+        cupSessionEntity.uniquenessConstraints = [["id"], ["tastingId"]]
+        if includeExactTemperature { cupSessionEntity.properties.append(attribute("preciseTemperatureC", .doubleAttributeType, optional: true)) }
+
+        let syncOperationEntity = NSEntityDescription()
+        syncOperationEntity.name = "SyncOperationRecord"; syncOperationEntity.managedObjectClassName = NSStringFromClass(SyncOperationRecord.self)
+        let syncTableName = attribute("tableName", .stringAttributeType, defaultValue: "")
+        syncTableName.renamingIdentifier = "entityName"
+        syncOperationEntity.properties = syncProperties(attribute: attribute) + [
+            syncTableName, attribute("entityId", .UUIDAttributeType),
+            attribute("operation", .stringAttributeType, defaultValue: SyncStatus.pendingCreate.rawValue), attribute("payloadJSON", .stringAttributeType, defaultValue: "{}"),
+            attribute("attemptCount", .integer64AttributeType, defaultValue: 0), attribute("nextAttemptAt", .dateAttributeType),
+            attribute("lastError", .stringAttributeType, defaultValue: "")
+        ]
+        syncOperationEntity.uniquenessConstraints = [["id"], ["tableName", "entityId"]]
+
+        let profileEntity = NSEntityDescription()
+        profileEntity.name = "UserProfileRecord"; profileEntity.managedObjectClassName = NSStringFromClass(UserProfileRecord.self)
+        profileEntity.properties = syncProperties(attribute: attribute) + [
+            attribute("displayName", .stringAttributeType, defaultValue: ""), attribute("alias", .stringAttributeType, defaultValue: ""),
+            attribute("biography", .stringAttributeType, defaultValue: ""), attribute("avatarColor", .stringAttributeType, defaultValue: "#3F7A63"),
+            attribute("favoriteMethods", .stringAttributeType, defaultValue: ""), attribute("isPrivate", .booleanAttributeType, defaultValue: true)
+        ]
+        profileEntity.uniquenessConstraints = [["id"], ["ownerId"]]
+
+        model.entities = [
+            coffeeEntity, experimentEntity, grinderEntity, equipmentEntity,
+            recipeEntity, ingredientEntity, recipeStepEntity, techniqueEntity, techniqueStepEntity, brewSessionEntity,
+            tastingEntity, tastingObservationEntity, cupSessionEntity, syncOperationEntity, profileEntity
+        ]
+        return model
+    }
+
+    private static func syncProperties(attribute: (String, NSAttributeType, Bool, Any?) -> NSAttributeDescription) -> [NSAttributeDescription] {
+        [
+            attribute("id", .UUIDAttributeType, false, nil), attribute("ownerId", .UUIDAttributeType, true, nil),
+            attribute("createdAt", .dateAttributeType, false, nil), attribute("updatedAt", .dateAttributeType, false, nil),
+            attribute("version", .integer64AttributeType, false, 1), attribute("syncStatusRaw", .stringAttributeType, false, SyncStatus.pendingCreate.rawValue),
+            attribute("deletedAt", .dateAttributeType, true, nil)
+        ]
+    }
+}

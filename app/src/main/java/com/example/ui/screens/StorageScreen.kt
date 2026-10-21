@@ -156,7 +156,7 @@ private fun OwnerScopedStorageScreen(
         if (uri != null) try {
             val text = fileContext.contentResolver.openInputStream(uri)?.use { TechniqueFiles.readLimited(it) } ?: error("Archivo no disponible.")
             importedFile = TechniqueFiles.decode(text)
-        } catch (_: Exception) { fileError = "Archivo no compatible o cantidades inválidas. Usa un JSON de técnica exportado por Brew Studio." }
+        } catch (_: Exception) { fileError = "Archivo no compatible o cantidades inválidas. Usa un JSON de técnica exportado por cUpa." }
     }
     if (fileError != null) AlertDialog(onDismissRequest = { fileError = null }, title = { Text("Archivo de técnica") },
         text = { Text(fileError ?: "") }, confirmButton = { TextButton(onClick = { fileError = null }) { Text("Aceptar") } })

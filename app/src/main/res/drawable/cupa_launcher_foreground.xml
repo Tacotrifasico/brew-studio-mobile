@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keep the whole supplied character inside Android's adaptive-icon safe zone. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="16.67%" android:insetRight="16.67%"
+    android:insetTop="16.67%" android:insetBottom="16.67%">
+    <bitmap android:src="@drawable/cupa_launcher_art" android:gravity="fill" android:filter="true" />
+</inset>

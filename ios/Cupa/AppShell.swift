@@ -1,0 +1,212 @@
+import Network
+import SwiftUI
+import CoreData
+
+@MainActor
+final class ConnectivityMonitor: ObservableObject {
+    @Published private(set) var isConnected = true
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "com.tacotrifasico.cupa.connectivity")
+
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in self?.isConnected = path.status == .satisfied }
+        }
+        monitor.start(queue: queue)
+    }
+
+    deinit { monitor.cancel() }
+}
+
+enum CupaTab: String, CaseIterable, Hashable, Identifiable {
+    case home, brew, tasting, lab, storage
+    var id: Self { self }
+    var title: String {
+        switch self { case .home: "Taller"; case .brew: "Preparar"; case .tasting: "Cata"; case .lab: "Laboratorio"; case .storage: "Almacén" }
+    }
+}
+
+@MainActor
+final class AppNavigationModel: ObservableObject {
+    @Published var selection: CupaTab
+    init(selection: CupaTab = .home) { self.selection = selection }
+    func select(_ tab: CupaTab) { selection = tab }
+}
+
+struct AppShell: View {
+    let storageWarning: String?
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.managedObjectContext) private var context
+    @StateObject private var account: AccountModel
+    @StateObject private var navigation = AppNavigationModel()
+    @StateObject private var calculator = CalculatorModel()
+    @StateObject private var lab = LabModel()
+    @StateObject private var preparation = PreparationModel()
+    @StateObject private var tasting = TastingModel()
+    @StateObject private var settings = SettingsModel()
+    @StateObject private var connectivity = ConnectivityMonitor()
+    @State private var syncInProgress = false
+    @State private var syncNotice: String?
+    @State private var showingSyncDetails = false
+
+    init(storageWarning: String? = nil, accountDeletionHandler: @escaping (UUID) throws -> Void = { _ in }) {
+        self.storageWarning = storageWarning
+        _account = StateObject(wrappedValue: AccountModel(accountDeletionHandler: accountDeletionHandler))
+    }
+
+    var body: some View {
+        Group {
+            if !account.canEnterApp {
+                AccountView(model: account, requiresLogin: true)
+            } else {
+        TabView(selection: $navigation.selection) {
+            NavigationStack {
+                HomeView(
+                    selection: $navigation.selection,
+                    account: account,
+                    settings: settings,
+                    calculator: calculator,
+                    lab: lab,
+                    preparation: preparation
+                )
+            }
+                .tag(CupaTab.home)
+                .tabItem { Label("Taller", systemImage: "house") }
+
+            NavigationStack { BrewView(preparation: preparation, tasting: tasting, selection: $navigation.selection) }
+                .tag(CupaTab.brew)
+                .tabItem { Label("Preparar", systemImage: "mug") }
+
+            NavigationStack { TastingView(model: tasting, lab: lab, selection: $navigation.selection) }
+                .tag(CupaTab.tasting)
+                .tabItem { Label("Cata", systemImage: "heart") }
+
+            NavigationStack { LabView(model: lab, preparation: preparation, account: account, selection: $navigation.selection) }
+                .tag(CupaTab.lab)
+                .tabItem { Label("Laboratorio", systemImage: "flask") }
+
+            NavigationStack { StorageView(selection: $navigation.selection, lab: lab, preparation: preparation, account: account) }
+                .tag(CupaTab.storage)
+                .tabItem { Label("Almacén", systemImage: "shippingbox") }
+        }
+            }
+        }
+        .id(account.localScopeKey)
+        .tint(CupaTheme.forest)
+        .background(BrewOrganicCanvas().ignoresSafeArea())
+        .toolbarBackground(CupaTheme.card, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .onOpenURL { _ = account.handleAuthCallback($0) }
+        .sheet(isPresented: Binding(
+            get: { account.passwordRecoveryState.isPresented },
+            set: { if !$0 { account.dismissPasswordRecovery() } }
+        )) { PasswordResetView(model: account) }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if account.canEnterApp {
+            VStack(spacing: 0) {
+                if let storageWarning {
+                    statusBanner(storageWarning, icon: "externaldrive.badge.exclamationmark", color: CupaTheme.terracotta, foreground: CupaTheme.onTerracotta)
+                        .accessibilityIdentifier("storage.recoveryWarning")
+                }
+                if let notice = account.sessionNotice {
+                    statusBanner(notice, icon: connectivity.isConnected ? "person.crop.circle.badge.exclamationmark" : "wifi.slash", color: CupaTheme.espresso)
+                        .accessibilityIdentifier("sync.statusNotice")
+                } else if syncNotice != nil {
+                    Button {
+                        showingSyncDetails = true
+                    } label: {
+                        statusBanner(
+                            "Cambios locales · Detalles",
+                            icon: connectivity.isConnected ? "arrow.triangle.2.circlepath" : "wifi.slash",
+                            color: CupaTheme.espresso
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("sync.statusNotice")
+                    .accessibilityHint("Muestra el estado completo y las opciones de sincronización")
+                }
+            }
+            }
+        }
+        .alert("Estado de sincronización", isPresented: $showingSyncDetails) {
+            if canRetrySync { Button("Reintentar") { Task { await refreshAndSync(forceRetry: true) } } }
+            Button("Cerrar", role: .cancel) {}
+        } message: { Text(syncNotice ?? "Los cambios quedan guardados en este dispositivo.") }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active || phase == .background { preparation.synchronizeClock(); tasting.synchronizeClock() }
+            if phase == .active { Task { await refreshAndSync() } }
+        }
+        .onChange(of: preparation.state.status) { _, status in
+            if status == .completed && preparation.state.savedAt == nil {
+                do { try preparation.saveCompletedCup(in: context) }
+                catch { NSLog("Cupa: preparación pendiente de guardar. %@", error.localizedDescription) }
+            }
+        }
+        .task {
+            context.activeOwnerId = account.tokens?.userId
+            do { try SampleCoffee.ensure(in: context) }
+            catch { NSLog("Cupa: no se pudo guardar Ronpotrero. %@", error.localizedDescription) }
+            lab.setTemperatureUnit(settings.temperatureUnit)
+            lab.setManualAltitude(settings.altitudeMeters)
+            preparation.loadCalculatorIfPristine(calculator)
+            if preparation.state.status == .completed && preparation.state.savedAt == nil { try? preparation.saveCompletedCup(in: context) }
+            await refreshAndSync()
+        }
+        .onChange(of: account.localScopeKey) { _, _ in
+            let ownerId = account.tokens?.userId; context.activeOwnerId = ownerId
+            calculator.switchScope(to: ownerId); lab.switchScope(to: ownerId); preparation.switchScope(to: ownerId); tasting.switchScope(to: ownerId)
+            lab.setManualAltitude(settings.altitudeMeters)
+            lab.setTemperatureUnit(settings.temperatureUnit)
+            preparation.loadCalculatorIfPristine(calculator)
+        }
+        .onChange(of: calculator.transferVersion) { _, _ in preparation.loadCalculatorDraftIfPossible(calculator) }
+        .onChange(of: settings.temperatureUnit) { _, unit in lab.setTemperatureUnit(unit) }
+        .onChange(of: settings.altitudeMeters) { _, meters in lab.setManualAltitude(meters) }
+        .onChange(of: lab.state.temperatureUnit) { _, unit in
+            if settings.temperatureUnit != unit { settings.temperatureUnit = unit }
+        }
+        .onChange(of: connectivity.isConnected) { wasConnected, isConnected in
+            guard !wasConnected, isConnected else { return }
+            Task { await refreshAndSync() }
+        }
+        .preferredColorScheme(settings.preferredColorScheme)
+    }
+
+    private func statusBanner(_ text: String, icon: String, color: Color, foreground: Color = CupaTheme.onAccent) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.bold())
+            .foregroundStyle(foreground)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color)
+    }
+
+    private var canRetrySync: Bool {
+        connectivity.isConnected && account.configuration.isSupabaseConfigured && account.tokens != nil && !syncInProgress
+    }
+
+    private func refreshAndSync(forceRetry: Bool = false) async {
+        guard connectivity.isConnected, !syncInProgress else {
+            if !connectivity.isConnected { syncNotice = "Sin conexión. Los cambios quedan guardados en este dispositivo." }
+            return
+        }
+        syncInProgress = true
+        defer { syncInProgress = false }
+        guard let tokens = await account.validTokens() else { return }
+        syncNotice = "Actualizando perfil…"
+        let coordinator = EntitySyncCoordinator(context: context, configuration: account.configuration)
+        await coordinator.sync(ownerId: tokens.userId, accessToken: tokens.accessToken, forceRetry: forceRetry)
+        if coordinator.authenticationRejected, let refreshed = await account.validTokens(forceRefresh: true) {
+            await coordinator.sync(ownerId: refreshed.userId, accessToken: refreshed.accessToken, forceRetry: forceRetry)
+        }
+        switch coordinator.state {
+        case .completed: syncNotice = nil
+        case .offline: syncNotice = "Sin conexión. Tu biblioteca permanece en este dispositivo."
+        case let .waitingRetry(count): syncNotice = "\(count) \(count == 1 ? "cambio local sigue pendiente" : "cambios locales siguen pendientes") de sincronizar."
+        case let .failed(message): syncNotice = "Sincronización pendiente: \(message)"
+        default: break
+        }
+    }
+}

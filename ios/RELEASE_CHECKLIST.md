@@ -1,0 +1,24 @@
+# Checklist de distribución
+
+- [ ] Toda la matriz está Validada o Bloqueada por una dependencia externa real.
+- [ ] Supabase y RLS validados con dos usuarios.
+- [ ] Core Data funciona offline y sincroniza al reconectar.
+- [x] Caché, outbox y trabajo recuperable quedan aislados al cambiar de cuenta localmente.
+- [x] Contrato remoto alineado con tablas y payloads Android; migraciones con sintaxis válida y ejecución PostgreSQL efímera aprobada en ambos historiales.
+- [ ] Sesión recuperada tras reinicio y datos tras reinstalación/login; registro con confirmación/reenvío, recuperación completa por enlace profundo y cambio de contraseña, eliminación remota y purga local selectiva ya están preparados.
+- [x] Calculadora y Laboratorio pasan pruebas de paridad.
+- [ ] CRUD completo de entidades separadas.
+- [x] Conflictos y errores de sincronización validados localmente: comparación atómica, remoto más reciente, respuesta incoherente, offline, autenticación y backoff; la integración real permanece cubierta por su bloqueo Supabase independiente.
+- [ ] Gemini seguro con fallback local: contrato, cuota atómica, timeout, validación simétrica, no-retención solicitada y telemetría no sensible aprobados localmente; falta desplegarlo y provocar éxito, 429, timeout y error real con el proyecto Supabase/Gemini.
+- [ ] Tema claro/oscuro completo. El sistema Warm Specialty Paper & Ceramic y su contraste están implementados; falta recorrido visual/VoiceOver en Simulator.
+- [ ] Sin botones muertos, mocks ni placeholders de producción. La cuenta y el envío directo ya no exponen UUID técnicos; falta recorrido visual completo.
+- [x] Sin TODO críticos ni secretos.
+- [ ] Pruebas críticas aprobadas (dominio aprobado; UI e integración real pendientes).
+- [x] Build Release del código aprobado sin firma.
+- [x] Archive técnico generado sin firma y sin catálogo por fallo local de `actool`.
+- [ ] Bundle ID, versión, cifrado, icono, launch screen y permisos revisados (bundle/versión/cifrado/launch aprobados; no se usan APIs con permiso; ícono preparado y falta validar catálogo).
+- [x] Development, Staging y Production separados y compilables; metadata expandida dentro de cada bundle validada.
+- [ ] Privacidad, accesibilidad y localización revisadas; manifiesto, consentimiento de IA, región española y purga local tras eliminar cuenta están comprobados, falta validar las declaraciones y recorridos en App Store Connect/dispositivo.
+- [x] Compilación realizada con Xcode 26 y SDK iOS 26.5, superior al mínimo de SDK iOS 26 vigente desde el 28 de abril de 2026.
+- [ ] Moderación UGC operativa: normas y contacto publicados, cola de reportes atendida y bloqueo validado con dos usuarios.
+- [x] Acciones de cuenta Apple y legales documentadas.

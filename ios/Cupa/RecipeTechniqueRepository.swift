@@ -1,0 +1,500 @@
+import CoreData
+import Foundation
+
+// Shared Android/iOS v1 file format. Public content, fresh IDs, no account or local inventory links.
+enum TechniqueFiles {
+    static let maxBytes = 1_048_576
+    struct Envelope: Codable { var format = "brew-studio"; var version = 1; var kind = "technique"; let technique: Payload }
+    struct Payload: Codable {
+        let name: String; let methodName: String; let doseGrams: Double; let waterMl: Int; let temperatureC: Int
+        let executionMode: String; let grindValue: Double; let grindUnit: String; let grindDescription: String
+        let notes: String; let description: String; let steps: [Step]
+    }
+    struct Step: Codable {
+        let title: String; let durationSeconds: Int; let waterAddedMl: Int; let gesture: String; let intensity: String
+        let note: String; let coverage: Double?; let flow: Double?; let secondaryAction: String?
+    }
+    enum FileError: LocalizedError {
+        case incompatible, tooLarge, invalid
+        var errorDescription: String? { switch self {
+        case .incompatible: "Archivo de técnica no compatible."
+        case .tooLarge: "El archivo supera 1 MB."
+        case .invalid: "Revisa el método, cantidades y pasos del archivo."
+        } }
+    }
+    static func encode(_ draft: TechniqueDraftModel) throws -> Data {
+        try TechniqueDraftValidator.validate(draft)
+        let payload = Payload(name: draft.name, methodName: draft.methodName, doseGrams: draft.doseGrams, waterMl: draft.waterMl,
+            temperatureC: draft.temperatureC, executionMode: draft.executionMode, grindValue: draft.grindValue, grindUnit: draft.grindUnit,
+            grindDescription: draft.grindDescription, notes: draft.notes, description: draft.techniqueDescription,
+            steps: draft.steps.map { Step(title: $0.title, durationSeconds: $0.durationSeconds, waterAddedMl: $0.waterAddedMl,
+                gesture: $0.gesture, intensity: $0.intensity, note: $0.note, coverage: $0.coverage, flow: $0.flow, secondaryAction: $0.secondaryAction) })
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(Envelope(technique: payload))
+    }
+    static func decode(_ data: Data) throws -> TechniqueDraftModel {
+        guard data.count <= maxBytes else { throw FileError.tooLarge }
+        let file = try JSONDecoder().decode(Envelope.self, from: data)
+        guard file.format == "brew-studio", file.version == 1, file.kind == "technique" else { throw FileError.incompatible }
+        let p = file.technique
+        guard !p.methodName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, p.name.count <= 200, p.methodName.count <= 200,
+              (1...128).contains(p.steps.count), p.steps.allSatisfy({ (1...172800).contains($0.durationSeconds) && (0...2000).contains($0.waterAddedMl) }),
+              p.doseGrams.isFinite, p.grindValue.isFinite, (0...50000).contains(p.grindValue),
+              p.steps.allSatisfy({ step in
+                  (step.coverage.map { $0.isFinite && (0...100).contains($0) } ?? true) &&
+                  (step.flow.map { $0.isFinite && (0...200).contains($0) } ?? true)
+              }) else { throw FileError.invalid }
+        let draft = TechniqueDraftModel(name: p.name, methodName: p.methodName, doseGrams: p.doseGrams, waterMl: p.waterMl,
+            ratio: p.doseGrams > 0 ? Double(p.waterMl) / p.doseGrams : 0, temperatureC: p.temperatureC,
+            executionMode: p.executionMode, grindValue: p.grindValue, grindDescription: p.grindDescription, grindUnit: p.grindUnit,
+            notes: p.notes, techniqueDescription: p.description,
+            steps: p.steps.map { TechniqueStepDraft(title: $0.title, durationSeconds: $0.durationSeconds, waterAddedMl: $0.waterAddedMl,
+                intensity: $0.intensity, gesture: $0.gesture, note: $0.note, coverage: $0.coverage, flow: $0.flow, secondaryAction: $0.secondaryAction) })
+        try TechniqueDraftValidator.validate(draft)
+        return draft
+    }
+}
+
+struct RecipeIngredientDraft: Identifiable, Equatable, Codable {
+    var id = UUID(); var name = ""; var amount = 0.0; var unit = "GRAMS"
+}
+
+struct RecipeStepDraft: Identifiable, Equatable, Codable {
+    var id = UUID(); var instruction = ""; var durationSeconds: Int?
+}
+
+struct RecipeDraftModel: Equatable, Codable {
+    var id = UUID(); var name = ""; var recipeKind = "BLACK_COFFEE"; var intention = ""
+    var suggestedMethodId: UUID?; var suggestedMethodName = ""; var isFavorite = false; var tags = ""
+    var ingredients: [RecipeIngredientDraft] = []; var steps: [RecipeStepDraft] = []
+}
+
+enum RecipeDraftValidationError: LocalizedError, Equatable {
+    case emptyName, missingIngredient, missingIngredientName, invalidIngredientAmount
+    case missingStep, missingStepInstruction, invalidStepDuration
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyName: "Escribe un nombre para la receta."
+        case .missingIngredient: "Agrega por lo menos un ingrediente."
+        case .missingIngredientName: "Todos los ingredientes necesitan un nombre."
+        case .invalidIngredientAmount: "Cada ingrediente necesita una cantidad mayor a 0."
+        case .missingStep: "Agrega por lo menos un paso de preparación."
+        case .missingStepInstruction: "Todos los pasos necesitan una instrucción."
+        case .invalidStepDuration: "La duración de cada paso debe ser mayor a 0 segundos."
+        }
+    }
+}
+
+enum RecipeDraftValidator {
+    static func validate(_ draft: RecipeDraftModel) throws {
+        if draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw RecipeDraftValidationError.emptyName }
+        if draft.ingredients.isEmpty { throw RecipeDraftValidationError.missingIngredient }
+        if draft.ingredients.contains(where: { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) { throw RecipeDraftValidationError.missingIngredientName }
+        if draft.ingredients.contains(where: { !$0.amount.isFinite || $0.amount <= 0 }) { throw RecipeDraftValidationError.invalidIngredientAmount }
+        if draft.steps.isEmpty { throw RecipeDraftValidationError.missingStep }
+        if draft.steps.contains(where: { $0.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) { throw RecipeDraftValidationError.missingStepInstruction }
+        if draft.steps.contains(where: { ($0.durationSeconds ?? 1) <= 0 }) { throw RecipeDraftValidationError.invalidStepDuration }
+    }
+
+    static func message(for draft: RecipeDraftModel) -> String? {
+        do { try validate(draft); return nil } catch { return error.localizedDescription }
+    }
+}
+
+enum RecipeTextParser {
+    static func parse(_ rawText: String) -> RecipeDraftModel {
+        let lines = rawText.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return RecipeDraftModel() }
+
+        var draft = RecipeDraftModel()
+        var section: Section?
+        for (index, line) in lines.enumerated() {
+            let folded = line.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            if index == 0 {
+                if folded.hasPrefix("receta:") || folded.hasPrefix("nombre:") {
+                    draft.name = String(line.drop(while: { $0 != ":" }).dropFirst()).trimmingCharacters(in: .whitespaces)
+                } else {
+                    draft.name = line.trimmingCharacters(in: CharacterSet(charactersIn: "#* "))
+                }
+                continue
+            }
+            if folded.contains("ingrediente") { section = .ingredients; continue }
+            if folded.contains("paso") || folded.contains("preparacion") || folded.contains("instruccion") { section = .steps; continue }
+            if folded.contains("nota") || folded.contains("intencion") || folded.contains("perfil") || folded.contains("descriptor") { section = .notes; continue }
+
+            switch section {
+            case .ingredients:
+                draft.ingredients.append(parseIngredient(line))
+            case .steps:
+                let instruction = stripListPrefix(line)
+                if !instruction.isEmpty { draft.steps.append(.init(instruction: instruction)) }
+            case .notes:
+                draft.intention += (draft.intention.isEmpty ? "" : " ") + line
+            case nil:
+                if isNumberedListItem(line) {
+                    draft.steps.append(.init(instruction: stripListPrefix(line)))
+                } else if looksLikeIngredient(line) {
+                    draft.ingredients.append(parseIngredient(line))
+                } else if draft.intention.isEmpty {
+                    draft.intention = line
+                }
+            }
+        }
+
+        let fullText = rawText.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        draft.recipeKind = inferredKind(fullText)
+        draft.suggestedMethodName = inferredMethod(fullText)
+        if draft.name.isEmpty { draft.name = "Receta importada" }
+        if draft.ingredients.isEmpty {
+            draft.ingredients = [.init(name: "Café de especialidad", amount: 15, unit: "GRAMS"), .init(name: "Agua filtrada", amount: 240, unit: "MILLILITERS")]
+        }
+        if draft.steps.isEmpty { draft.steps = [.init(instruction: "Mezclar los ingredientes y servir")] }
+        return draft
+    }
+
+    private enum Section { case ingredients, steps, notes }
+
+    private static func inferredKind(_ text: String) -> String {
+        if containsAny(text, ["leche", "latte", "cappuccino", "flat white", "macchiato"]) { return "MILK_DRINK" }
+        if containsAny(text, ["hielo", "cold brew", "tonic", "fresco", "fria", "frio"]) { return "COLD_DRINK" }
+        if containsAny(text, ["postre", "affogato", "helado", "dulce", "chocolate"]) { return "DESSERT" }
+        if containsAny(text, ["autor", "signature", "jarabe", "syrup", "coctel"]) { return "SIGNATURE" }
+        if containsAny(text, ["v60", "espresso", "filtrado", "aeropress", "chemex"]) { return "BLACK_COFFEE" }
+        return "OTHER"
+    }
+
+    private static func inferredMethod(_ text: String) -> String {
+        if text.contains("v60") { return "V60" }
+        if text.contains("aeropress") { return "Aeropress" }
+        if text.contains("espresso") { return "Espresso" }
+        if text.contains("prensa francesa") || text.contains("french press") { return "Prensa Francesa" }
+        if text.contains("chemex") { return "Chemex" }
+        if text.contains("kalita") { return "Kalita Wave" }
+        return ""
+    }
+
+    private static func parseIngredient(_ line: String) -> RecipeIngredientDraft {
+        let clean = line.trimmingCharacters(in: CharacterSet(charactersIn: "-*• \t"))
+        let pattern = #"^([0-9]+(?:[.,][0-9]+)?)\s*(g|gr|gramos?|ml|mililitros?|u|unidades?|cdta|cucharaditas?|cda|cucharadas?|oz|onzas?)\b\s*(.*)$"#
+        if let match = clean.firstMatch(of: try! Regex(pattern)) {
+            let amount = Double(String(match.output[1].substring!).replacingOccurrences(of: ",", with: ".")) ?? 0
+            let rawUnit = String(match.output[2].substring!).lowercased()
+            let name = String(match.output[3].substring!).trimmingCharacters(in: CharacterSet(charactersIn: " :-"))
+            return .init(name: name.isEmpty ? clean : name, amount: amount, unit: normalizedUnit(rawUnit))
+        }
+        return .init(name: clean, amount: 0, unit: "GRAMS")
+    }
+
+    private static func normalizedUnit(_ unit: String) -> String {
+        if unit == "ml" || unit.hasPrefix("mililit") { return "MILLILITERS" }
+        if unit == "u" || unit.hasPrefix("unidad") { return "UNITS" }
+        if unit == "cdta" || unit.hasPrefix("cucharadita") { return "TEASPOONS" }
+        if unit == "cda" || unit.hasPrefix("cucharada") { return "TABLESPOONS" }
+        if unit == "oz" || unit.hasPrefix("onza") { return "OUNCES" }
+        return "GRAMS"
+    }
+
+    private static func stripListPrefix(_ line: String) -> String {
+        line.replacingOccurrences(of: #"^\s*\d+[.)-]\s*"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func isNumberedListItem(_ line: String) -> Bool {
+        line.range(of: #"^\s*\d+[.)-]\s*.+"#, options: .regularExpression) != nil
+    }
+
+    private static func looksLikeIngredient(_ line: String) -> Bool {
+        line.range(of: #"^\s*[-*•]?\s*\d+(?:[.,]\d+)?\s*(?:g|gr|gramos?|ml|mililitros?|u|unidades?|cdta|cda|oz)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    private static func containsAny(_ text: String, _ values: [String]) -> Bool { values.contains(where: text.contains) }
+}
+
+struct TechniqueStepDraft: Identifiable, Equatable, Codable {
+    var id = UUID(); var title = ""; var durationSeconds = 30; var waterAddedMl = 0
+    var intensity = "MEDIUM"; var gesture = "CIRCULAR_POUR"; var note = ""
+    var coverage: Double?; var flow: Double?; var secondaryAction: String?
+}
+
+struct TechniqueDraftModel: Equatable, Codable {
+    var id = UUID(); var name = ""; var methodId: UUID?; var methodName = "V60"
+    var recipeId: UUID?; var beanId: UUID?; var grinderId: UUID?
+    var doseGrams = 15.0; var waterMl = 240; var ratio = 16.0; var temperatureC = 93
+    var executionMode = "GUIDED"; var grindValue = 18.0; var grindDescription = "18 clics"; var grindUnit = "CLICKS"
+    var notes = ""; var techniqueDescription = ""; var steps: [TechniqueStepDraft] = []
+}
+
+extension TechniqueDraftModel {
+    static func fromLab(_ state: LabState) -> TechniqueDraftModel {
+        let baseName = state.techniqueName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = baseName.flatMap { $0.isEmpty ? nil : "\($0) · ajuste de laboratorio" } ?? "Hipótesis \(state.method)"
+        return TechniqueDraftModel(
+            name: name,
+            methodId: state.methodId,
+            methodName: state.method,
+            recipeId: state.recipeId,
+            beanId: state.beanId,
+            grinderId: state.grinderId,
+            doseGrams: Double(state.coffeeGrams),
+            waterMl: state.waterMl,
+            ratio: state.coffeeGrams > 0 ? Double(state.waterMl) / Double(state.coffeeGrams) : Double(state.ratio),
+            temperatureC: state.temperatureC,
+            executionMode: "MANUAL",
+            grindValue: Double(state.grindClicks),
+            grindDescription: "\(state.grindClicks) clics",
+            grindUnit: "CLICKS",
+            notes: state.notes,
+            techniqueDescription: "Guardada desde el Laboratorio",
+            steps: [
+                TechniqueStepDraft(
+                    title: "Preparar hipótesis",
+                    durationSeconds: state.timeSeconds,
+                    waterAddedMl: state.waterMl,
+                    intensity: "MEDIUM",
+                    gesture: "MANUAL",
+                    note: state.notes
+                )
+            ]
+        )
+    }
+}
+
+enum TechniqueDraftValidationError: LocalizedError, Equatable {
+    case emptyName, invalidCoffee, invalidWater, invalidTemperature, missingStepTitle, invalidStepDuration, invalidStepWater, waterMismatch, invalidRatio
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyName: "Escribe un nombre para la técnica."
+        case .invalidCoffee: "El café debe estar entre 1 y 100 g."
+        case .invalidWater: "El agua total debe estar entre 10 y 2000 ml."
+        case .invalidTemperature: "La temperatura debe estar entre 0 y 100 °C."
+        case .missingStepTitle: "Todos los pasos necesitan un título."
+        case .invalidStepDuration: "Cada paso necesita una duración mayor a 0 segundos."
+        case .invalidStepWater: "El agua de cada paso debe ser 0 ml o más."
+        case .waterMismatch: "La suma del agua de los pasos debe coincidir con el agua total."
+        case .invalidRatio: "La proporción resultante debe estar entre 1:1 y 1:40."
+        }
+    }
+}
+
+enum TechniqueDraftValidator {
+    static func validate(_ draft: TechniqueDraftModel) throws {
+        if draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw TechniqueDraftValidationError.emptyName }
+        if !(1...100).contains(draft.doseGrams) { throw TechniqueDraftValidationError.invalidCoffee }
+        if !(10...2_000).contains(draft.waterMl) { throw TechniqueDraftValidationError.invalidWater }
+        if !(0...100).contains(draft.temperatureC) { throw TechniqueDraftValidationError.invalidTemperature }
+        if draft.steps.isEmpty || draft.steps.contains(where: { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) { throw TechniqueDraftValidationError.missingStepTitle }
+        if draft.steps.contains(where: { $0.durationSeconds <= 0 }) { throw TechniqueDraftValidationError.invalidStepDuration }
+        if draft.steps.contains(where: { $0.waterAddedMl < 0 }) { throw TechniqueDraftValidationError.invalidStepWater }
+        if draft.steps.reduce(0, { $0 + $1.waterAddedMl }) != draft.waterMl { throw TechniqueDraftValidationError.waterMismatch }
+        let ratio = Double(draft.waterMl) / draft.doseGrams
+        if !(1...40).contains(ratio) { throw TechniqueDraftValidationError.invalidRatio }
+    }
+
+    static func message(for draft: TechniqueDraftModel) -> String? {
+        do { try validate(draft); return nil } catch { return error.localizedDescription }
+    }
+}
+
+@MainActor
+final class RecipeTechniqueRepository {
+    private let context: NSManagedObjectContext
+    init(context: NSManagedObjectContext) { self.context = context }
+
+    func recipeDraft(for recipe: RecipeRecord) throws -> RecipeDraftModel {
+        RecipeDraftModel(
+            id: recipe.id, name: recipe.name, recipeKind: recipe.recipeKind, intention: recipe.intention,
+            suggestedMethodId: recipe.suggestedMethodId, suggestedMethodName: recipe.suggestedMethodName,
+            isFavorite: recipe.isFavorite, tags: recipe.tags,
+            ingredients: try ingredients(recipeId: recipe.id).map { .init(id: $0.id, name: $0.name, amount: $0.amount, unit: $0.unit) },
+            steps: try recipeSteps(recipeId: recipe.id).map { .init(id: $0.id, instruction: $0.instruction, durationSeconds: $0.durationSeconds) }
+        )
+    }
+
+    @discardableResult func saveRecipe(_ draft: RecipeDraftModel) throws -> RecipeRecord {
+        try RecipeDraftValidator.validate(draft)
+        let recipe = try recipe(id: draft.id) ?? RecipeRecord(
+            context: context, id: draft.id, name: draft.name, recipeKind: draft.recipeKind,
+            intention: draft.intention, suggestedMethodId: draft.suggestedMethodId,
+            suggestedMethodName: draft.suggestedMethodName, isFavorite: draft.isFavorite, tags: draft.tags
+        )
+        if !recipe.isInserted {
+            recipe.name = draft.name; recipe.recipeKind = draft.recipeKind; recipe.intention = draft.intention
+            recipe.suggestedMethodId = draft.suggestedMethodId; recipe.suggestedMethodName = draft.suggestedMethodName
+            recipe.isFavorite = draft.isFavorite; recipe.tags = draft.tags; recipe.markUpdated()
+        }
+        try reconcileIngredients(draft.ingredients, recipeId: recipe.id)
+        try reconcileRecipeSteps(draft.steps, recipeId: recipe.id)
+        try saveContext()
+        return recipe
+    }
+
+    @discardableResult func duplicateRecipe(_ source: RecipeRecord) throws -> RecipeRecord {
+        var draft = try recipeDraft(for: source)
+        let sourceId = source.id; draft.id = UUID(); draft.name = "Copia de \(source.name)"
+        draft.ingredients = draft.ingredients.map { var item = $0; item.id = UUID(); return item }
+        draft.steps = draft.steps.map { var item = $0; item.id = UUID(); return item }
+        let copy = RecipeRecord(
+            context: context, id: draft.id, name: draft.name, recipeKind: draft.recipeKind, intention: draft.intention,
+            suggestedMethodId: draft.suggestedMethodId, suggestedMethodName: draft.suggestedMethodName,
+            isFavorite: draft.isFavorite, tags: draft.tags, originalEntityId: source.originalEntityId ?? sourceId,
+            rootEntityId: source.rootEntityId ?? sourceId, copyMode: "FORK"
+        )
+        copy.originalAuthorUserId = source.originalAuthorUserId
+        copy.originalAuthorName = source.originalAuthorName
+        copy.importedFromShareId = source.importedFromShareId
+        try reconcileIngredients(draft.ingredients, recipeId: copy.id)
+        try reconcileRecipeSteps(draft.steps, recipeId: copy.id)
+        try saveContext(); return copy
+    }
+
+    func deleteRecipe(_ recipe: RecipeRecord) throws {
+        recipe.markDeleted()
+        try ingredients(recipeId: recipe.id).forEach { $0.markDeleted() }
+        try recipeSteps(recipeId: recipe.id).forEach { $0.markDeleted() }
+        try saveContext()
+    }
+
+    func toggleFavorite(_ recipe: RecipeRecord) throws {
+        recipe.isFavorite.toggle(); recipe.markUpdated(); try saveContext()
+    }
+
+    func techniqueDraft(for technique: TechniqueRecord) throws -> TechniqueDraftModel {
+        TechniqueDraftModel(
+            id: technique.id, name: technique.name, methodId: technique.methodId, methodName: technique.methodName,
+            recipeId: technique.recipeId, beanId: technique.beanId, grinderId: technique.grinderId,
+            doseGrams: technique.doseGrams, waterMl: Int(technique.waterMl), ratio: technique.ratio,
+            temperatureC: Int(technique.temperatureC), executionMode: technique.executionMode,
+            grindValue: technique.grindValue, grindDescription: technique.grindDescription, grindUnit: technique.grindUnit,
+            notes: technique.notes, techniqueDescription: technique.techniqueDescription,
+            steps: try techniqueSteps(techniqueId: technique.id).map {
+                .init(id: $0.id, title: $0.title, durationSeconds: Int($0.durationSeconds), waterAddedMl: Int($0.waterAddedMl), intensity: $0.intensity, gesture: $0.gesture, note: $0.stepNote, coverage: $0.coverage, flow: $0.flow, secondaryAction: $0.secondaryAction)
+            }
+        )
+    }
+
+    @discardableResult func saveTechnique(_ draft: TechniqueDraftModel, copyMode: String? = nil) throws -> TechniqueRecord {
+        try TechniqueDraftValidator.validate(draft)
+        var draft = draft
+        draft.ratio = Double(draft.waterMl) / draft.doseGrams
+        let totalTime = draft.steps.reduce(0) { $0 + max(0, $1.durationSeconds) }
+        let technique = try technique(id: draft.id) ?? TechniqueRecord(
+            context: context, id: draft.id, name: draft.name, methodId: draft.methodId, methodName: draft.methodName,
+            recipeId: draft.recipeId, beanId: draft.beanId, grinderId: draft.grinderId,
+            doseGrams: draft.doseGrams, waterMl: draft.waterMl, ratio: draft.ratio, temperatureC: draft.temperatureC,
+            executionMode: draft.executionMode, grindValue: draft.grindValue, grindDescription: draft.grindDescription,
+            grindUnit: draft.grindUnit, notes: draft.notes, techniqueDescription: draft.techniqueDescription, totalTimeSeconds: totalTime
+        )
+        if !technique.isInserted {
+            technique.name = draft.name; technique.methodId = draft.methodId; technique.methodName = draft.methodName
+            technique.recipeId = draft.recipeId; technique.beanId = draft.beanId; technique.grinderId = draft.grinderId
+            technique.doseGrams = draft.doseGrams; technique.waterMl = Int64(draft.waterMl); technique.ratio = draft.ratio
+            technique.temperatureC = Int64(draft.temperatureC); technique.executionMode = draft.executionMode
+            technique.grindValue = draft.grindValue; technique.grindDescription = draft.grindDescription; technique.grindUnit = draft.grindUnit
+            technique.notes = draft.notes; technique.techniqueDescription = draft.techniqueDescription; technique.totalTimeSeconds = Int64(totalTime)
+            technique.markUpdated()
+        }
+        if let copyMode { technique.copyMode = copyMode }
+        try reconcileTechniqueSteps(draft.steps, techniqueId: technique.id)
+        try saveContext(); return technique
+    }
+
+    @discardableResult func saveImportedTechnique(_ imported: TechniqueDraftModel) throws -> TechniqueRecord {
+        try TechniqueDraftValidator.validate(imported)
+        var draft = imported
+        let request = NSFetchRequest<EquipmentRecord>(entityName: "EquipmentRecord")
+        request.predicate = LocalDataScope.visiblePredicate()
+        let existing = try context.fetch(request).first { $0.isBrewingMethod && $0.name.caseInsensitiveCompare(draft.methodName) == .orderedSame }
+        if let existing { draft.methodId = existing.id }
+        else if PreparationTechniqueCatalog.techniques(for: draft.methodName).isEmpty {
+            let method = EquipmentRecord(context: context, name: draft.methodName, equipmentType: "BREWER_METHOD", brand: "", model: "", capacityMl: nil,
+                configuration: "", notes: "Método de técnica importada", isFavorite: true, isActive: true)
+            draft.methodId = method.id
+        }
+        do { return try saveTechnique(draft, copyMode: "IMPORT") } catch { context.rollback(); throw error }
+    }
+
+    @discardableResult func duplicateTechnique(_ technique: TechniqueRecord) throws -> TechniqueRecord {
+        let sourceId = technique.id
+        var draft = try techniqueDraft(for: technique)
+        draft.id = UUID(); draft.name = "Copia de \(draft.name)"
+        draft.steps = draft.steps.map { step in
+            var copy = step; copy.id = UUID(); return copy
+        }
+        let copy = try saveTechnique(draft)
+        copy.originalAuthorUserId = technique.originalAuthorUserId
+        copy.originalAuthorName = technique.originalAuthorName
+        copy.originalEntityId = technique.originalEntityId ?? sourceId
+        copy.rootEntityId = technique.rootEntityId ?? technique.originalEntityId ?? sourceId
+        copy.importedFromShareId = technique.importedFromShareId
+        copy.copyMode = "FORK"
+        try saveContext()
+        return copy
+    }
+
+    func deleteTechnique(_ technique: TechniqueRecord) throws {
+        technique.markDeleted(); try techniqueSteps(techniqueId: technique.id).forEach { $0.markDeleted() }; try saveContext()
+    }
+
+    func ingredients(recipeId: UUID) throws -> [RecipeIngredientRecord] {
+        try fetch(RecipeIngredientRecord.self, entity: "RecipeIngredientRecord", predicate: NSPredicate(format: "recipeId == %@", recipeId as CVarArg), sortKey: "orderIndex")
+    }
+    func recipeSteps(recipeId: UUID) throws -> [RecipeStepRecord] {
+        try fetch(RecipeStepRecord.self, entity: "RecipeStepRecord", predicate: NSPredicate(format: "recipeId == %@", recipeId as CVarArg), sortKey: "stepNumber")
+    }
+    func techniqueSteps(techniqueId: UUID) throws -> [TechniqueStepRecord] {
+        try fetch(TechniqueStepRecord.self, entity: "TechniqueStepRecord", predicate: NSPredicate(format: "techniqueId == %@", techniqueId as CVarArg), sortKey: "stepNumber")
+    }
+
+    private func recipe(id: UUID) throws -> RecipeRecord? { try object(RecipeRecord.self, entity: "RecipeRecord", id: id) }
+    private func technique(id: UUID) throws -> TechniqueRecord? { try object(TechniqueRecord.self, entity: "TechniqueRecord", id: id) }
+
+    private func reconcileIngredients(_ drafts: [RecipeIngredientDraft], recipeId: UUID) throws {
+        let current = try ingredients(recipeId: recipeId); let incoming = Set(drafts.map(\.id))
+        current.filter { !incoming.contains($0.id) }.forEach { $0.markDeleted() }
+        for (index, draft) in drafts.enumerated() where !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let item = current.first(where: { $0.id == draft.id }) {
+                item.name = draft.name; item.amount = draft.amount; item.unit = draft.unit; item.orderIndex = Int64(index); item.markUpdated()
+            } else { _ = RecipeIngredientRecord(context: context, id: draft.id, recipeId: recipeId, name: draft.name, amount: draft.amount, unit: draft.unit, orderIndex: index) }
+        }
+    }
+
+    private func reconcileRecipeSteps(_ drafts: [RecipeStepDraft], recipeId: UUID) throws {
+        let current = try recipeSteps(recipeId: recipeId); let incoming = Set(drafts.map(\.id))
+        current.filter { !incoming.contains($0.id) }.forEach { $0.markDeleted() }
+        for (index, draft) in drafts.enumerated() where !draft.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let item = current.first(where: { $0.id == draft.id }) {
+                item.instruction = draft.instruction; item.stepNumber = Int64(index + 1); item.durationSeconds = draft.durationSeconds; item.markUpdated()
+            } else { _ = RecipeStepRecord(context: context, id: draft.id, recipeId: recipeId, instruction: draft.instruction, stepNumber: index + 1, durationSeconds: draft.durationSeconds) }
+        }
+    }
+
+    private func reconcileTechniqueSteps(_ drafts: [TechniqueStepDraft], techniqueId: UUID) throws {
+        let current = try techniqueSteps(techniqueId: techniqueId); let incoming = Set(drafts.map(\.id)); var accumulated = 0
+        current.filter { !incoming.contains($0.id) }.forEach { $0.markDeleted() }
+        for (index, draft) in drafts.enumerated() where !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            accumulated += max(0, draft.waterAddedMl)
+            if let item = current.first(where: { $0.id == draft.id }) {
+                item.stepNumber = Int64(index + 1); item.title = draft.title; item.durationSeconds = Int64(max(0, draft.durationSeconds))
+                item.waterAddedMl = Int64(max(0, draft.waterAddedMl)); item.waterAccumulatedMl = Int64(accumulated)
+                item.intensity = draft.intensity; item.gesture = draft.gesture; item.stepNote = draft.note
+                item.coverage = draft.coverage; item.flow = draft.flow; item.secondaryAction = draft.secondaryAction; item.markUpdated()
+            } else {
+                _ = TechniqueStepRecord(context: context, id: draft.id, techniqueId: techniqueId, stepNumber: index + 1, title: draft.title, durationSeconds: max(0, draft.durationSeconds), waterAddedMl: max(0, draft.waterAddedMl), waterAccumulatedMl: accumulated, intensity: draft.intensity, gesture: draft.gesture, stepNote: draft.note, coverage: draft.coverage, flow: draft.flow, secondaryAction: draft.secondaryAction)
+            }
+        }
+    }
+
+    private func object<T: NSManagedObject>(_ type: T.Type, entity: String, id: UUID) throws -> T? {
+        let request = NSFetchRequest<T>(entityName: entity); request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "id == %@", id as CVarArg)); request.fetchLimit = 1
+        return try context.fetch(request).first
+    }
+    private func fetch<T: NSManagedObject>(_ type: T.Type, entity: String, predicate: NSPredicate, sortKey: String) throws -> [T] {
+        let request = NSFetchRequest<T>(entityName: entity); request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: predicate); request.sortDescriptors = [NSSortDescriptor(key: sortKey, ascending: true)]
+        return try context.fetch(request)
+    }
+    private func saveContext() throws { if context.hasChanges { try context.save() } }
+}

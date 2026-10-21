@@ -120,6 +120,15 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
 
+        // Revocation/sign-out closes the root gate too, not only social actions.
+        viewModelScope.launch {
+            sessionManager.observeUserId().collect {
+                if (!authRepo.isLoggedIn()) {
+                    _uiState.update { current -> if (current.isLoggedIn) SocialUiState() else current }
+                }
+            }
+        }
+
         // Fetch counts from Room lists to populate stats
         viewModelScope.launch {
             database.recipeDao().getRecipesCount().collect { count ->
@@ -146,6 +155,39 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     // AUTH ACTIONS
+
+    fun startGoogle(context: android.content.Context) {
+        if (_uiState.value.isAuthLoading || authRepo.isLoggedIn()) return
+        runCatching {
+            val url = authRepo.beginGoogle()
+            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        }.fold(onSuccess = {
+            _uiState.update { it.copy(authError = null, authNotice = "Completa el acceso en Google o continúa aquí con tu correo.") }
+        }, onFailure = {
+            authRepo.cancelGoogle()
+            _uiState.update { it.copy(authError = "No se pudo abrir Google. Revisa tu conexión e intenta otra vez.", authNotice = null) }
+        })
+    }
+
+    fun handleGoogleCallback(uri: android.net.Uri?) {
+        val value = uri?.toString() ?: return
+        if (!GoogleOAuthFlow.matches(value, com.example.BuildConfig.APPLICATION_ID + "://auth/confirmed")) return
+        // A plain confirmation link must not create a session.
+        if (uri.getQueryParameter("code") == null && uri.getQueryParameter("error") == null && uri.fragment == null) return
+        if (_uiState.value.isAuthLoading || authRepo.isLoggedIn()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isAuthLoading = true, authError = null, authNotice = null) }
+            authRepo.finishGoogle(value).fold(onSuccess = {
+                _uiState.update { it.copy(isAuthLoading = false, isLoggedIn = authRepo.isLoggedIn(),
+                    userId = authRepo.getUserId(), email = authRepo.getCachedEmail().orEmpty(),
+                    displayName = authRepo.getCachedDisplayName(), handle = authRepo.getCachedHandle(),
+                    avatarColor = authRepo.getCachedAvatarColor()) }
+                fetchRemoteData() // Profiles/social only; never upload local inventory.
+            }, onFailure = { error ->
+                _uiState.update { it.copy(isAuthLoading = false, authError = error.message ?: "Intenta acceder de nuevo.") }
+            })
+        }
+    }
 
     fun login(email: String, password: String) {
         viewModelScope.launch {
@@ -217,21 +259,6 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
                     feed = emptyList() // Clear account-specific social cache
                 )
             }
-        }
-    }
-
-    fun loginDemo() {
-        authRepo.loginDemo()
-        _uiState.update {
-            it.copy(
-                isLoggedIn = true,
-                userId = authRepo.getUserId(),
-                displayName = authRepo.getCachedDisplayName(),
-                handle = authRepo.getCachedHandle(),
-                avatarColor = authRepo.getCachedAvatarColor(),
-                email = authRepo.getCachedEmail() ?: "demo@brewstudio.app",
-                authError = null
-            )
         }
     }
 

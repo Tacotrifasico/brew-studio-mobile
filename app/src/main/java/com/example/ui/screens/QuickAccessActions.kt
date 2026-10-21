@@ -36,7 +36,7 @@ enum class QuickAccessAction(val id: String, val title: String) {
 
 // Share only the chosen recipe, never account IDs, tokens or sync metadata.
 fun recipeShareText(recipe: Recipe, methodName: String? = recipe.legacyMethodName ?: recipe.suggestedMethodId): String = listOf(
-    "Brew Studio · ${recipe.name}", recipe.intention,
+    "cUpa · ${recipe.name}", recipe.intention,
     methodName?.takeIf { it.isNotBlank() }?.takeUnless { runCatching { java.util.UUID.fromString(it) }.isSuccess }
         ?.let { "Método: $it" }.orEmpty(),
     "Ingredientes", recipe.ingredientsSummary, "Pasos", recipe.stepsSummary,

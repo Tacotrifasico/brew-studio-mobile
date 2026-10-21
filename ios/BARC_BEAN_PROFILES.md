@@ -1,0 +1,83 @@
+# BARC reversible · Android / iOS
+
+## Uso
+
+Tocar **Calculadora barista** gira la tarjeta. El reverso muestra el método del
+frente (no permite cambiarlo), Grano, Clics de molino y Temperatura. Tocar el título
+otra vez vuelve al cálculo. Cambiar los controles guarda automáticamente; se muestra
+un error si no se guardó. No cambia cantidades ni favoritos del frente.
+
+Android: Almacén → Café → editar el grano → Ajustes por método.
+iOS: Almacén → Café → abrir el grano → Cómo lo preparo.
+Elegir el método ahí y editar los mismos ajustes. Al volver al Taller, seleccionar
+el grano recupera su combinación. V60 y AeroPress conservan valores independientes.
+Preparar y Laboratorio reciben el grano, la temperatura y los clics. Una preparación
+en curso no debe ser reemplazada; primero hay que cancelarla.
+
+## Persistencia local
+
+Android: columna Bean.brewProfilesJSON, Room 9 → 10, sin borrar inventario.
+iOS: CoffeeBeanRecord.brewProfilesJSON; migración inferida explícita del modelo
+programático anterior. La selección de grano se conserva por cuenta en preferencias.
+Las notas del café no se usan para almacenar configuraciones.
+
+JSON compartido:
+```json
+{
+  "v60": {"methodName":"V60","clicks":22,"temperatureC":91},
+  "aeropress": {"methodName":"AeroPress","clicks":15,"temperatureC":87}
+}
+```
+
+Clave: nombre de método sin espacios perimetrales, sin diacríticos, en minúsculas
+con locale estable. Se admite un método personalizado. Celsius es la unidad
+persistida; los controles avanzan en la unidad elegida (1 °C o 1 °F).
+`temperatureC` admite decimales: 195 °F equivale a 90.555555… °C y debe conservar
+esa precisión al guardar, leer y sincronizar, sin convertir el campo a entero.
+Los JSON anteriores con Celsius entero siguen siendo válidos, sin migración de DB.
+Límites: 1–200 clics, 1–100 °C (34–212 °F enteros en el control).
+Los motores actuales de Preparar/Laboratorio usan Celsius entero y reciben el
+valor redondeado; esto no modifica el favorito preciso almacenado en el grano.
+Un método sin asociación no hereda los ajustes de otro método/grano.
+Los clics representan el molino que usa la persona, no una equivalencia universal.
+
+## Almacenamiento local — alcance vigente
+
+Los ajustes por grano/método se quedan en este dispositivo. No implementar su
+sincronización en esta etapa. La columna remota histórica `beans.brew_profiles`
+existe pero su API está sellada para clientes desde la migración local-first.
+El reverso y el Almacén usan el mismo JSON local; notas no reemplaza ese campo.
+Compartir una técnica sólo publica los ajustes explícitos de esa técnica, no
+el café completo ni el mapa de preferencias de otros métodos.
+Ver `Backend/README.md` de la rama iOS para la arquitectura actual.
+
+## Verificación
+
+BeanBrewProfilesTest (Android): mapa por método, migración preservando datos,
+persistencia Room, selección recuperada y transferencia a Lab/Preparar.
+LabGoldenVerifier (iOS): store SQLite real del modelo anterior → modelo nuevo,
+reapertura, selección persistente y transferencia a Lab/Preparar.
+La compilación y las pruebas de lógica no sustituyen la prueba visual en teléfonos.
+
+## Ronpotrero (muestra permanente)
+
+ID común: `524f4e50-4f54-4520-8000-000000000001`. Café ficticio de Chiapas,
+Bourbon lavado a 1700 m, tueste medio, 250 g, chocolate/panela/naranja.
+V60: 22 clics / 92 °C; AeroPress: 18 / 88 °C; prensa francesa: 28 / 94 °C.
+Son datos de ejemplo, no calibraciones universales de molino.
+
+Se crea una sola vez en ambos OS y se ofrece como selección inicial de BARC.
+No sustituye una selección ya guardada, ni una elección explícita de ningún grano.
+No se puede eliminar ni marcar terminado; sus perfiles editados no se resetean al
+reiniciar. Es local, con ownerId/ownerUserId nulo, y no se sube como café personal.
+Axcis debe tratar su ID como referencia local de muestra, no como FK remota:
+antes de publicar contenido basado en él, guardar una copia de café perteneciente
+al usuario o resolver la referencia mediante snapshot, sin subir datos de muestra
+como si fueran inventario real.
+
+Corrección iOS: la migración debe pasar la misma opción de historial persistente
+al origen, destino y reemplazo que la app usa al abrir su store. Omitirla en un
+store con historial lo vuelve de sólo lectura. El verificador ahora migra stores
+reales con historial activado y desactivado, guarda un café nuevo y reabre SQLite.
+No borrar/reinstalar desde cero para resolver el aviso: actualizar la app conserva
+el inventario anterior y ejecuta la migración.

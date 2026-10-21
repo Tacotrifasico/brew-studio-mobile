@@ -1,0 +1,196 @@
+import SwiftUI
+import UIKit
+
+// Same IDs, default order and minimum selection as Android QuickAccessAction.
+enum QuickAccessAction: String, CaseIterable, Identifiable {
+    case addCoffee = "add_coffee", addEquipment = "add_equipment", shareRecipe = "share_recipe"
+    case addRecipe = "add_recipe", addTechnique = "add_technique", addGrinder = "add_grinder"
+    var id: String { rawValue }
+    static let defaults: Set<String> = ["add_coffee", "add_equipment", "share_recipe", "add_recipe"]
+    static func normalize(_ ids: Set<String>) -> Set<String> {
+        let valid = ids.intersection(Set(allCases.map(\.rawValue)))
+        return valid.isEmpty ? defaults : valid
+    }
+    static func toggle(_ ids: Set<String>, _ id: String) -> Set<String> {
+        var current = normalize(ids)
+        guard allCases.contains(where: { $0.rawValue == id }) else { return current }
+        if current.contains(id) { if current.count > 1 { current.remove(id) } } else { current.insert(id) }
+        return current
+    }
+    var title: String {
+        switch self {
+        case .addCoffee: "Agregar grano"; case .addEquipment: "Agregar instrumento"; case .shareRecipe: "Compartir receta"
+        case .addRecipe: "Nueva receta"; case .addTechnique: "Nueva técnica"; case .addGrinder: "Agregar molino"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .addCoffee: "leaf"; case .addEquipment: "wrench.and.screwdriver"; case .shareRecipe: "square.and.arrow.up"
+        case .addRecipe: "book"; case .addTechnique: "drop"; case .addGrinder: "dial.low"
+        }
+    }
+    var color: Color { [Self.addCoffee, .shareRecipe, .addTechnique].contains(self) ? CupaTheme.forestText : CupaTheme.terracottaText }
+}
+
+enum CupaPalette {
+    enum Light {
+        static let background: UInt = 0xF7F5F0, backgroundAlt: UInt = 0xEFECE6, card: UInt = 0xFFFFFF
+        static let text: UInt = 0x1E1A17, secondaryText: UInt = 0x5A655D, border: UInt = 0xE6DFD5
+        static let forest: UInt = 0x234E3C, terracotta: UInt = 0xC26638, terracottaText: UInt = 0xA94F28, terracottaSurface: UInt = 0xA94F28, gold: UInt = 0xB45309
+        static let espresso: UInt = 0xA4472F, clarity: UInt = 0x2E5A44, onAccent: UInt = 0xFFFFFF, onTerracotta: UInt = 0x120E0C
+        static let forestText: UInt = 0x234E3C, goldText: UInt = 0x965000, espressoText: UInt = 0xA4472F, clarityText: UInt = 0x2E5A44
+    }
+
+    enum Dark {
+        static let background: UInt = 0x121413, backgroundAlt: UInt = 0x181C1A, card: UInt = 0x1C211F
+        static let text: UInt = 0xF7F9F6, secondaryText: UInt = 0x9CA3AF, border: UInt = 0x2A302D
+        static let forest: UInt = 0x234E3C, terracotta: UInt = 0xC86D51, terracottaText: UInt = 0xF09A7D, terracottaSurface: UInt = 0xA94F28, gold: UInt = 0xB45309
+        static let espresso: UInt = 0xA4472F, clarity: UInt = 0x2E5A44, onAccent: UInt = 0xFFFFFF, onTerracotta: UInt = 0x111512
+        static let forestText: UInt = 0x8FC1A9, goldText: UInt = 0xF0B35B, espressoText: UInt = 0xF0A088, clarityText: UInt = 0x8FC1A9
+    }
+}
+
+enum CupaTheme {
+    static let background = adaptive(light: CupaPalette.Light.background, dark: CupaPalette.Dark.background)
+    static let backgroundAlt = adaptive(light: CupaPalette.Light.backgroundAlt, dark: CupaPalette.Dark.backgroundAlt)
+    static let card = adaptive(light: CupaPalette.Light.card, dark: CupaPalette.Dark.card)
+    static let text = adaptive(light: CupaPalette.Light.text, dark: CupaPalette.Dark.text)
+    static let secondaryText = adaptive(light: CupaPalette.Light.secondaryText, dark: CupaPalette.Dark.secondaryText)
+    static let border = adaptive(light: CupaPalette.Light.border, dark: CupaPalette.Dark.border)
+    static let forest = adaptive(light: CupaPalette.Light.forest, dark: CupaPalette.Dark.forest)
+    static let terracotta = adaptive(light: CupaPalette.Light.terracotta, dark: CupaPalette.Dark.terracotta)
+    static let terracottaText = adaptive(light: CupaPalette.Light.terracottaText, dark: CupaPalette.Dark.terracottaText)
+    static let terracottaSurface = adaptive(light: CupaPalette.Light.terracottaSurface, dark: CupaPalette.Dark.terracottaSurface)
+    static let gold = adaptive(light: CupaPalette.Light.gold, dark: CupaPalette.Dark.gold)
+    static let espresso = adaptive(light: CupaPalette.Light.espresso, dark: CupaPalette.Dark.espresso)
+    static let clarity = adaptive(light: CupaPalette.Light.clarity, dark: CupaPalette.Dark.clarity)
+    static let forestText = adaptive(light: CupaPalette.Light.forestText, dark: CupaPalette.Dark.forestText)
+    static let goldText = adaptive(light: CupaPalette.Light.goldText, dark: CupaPalette.Dark.goldText)
+    static let espressoText = adaptive(light: CupaPalette.Light.espressoText, dark: CupaPalette.Dark.espressoText)
+    static let clarityText = adaptive(light: CupaPalette.Light.clarityText, dark: CupaPalette.Dark.clarityText)
+    static let onAccent = adaptive(light: CupaPalette.Light.onAccent, dark: CupaPalette.Dark.onAccent)
+    static let onTerracotta = adaptive(light: CupaPalette.Light.onTerracotta, dark: CupaPalette.Dark.onTerracotta)
+    static let warmShadow = Color(hex: 0x1E1A17)
+
+    // Stable per-lot identity; same UUID ASCII sum and palettes as Android.
+    static func coffeeAccent(_ id: UUID) -> Color {
+        let index = id.uuidString.lowercased().unicodeScalars.reduce(0) { $0 + Int($1.value) } % 4
+        return adaptive(light: [0x234E3C, 0xA94F28, 0x965000, 0x2E646A][index],
+                        dark: [0x8FC1A9, 0xF09A7D, 0xF0B35B, 0x85BEC4][index])
+    }
+
+    private static func adaptive(light: UInt, dark: UInt) -> Color {
+        Color(uiColor: UIColor { traits in UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light) })
+    }
+}
+
+extension Color {
+    init(hex: UInt, alpha: Double = 1) {
+        self.init(
+            .sRGB,
+            red: Double((hex >> 16) & 0xff) / 255,
+            green: Double((hex >> 8) & 0xff) / 255,
+            blue: Double(hex & 0xff) / 255,
+            opacity: alpha
+        )
+    }
+}
+
+extension UIColor {
+    convenience init(hex: UInt, alpha: CGFloat = 1) {
+        self.init(red: CGFloat((hex >> 16) & 0xff) / 255, green: CGFloat((hex >> 8) & 0xff) / 255, blue: CGFloat(hex & 0xff) / 255, alpha: alpha)
+    }
+}
+
+extension View {
+    func brewScrollableCanvas(warmTop: Bool = false) -> some View {
+        scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .background(BrewOrganicCanvas(warmTop: warmTop).ignoresSafeArea())
+            .brewKeyboardDismissToolbar()
+    }
+
+    func brewKeyboardDismissToolbar() -> some View {
+        toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Listo") {
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil,
+                        from: nil,
+                        for: nil
+                    )
+                }
+                .accessibilityLabel("Cerrar teclado")
+            }
+        }
+    }
+}
+
+/// Shared layered paper/ceramic canvas, matching Android's normalized geometry.
+/// Static vector gradients: no images, animation, network or touch interception.
+struct BrewOrganicCanvas: View {
+    var warmTop = false
+    @Environment(\.colorScheme) private var colorScheme
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(CupaTheme.background))
+            let dark = colorScheme == .dark
+            let top = warmTop ? CupaTheme.terracotta : CupaTheme.forest
+            let bottom = warmTop ? CupaTheme.forest : CupaTheme.terracotta
+            func sphere(_ center: CGPoint, _ radius: CGFloat, _ color: Color) {
+                let disk = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+                context.fill(disk, with: .color(color.opacity(dark ? 0.11 : 0.065)))
+                context.fill(disk, with: .radialGradient(Gradient(colors: [color.opacity(dark ? 0.10 : 0.06), color.opacity(0)]),
+                    center: CGPoint(x: center.x - radius * 0.28, y: center.y - radius * 0.3), startRadius: 0, endRadius: radius * 1.2))
+            }
+            sphere(CGPoint(x: size.width * 0.88, y: size.height * 0.10), size.width * 0.55, top)
+            sphere(CGPoint(x: size.width * 0.12, y: size.height * 0.82), size.width * 0.48, bottom)
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .radialGradient(
+                Gradient(colors: [.white.opacity(dark ? 0.015 : 0.24), .white.opacity(0)]),
+                center: CGPoint(x: size.width * 0.42, y: 0), startRadius: 0, endRadius: size.width * 1.15))
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+struct CupaCard<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CupaTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(CupaTheme.border, lineWidth: 1)
+            }
+            .shadow(color: CupaTheme.warmShadow.opacity(0.08), radius: 8, x: 0, y: 3)
+    }
+}
+
+struct SectionHeader: View {
+    let eyebrow: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(eyebrow.uppercased())
+                .font(.caption.weight(.bold))
+                .tracking(1.4)
+                .foregroundStyle(CupaTheme.terracottaText)
+            Text(title)
+                .font(.largeTitle.bold())
+                .foregroundStyle(CupaTheme.text)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(CupaTheme.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}

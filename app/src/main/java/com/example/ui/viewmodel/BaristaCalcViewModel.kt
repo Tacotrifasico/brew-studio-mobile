@@ -1244,7 +1244,7 @@ class BaristaCalcViewModel(application: Application) : AndroidViewModel(applicat
 
     fun deleteTechnique(techId: String) {
         if (BrewTechniqueCatalog.isBuiltInTechnique(techId)) {
-            showToast("Las técnicas incluidas por Cupa no se pueden eliminar.")
+            showToast("Las técnicas incluidas por cUpa no se pueden eliminar.")
             return
         }
         viewModelScope.launch {

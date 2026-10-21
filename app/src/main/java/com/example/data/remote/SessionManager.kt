@@ -14,6 +14,7 @@ class SessionManager(context: Context) {
     companion object {
         private const val KEY_ENCRYPTED = "encrypted_session_v1"
         private var memorySession: String? = null // memory-only fallback if Keystore is unavailable
+        private var memoryOAuth: String? = null
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_EMAIL = "user_email"
@@ -50,6 +51,7 @@ class SessionManager(context: Context) {
     }
 
     fun clearSession() {
+        cancelGoogleOAuth()
         memorySession = null
         prefs.edit().apply {
             remove(KEY_ACCESS_TOKEN)
@@ -62,6 +64,33 @@ class SessionManager(context: Context) {
             apply()
         }
         SupabaseClientProvider.setAuthToken(null)
+    }
+
+    fun beginGoogleOAuth(): String {
+        val verifier = GoogleOAuthFlow.verifier()
+        val id = java.util.UUID.randomUUID().toString()
+        val raw = JSONArray().put(id).put(verifier).put(System.currentTimeMillis()).toString()
+        memoryOAuth = raw
+        val encrypted = runCatching { SessionCipher.encrypt(raw) }.getOrNull()
+        prefs.edit().apply {
+            if (encrypted == null) remove("oauth_pending") else putString("oauth_pending", encrypted)
+            putString("oauth_attempt", id)
+        }.commit()
+        return verifier
+    }
+
+    @Synchronized fun consumeGoogleOAuth(): Pair<String, String>? {
+        val raw = prefs.getString("oauth_pending", null)?.let { runCatching { SessionCipher.decrypt(it) }.getOrNull() } ?: memoryOAuth
+        memoryOAuth = null
+        prefs.edit().remove("oauth_pending").commit()
+        val value = raw?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return null
+        val age = System.currentTimeMillis() - value.optLong(2)
+        return if (age in 0..600_000 && isCurrentGoogleOAuth(value.optString(0))) value.optString(0) to value.optString(1) else null
+    }
+    fun isCurrentGoogleOAuth(id: String): Boolean = prefs.getString("oauth_attempt", null) == id
+    fun cancelGoogleOAuth() {
+        memoryOAuth = null
+        prefs.edit().remove("oauth_pending").remove("oauth_attempt").commit()
     }
 
     private fun credentials(): JSONArray? {

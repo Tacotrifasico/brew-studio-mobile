@@ -1,0 +1,2320 @@
+import SwiftUI
+import CoreData
+import UIKit
+
+// One horizontal row per quantity. Four digits never add a second text/control level.
+private struct BrewLabQuantityControl: View {
+    let label: String
+    let unit: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    var body: some View {
+        HStack(spacing: 0) {
+            (Text("\(label) ").font(.system(size: 11, weight: .semibold)).foregroundColor(CupaTheme.secondaryText)
+             + Text("\(value) \(unit)").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundColor(CupaTheme.text))
+                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("lab_quantity_\(unit)")
+            Button { value = max(range.lowerBound, value - 1) } label: { Image(systemName: "minus").font(.system(size: 13)).frame(width: 24, height: 36).contentShape(Rectangle()) }
+                .disabled(value <= range.lowerBound).accessibilityLabel("Menos 1 \(unit) de \(label)")
+            Button { value = min(range.upperBound, value + 1) } label: { Image(systemName: "plus").font(.system(size: 13)).frame(width: 24, height: 36).contentShape(Rectangle()) }
+                .disabled(value >= range.upperBound).accessibilityLabel("Más 1 \(unit) de \(label)")
+        }
+        .buttonStyle(.plain).foregroundStyle(CupaTheme.forest)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
+        .background(CupaTheme.backgroundAlt, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// Native touch tracking, with a persistent colour rail instead of a progress fill.
+private struct BrewTemperatureRail: UIViewRepresentable {
+    @Binding var value: Double
+    let guide: LabTemperatureGuide
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> BrewTemperatureUISlider {
+        let slider = BrewTemperatureUISlider(frame: .zero)
+        slider.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .valueChanged)
+        return slider
+    }
+    func updateUIView(_ slider: BrewTemperatureUISlider, context: Context) {
+        context.coordinator.parent = self
+        slider.minimumValue = Float(guide.sliderRange.lowerBound)
+        slider.maximumValue = Float(guide.sliderRange.upperBound)
+        slider.value = Float(value)
+        slider.zone = guide.recipeBand
+        slider.points = guide.recipePoints
+        slider.ceiling = guide.openHotWater ? Double(guide.degrees(guide.boilingC)) : nil
+        slider.accessibilityLabel = "Temperatura del agua"
+        slider.accessibilityValue = "\(Int(value)) \(guide.unit.symbol). \(guide.headline)"
+        slider.setNeedsLayout()
+    }
+    final class Coordinator: NSObject {
+        var parent: BrewTemperatureRail
+        init(_ parent: BrewTemperatureRail) { self.parent = parent }
+        @objc func changed(_ slider: UISlider) {
+            let next = Double(slider.value.rounded())
+            slider.value = Float(next)
+            if next != parent.value { parent.value = next }
+        }
+    }
+}
+
+private final class BrewTemperatureUISlider: UISlider {
+    var zone: ClosedRange<Double>?
+    var points: [Double] = []
+    var ceiling: Double?
+    private let rail = UIImageView()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        rail.isUserInteractionEnabled = false
+        insertSubview(rail, at: 0)
+        let clear = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in }
+        setMinimumTrackImage(clear, for: .normal); setMaximumTrackImage(clear, for: .normal)
+        let thumb = UIGraphicsImageRenderer(size: CGSize(width: 28, height: 28)).image { _ in
+            let circle = UIBezierPath(ovalIn: CGRect(x: 3, y: 3, width: 22, height: 22))
+            UIColor.white.setFill(); circle.fill()
+            UIColor(red: 200/255, green: 109/255, blue: 81/255, alpha: 1).setStroke()
+            circle.lineWidth = 2; circle.stroke()
+        }
+        setThumbImage(thumb, for: .normal); setThumbImage(thumb, for: .highlighted)
+    }
+    required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0, maximumValue > minimumValue else { return }
+        rail.frame = bounds; sendSubviewToBack(rail)
+        let track = trackRect(forBounds: bounds)
+        let start = thumbRect(forBounds: bounds, trackRect: track, value: minimumValue).midX
+        let end = thumbRect(forBounds: bounds, trackRect: track, value: maximumValue).midX
+        let mid = track.midY
+        func x(_ v: Double) -> CGFloat { start + (end - start) * CGFloat((v - Double(minimumValue)) / Double(maximumValue - minimumValue)) }
+        rail.image = UIGraphicsImageRenderer(size: bounds.size).image { renderer in
+            // Match Android: continuous heat colours, with recipe bounds on a separate bracket.
+            let colours: [UIColor] = [
+                UIColor(red: 87/255, green: 157/255, blue: 184/255, alpha: 1),
+                UIColor(red: 145/255, green: 188/255, blue: 192/255, alpha: 1),
+                UIColor(red: 226/255, green: 187/255, blue: 112/255, alpha: 1),
+                UIColor(red: 216/255, green: 137/255, blue: 79/255, alpha: 1),
+                UIColor(red: 184/255, green: 77/255, blue: 62/255, alpha: 1)
+            ]
+            let context = renderer.cgContext
+            context.saveGState()
+            UIBezierPath(roundedRect: CGRect(x: start - 4, y: mid - 4, width: end - start + 8, height: 8), cornerRadius: 4).addClip()
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colours.map(\.cgColor) as CFArray, locations: [0, 0.25, 0.5, 0.75, 1]) {
+                context.drawLinearGradient(gradient, start: CGPoint(x: start, y: mid), end: CGPoint(x: end, y: mid), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+            }
+            context.restoreGState()
+            if let zone {
+                let left = x(zone.lowerBound), right = x(zone.upperBound)
+                let green = UIColor(red: 63/255, green: 122/255, blue: 99/255, alpha: 1)
+                let grey = UIColor(red: 164/255, green: 158/255, blue: 148/255, alpha: 1)
+                let bracket = UIBezierPath()
+                bracket.move(to: CGPoint(x: left, y: mid + 9)); bracket.addLine(to: CGPoint(x: right, y: mid + 9))
+                bracket.lineWidth = 4; bracket.lineCapStyle = .round; grey.setStroke(); bracket.stroke()
+                let reachableRight = x(min(zone.upperBound, ceiling ?? Double(maximumValue)))
+                if reachableRight >= left {
+                    let reachable = UIBezierPath(); reachable.move(to: CGPoint(x: left, y: mid + 9)); reachable.addLine(to: CGPoint(x: reachableRight, y: mid + 9))
+                    reachable.lineWidth = 4; reachable.lineCapStyle = .round; green.setStroke(); reachable.stroke()
+                }
+                for bound in Set([zone.lowerBound, zone.upperBound]) {
+                    let px = x(bound)
+                    let tick = UIBezierPath(); tick.move(to: CGPoint(x: px, y: mid - 8)); tick.addLine(to: CGPoint(x: px, y: mid + 9))
+                    tick.lineCapStyle = .round
+                    tick.lineWidth = 5; UIColor.white.setStroke(); tick.stroke()
+                    tick.lineWidth = 2; (bound <= (ceiling ?? Double(maximumValue)) ? green : grey).setStroke(); tick.stroke()
+                }
+            }
+            for point in points where point >= Double(minimumValue) && point <= Double(maximumValue) {
+                let colour = point <= (ceiling ?? Double(maximumValue)) ? UIColor(red: 156/255, green: 109/255, blue: 46/255, alpha: 1) : UIColor(red: 164/255, green: 158/255, blue: 148/255, alpha: 1)
+                let tick = UIBezierPath(); tick.move(to: CGPoint(x: x(point), y: mid - 10)); tick.addLine(to: CGPoint(x: x(point), y: mid - 4))
+                tick.lineCapStyle = .round; tick.lineWidth = 5; UIColor.white.setStroke(); tick.stroke()
+                tick.lineWidth = 2; colour.setStroke(); tick.stroke()
+                colour.setFill(); UIBezierPath(ovalIn: CGRect(x: x(point) - 2.5, y: mid - 12.5, width: 5, height: 5)).fill()
+            }
+        }
+    }
+    override func accessibilityIncrement() { adjust(1) }
+    override func accessibilityDecrement() { adjust(-1) }
+    private func adjust(_ delta: Float) {
+        value = min(maximumValue, max(minimumValue, value.rounded() + delta))
+        sendActions(for: .valueChanged)
+    }
+}
+
+// Plain-text handoff through the system share sheet; no automatic feed publication.
+func recipeShareText(_ draft: RecipeDraftModel) -> String {
+    let units = ["GRAMS": "g", "MILLILITERS": "ml", "UNITS": "uds", "TEASPOONS": "cdta", "TABLESPOONS": "cda", "OUNCES": "oz"]
+    return ["cUpa · \(draft.name)", draft.intention,
+        draft.suggestedMethodName.isEmpty ? "" : "Método: \(draft.suggestedMethodName)",
+        "Ingredientes", draft.ingredients.map { "\($0.amount.formatted(.number.precision(.fractionLength(0...2)))) \(units[$0.unit] ?? $0.unit) · \($0.name)" }.joined(separator: "\n"),
+        "Pasos", draft.steps.enumerated().map { "\($0.offset + 1). \($0.element.instruction)" + ($0.element.durationSeconds.map { " (\($0) s)" } ?? "") }.joined(separator: "\n"),
+        draft.tags.isEmpty ? "" : "Etiquetas: \(draft.tags)"].filter { !$0.isEmpty }.joined(separator: "\n\n")
+}
+
+private struct QuickRecipeShareView: View {
+    @Environment(\.dismiss) private var dismiss
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeIngredientRecord.orderIndex, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var ingredients: FetchedResults<RecipeIngredientRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeStepRecord.stepNumber, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var steps: FetchedResults<RecipeStepRecord>
+    let onCreateRecipe: () -> Void
+    var body: some View {
+        NavigationStack {
+            List {
+                if recipes.isEmpty {
+                    Text("Aún no tienes recetas. Crea una para poder compartirla.")
+                    Button("Nueva receta", action: onCreateRecipe)
+                } else {
+                    Text("Elige una receta para compartir desde tu teléfono.").font(.subheadline)
+                    ForEach(recipes) { recipe in
+                        ShareLink(item: text(recipe)) { Label(recipe.name, systemImage: "square.and.arrow.up") }
+                    }
+                }
+            }.brewScrollableCanvas()
+            .navigationTitle("Compartir receta").navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("Cerrar") { dismiss() } }
+        }
+    }
+    private func text(_ recipe: RecipeRecord) -> String {
+        var draft = RecipeDraftModel()
+        draft.name = recipe.name; draft.intention = recipe.intention; draft.tags = recipe.tags
+        draft.suggestedMethodName = recipe.suggestedMethodName
+        draft.ingredients = ingredients.filter { $0.recipeId == recipe.id }.map { RecipeIngredientDraft(name: $0.name, amount: $0.amount, unit: $0.unit) }
+        draft.steps = steps.filter { $0.recipeId == recipe.id }.map { RecipeStepDraft(instruction: $0.instruction, durationSeconds: $0.durationSeconds) }
+        return recipeShareText(draft)
+    }
+}
+
+struct HomeView: View {
+    @Environment(\.managedObjectContext) private var context
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CupSessionRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var cups: FetchedResults<CupSessionRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var techniques: FetchedResults<TechniqueRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var equipment: FetchedResults<EquipmentRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.updatedAt, ascending: false)], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
+    @Binding var selection: CupaTab
+    @ObservedObject var account: AccountModel
+    @ObservedObject var settings: SettingsModel
+    @ObservedObject var calculator: CalculatorModel
+    @ObservedObject var lab: LabModel
+    @ObservedObject var preparation: PreparationModel
+    @State private var showAccount = false
+    @State private var showSettings = false
+    @State private var showNotifications = false
+    @State private var showHub = false
+
+    @AppStorage("brew.quickAccess.v2") private var storedAccesses = ""
+    @State private var showCustomizeAccesses = false
+    @State private var quickAction: QuickAccessAction?
+    private var selectedAccesses: Set<String> { QuickAccessAction.normalize(Set(storedAccesses.split(separator: ",").map(String.init))) }
+
+    var body: some View {
+        ZStack {
+            BrewOrganicCanvas().ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 10) {
+                    HStack {
+                        Button { showHub = true } label: {
+                            Label(account.tokens?.email ?? "Mi perfil", systemImage: "person.crop.circle").font(.subheadline.weight(.semibold))
+                        }
+                        .accessibilityIdentifier("home.profile")
+                        Spacer()
+                        Menu {
+                            Button { showSettings = true } label: { Label("Configuración", systemImage: "gearshape") }
+                            Button { showNotifications = true } label: { Label("Notificaciones", systemImage: "bell") }
+                        } label: { Image(systemName: "line.3.horizontal").frame(width: 44, height: 44) }
+                        .accessibilityLabel("Menú")
+                    }
+                    .foregroundStyle(CupaTheme.forestText)
+
+                    Text("Taller del Brewther").font(.system(size: 22, weight: .bold, design: .serif))
+                        .foregroundStyle(CupaTheme.text).frame(maxWidth: .infinity, alignment: .leading)
+
+                    BaristaCalculatorCard(
+                        calculator: calculator,
+                        settings: settings,
+                        onLab: {
+                            lab.load(calculator: calculator)
+                            selection = .lab
+                        },
+                        onPrepare: {
+                            preparation.load(calculator: calculator)
+                            selection = .brew
+                        }
+                    )
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Accesos rápidos").font(.title3.bold())
+                            Spacer()
+                            Button { showCustomizeAccesses = true } label: {
+                                Label("Personalizar", systemImage: "slider.horizontal.3").font(.caption.bold())
+                            }.foregroundStyle(CupaTheme.forestText)
+                        }
+                        Button {
+                            preparation.load(calculator: calculator); selection = .brew
+                        } label: {
+                            Label("Preparar extracción", systemImage: "play.circle")
+                                .font(.subheadline.bold()).frame(maxWidth: .infinity, minHeight: 48)
+                                .foregroundStyle(CupaTheme.onAccent).background(CupaTheme.forest, in: RoundedRectangle(cornerRadius: 18))
+                        }
+                        LazyVGrid(columns: [.init(.flexible()), .init(.flexible())], spacing: 12) {
+                            ForEach(QuickAccessAction.allCases.filter { selectedAccesses.contains($0.rawValue) }) { item in
+                                Button { quickAction = item } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: item.icon).foregroundStyle(item.color)
+                                        Text(item.title).font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(CupaTheme.text)
+                                    }
+                                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                                    .padding(.horizontal, 10)
+                                    .background(CupaTheme.card)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                }
+                            }
+                        }
+                    }
+
+                    workshopStatusCard
+                    if !beans.isEmpty || !recipes.isEmpty { recentResourcesCard }
+                }
+                .padding()
+            }
+        }
+        .navigationBarHidden(true)
+        .sheet(isPresented: $showAccount) { AccountView(model: account) }
+        .sheet(isPresented: $showSettings) { SettingsView(model: settings, account: account) }
+        .alert("Notificaciones", isPresented: $showNotifications) { Button("Cerrar", role: .cancel) {} } message: { Text("Sin notificaciones nuevas") }
+        .sheet(isPresented: $showHub) { HubView(account: account) }
+        .sheet(isPresented: $showCustomizeAccesses) {
+            NavigationStack {
+                List {
+                    Section { Text("Elige tus acciones. Mantén al menos un acceso activo.").font(.subheadline) }
+                    ForEach(QuickAccessAction.allCases) { action in
+                        Toggle(isOn: Binding(get: { selectedAccesses.contains(action.rawValue) }, set: { _ in
+                            storedAccesses = QuickAccessAction.toggle(selectedAccesses, action.rawValue).sorted().joined(separator: ",")
+                        })) { Label(action.title, systemImage: action.icon) }
+                        .tint(CupaTheme.forest)
+                        .disabled(selectedAccesses.count == 1 && selectedAccesses.contains(action.rawValue))
+                    }
+                }.brewScrollableCanvas()
+                .navigationTitle("Personalizar accesos rápidos").navigationBarTitleDisplayMode(.inline)
+                .toolbar { Button("Listo") { showCustomizeAccesses = false } }
+            }
+        }
+        .sheet(item: $quickAction) { action in
+            switch action {
+            case .addCoffee: CoffeeBeanEditor(record: nil) { draft in
+                _ = draft.makeRecord(in: context)
+                do { try context.save(); return nil } catch { context.rollback(); return error.localizedDescription }
+            }
+            case .addEquipment: EquipmentEditor(record: nil) { draft in
+                _ = draft.insert(in: context)
+                do { try context.save(); return true } catch { context.rollback(); return false }
+            }
+            case .addGrinder: GrinderEditor(record: nil) { draft in
+                _ = draft.insert(in: context)
+                do { try context.save(); return true } catch { context.rollback(); return false }
+            }
+            case .addRecipe: RecipeEditorView(recipe: nil)
+            case .addTechnique: TechniqueEditorView(technique: nil)
+            case .shareRecipe: QuickRecipeShareView { quickAction = .addRecipe }
+            }
+        }
+    }
+
+    private var workshopStatusCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Estado del taller").font(.headline)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        WorkshopMetric(title: "Granos", count: beans.count, icon: "leaf", color: CupaTheme.terracotta)
+                        WorkshopMetric(title: "Recetas", count: recipes.count, icon: "book.closed", color: CupaTheme.forest)
+                        WorkshopMetric(title: "Tazas", count: cups.count, icon: "mug", color: CupaTheme.gold)
+                        WorkshopMetric(title: "Técnicas", count: techniques.count, icon: "list.number", color: CupaTheme.clarity)
+                        WorkshopMetric(title: "Equipo", count: equipment.count + grinders.count, icon: "wrench.and.screwdriver", color: CupaTheme.secondaryText)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("home.workshopStatus")
+    }
+
+    private var recentResourcesCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Últimos recursos usados").font(.headline)
+                if let bean = beans.first {
+                    LabeledContent {
+                        Text("\(bean.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g")
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Último grano").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            Text(bean.name).font(.subheadline.bold())
+                            if !bean.origin.isEmpty { Text(bean.origin).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                        }
+                    }
+                }
+                if let recipe = recipes.first {
+                    LabeledContent {
+                        Text(recipe.recipeKind.replacingOccurrences(of: "_", with: " ").capitalized)
+                            .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Última receta").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            Text(recipe.name).font(.subheadline.bold())
+                            if !recipe.intention.isEmpty { Text(recipe.intention).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("home.recentResources")
+    }
+}
+
+private struct WorkshopMetric: View {
+    let title: String
+    let count: Int
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon).foregroundStyle(color).font(.title3)
+            Text(count.formatted()).font(.title2.bold().monospacedDigit())
+            Text(title).font(.caption).foregroundStyle(CupaTheme.secondaryText)
+        }
+        .frame(width: 88, alignment: .leading)
+        .padding(12)
+        .background(CupaTheme.backgroundAlt.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title): \(count)")
+    }
+}
+
+struct BrewView: View {
+    @Environment(\.managedObjectContext) private var context
+    @ObservedObject var preparation: PreparationModel
+    @ObservedObject var tasting: TastingModel
+    @Binding var selection: CupaTab
+
+    var body: some View {
+        ZStack {
+            BrewOrganicCanvas(warmTop: true).ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    SectionHeader(eyebrow: "Secuencia de extracción", title: "Preparar café", subtitle: "Elige una técnica para los datos calculados y sigue cada paso.")
+                    PreparationExecutionView(model: preparation) { brewSessionId in
+                        tasting.newTasting(linkedBrewSessionId: brewSessionId)
+                        let request = NSFetchRequest<CupSessionRecord>(entityName: "CupSessionRecord")
+                        request.predicate = LocalDataScope.visiblePredicate(activeOwnerId: context.activeOwnerId, additional: NSPredicate(format: "brewSessionId == %@", brewSessionId as CVarArg))
+                        if let cup = try? context.fetch(request).first {
+                            tasting.state.freeNotes = cup.comment
+                            if cup.rating > 0 { tasting.state.rating = cup.rating }
+                        }
+                        selection = .tasting
+                    }
+                }
+                .padding()
+            }
+        }
+        .navigationBarHidden(true)
+    }
+}
+
+/// Swaps faces at the midpoint, keeping text upright during a true whole-card flip.
+private struct CalculatorFlip: AnimatableModifier {
+    var rotation: Double
+    let back: AnyView
+    var animatableData: Double { get { rotation } set { rotation = newValue } }
+    func body(content: Content) -> some View {
+        Group {
+            if rotation > 90 { back.rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0)) }
+            else { content }
+        }
+        .rotation3DEffect(.degrees(rotation), axis: (x: 0, y: 1, z: 0), perspective: 0.35)
+    }
+}
+
+private struct BeanMethodSettings: View {
+    @Environment(\.managedObjectContext) private var context
+    @ObservedObject var bean: CoffeeBeanRecord
+    let method: String
+    let unit: TemperatureUnit
+    @State private var saveError: String?
+    private var profile: BeanBrewProfile { bean.effectiveBrewProfile(for: method) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Clics de molino").font(.caption.bold())
+                    Text("\(profile.clicks)").font(.title3.monospacedDigit().bold())
+                    Stepper("Clics de molino", value: Binding(get: { profile.clicks }, set: { save(clicks: $0, temperature: profile.temperatureC) }), in: 1...200).labelsHidden()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Temperatura").font(.caption.bold())
+                    Text(profile.temperatureText(fahrenheit: unit == .fahrenheit))
+                        .font(.title3.monospacedDigit().bold())
+                    Stepper("Temperatura", onIncrement: { save(clicks: profile.clicks, temperature: profile.steppedTemperature(1, fahrenheit: unit == .fahrenheit)) }, onDecrement: { save(clicks: profile.clicks, temperature: profile.steppedTemperature(-1, fahrenheit: unit == .fahrenheit)) }).labelsHidden()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(12).background(CupaTheme.backgroundAlt).clipShape(RoundedRectangle(cornerRadius: 14))
+            if bean.brewProfile(for: method) == nil && saveError == nil {
+                Text("Punto inicial · calibra según tu molino.").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                Button("Guardar favorito") { save(clicks: profile.clicks, temperature: profile.temperatureC) }
+                    .font(.subheadline).foregroundStyle(CupaTheme.text).frame(minHeight: 44)
+            } else {
+                Text(saveError ?? "Guardado para este grano · \(method)")
+                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+            }
+        }
+    }
+
+    private func save(clicks: Int, temperature: Double) {
+        let previous = bean.brewProfilesJSON
+        let version = bean.version; let status = bean.syncStatusRaw; let updated = bean.updatedAt
+        do {
+            try bean.setBrewProfile(.init(methodName: method, clicks: clicks, temperatureC: temperature))
+            try context.save(); saveError = nil
+        } catch {
+            bean.brewProfilesJSON = previous; bean.version = version; bean.syncStatusRaw = status; bean.updatedAt = updated
+            saveError = "No se guardó. Vuelve a ajustar para reintentar."
+        }
+    }
+}
+
+private struct InventoryBeanBrewSettings: View {
+    @ObservedObject var bean: CoffeeBeanRecord
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var equipment: FetchedResults<EquipmentRecord>
+    @AppStorage("settings.temperature") private var rawUnit = TemperatureUnit.celsius.rawValue
+    @State private var method = "V60"
+    private var methods: [String] {
+        Array(Set(["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"] + equipment.filter { $0.isActive && $0.isBrewingMethod }.map(\.name))).sorted()
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("Método", selection: $method) { ForEach(methods, id: \.self) { Text($0).tag($0) } }
+            BeanMethodSettings(bean: bean, method: method, unit: TemperatureUnit(rawValue: rawUnit) ?? .celsius)
+        }
+    }
+}
+
+private struct BaristaCalculatorCard: View {
+    @Environment(\.managedObjectContext) private var context
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.createdAt, ascending: true)],
+        predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "isActive == YES"))
+    ) private var activeEquipment: FetchedResults<EquipmentRecord>
+    @ObservedObject var calculator: CalculatorModel
+    @ObservedObject var settings: SettingsModel
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var flipped = false
+    let onLab: () -> Void
+    let onPrepare: () -> Void
+    @State private var showingMethodManager = false
+    @State private var methodError: String?
+    @State private var coffeeDragStep = 0
+    @State private var ratioDragStep = 0
+    @State private var waterDragStep = 0
+
+    var body: some View {
+        frontCard
+            .modifier(CalculatorFlip(rotation: flipped ? 180 : 0, back: AnyView(backCard)))
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.42), value: flipped)
+            .onAppear { recallBean() }
+            .onChange(of: calculator.method) { _, _ in recallBean() }
+            .onChange(of: beans.map { $0.id.uuidString + $0.brewProfilesJSON }) { _, _ in recallBean() }
+    }
+
+    private func recallBean() {
+        if calculator.selectedBeanId != nil {
+            calculator.selectBean(beans.first { $0.id == calculator.selectedBeanId })
+        } else if calculator.needsInitialBeanSelection, let sample = beans.first(where: \.isSample) {
+            calculator.selectBean(sample)
+        }
+    }
+
+    // Matches Android: one compact touch target, with the next face explicitly named.
+    private func flipHeader(back: Bool) -> some View {
+        Button { flipped = !back } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Calculadora barista")
+                        .font(.system(size: 17, weight: .semibold, design: .serif))
+                        .foregroundStyle(CupaTheme.text)
+                    Text(back ? "Volver al cálculo" : flipHint)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(CupaTheme.terracottaText)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(CupaTheme.terracottaText)
+                    .frame(width: 36, height: 36)
+                    .background(CupaTheme.terracottaText.opacity(0.08), in: Circle())
+                    .overlay(Circle().stroke(CupaTheme.terracottaText.opacity(0.18), lineWidth: 1))
+            }
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(back ? "Calculadora barista. Volver al cálculo" : "Calculadora barista. Ver ajustes del grano")
+    }
+
+    private var flipHint: String {
+        guard let profile = calculator.selectedBeanProfile else { return "Ver reverso" }
+        let temperature = profile.temperatureText(fahrenheit: settings.temperatureUnit == .fahrenheit)
+        return "Ver reverso · \(profile.clicks) clics · \(temperature)"
+    }
+
+    private var backCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 12) {
+                flipHeader(back: true)
+                Text("Método · \(calculator.method)").font(.caption.bold()).foregroundStyle(CupaTheme.forestText)
+                Picker("Grano", selection: Binding(get: { calculator.selectedBeanId }, set: { id in calculator.selectBean(beans.first { $0.id == id }) })) {
+                    Text("Elegir grano del Almacén").tag(Optional<UUID>.none)
+                    ForEach(beans) { bean in Text(bean.name).tag(Optional(bean.id)) }
+                }
+                .tint(CupaTheme.forestText)
+                if let bean = beans.first(where: { $0.id == calculator.selectedBeanId }) {
+                    BeanMethodSettings(bean: bean, method: calculator.method, unit: settings.temperatureUnit)
+                } else {
+                    Text(beans.isEmpty ? "Agrega un grano en Almacén para guardar sus ajustes." : "Cada grano recuerda sus ajustes por método.")
+                        .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                }
+            }
+        }
+    }
+
+    private var frontCard: some View {
+        CupaCard {
+            VStack(spacing: 10) {
+                flipHeader(back: false)
+
+                VStack(spacing: 2) {
+                    Text("AGUA").font(.caption2.bold()).tracking(1.5)
+                    Text("\(calculator.water) ml")
+                        .font(.system(.largeTitle, design: .rounded, weight: .black))
+                    Text("\(calculator.coffeeInput) g · 1:\(calculator.ratioInput) · \(calculator.method)")
+                        .font(.caption)
+                }
+                .foregroundStyle(CupaTheme.onAccent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(LinearGradient(colors: calculatorGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: calculator.ratio)
+                .clipShape(RoundedRectangle(cornerRadius: 22))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Resultado: \(calculator.water) mililitros de agua, \(calculator.coffeeInput) gramos de café, proporción uno a \(calculator.ratioInput), método \(calculator.method)")
+
+                Text(calculator.category.label)
+                    .font(.caption.bold())
+                    .foregroundStyle(categoryTextColor)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: calculator.ratio)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+
+                calculatorInputs(axis: .horizontal)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(calculator.presets) { preset in
+                            Button { calculator.apply(preset) } label: {
+                                Label(preset.label, systemImage: preset.isCustom ? "star.fill" : "mug")
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .background(CupaTheme.backgroundAlt)
+                                    .clipShape(Capsule())
+                            }
+                            .foregroundStyle(CupaTheme.text)
+                        }
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Button { showingMethodManager = true } label: { Image(systemName: "slider.horizontal.3") }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel("Gestionar métodos de la calculadora")
+                        .accessibilityIdentifier("calculator.manageMethods")
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 7) {
+                            ForEach(quickMethodOptions) { option in
+                                Button(option.name) { calculator.selectMethod(option.name, methodId: option.equipmentId) }
+                                    .buttonStyle(.bordered)
+                                    .tint(calculator.method.caseInsensitiveCompare(option.name) == .orderedSame ? categoryTextColor : CupaTheme.secondaryText)
+                            }
+                        }
+                    }
+                }
+
+                HStack {
+                    Image(systemName: "info.circle")
+                    Text(calculator.microcopy).font(.caption)
+                    Spacer()
+                    Button { calculator.resetRatio() } label: { Image(systemName: "arrow.counterclockwise") }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel("Restablecer proporción")
+                    Button { calculator.toggleFavorite() } label: {
+                        Image(systemName: calculator.isCurrentFavorite ? "heart.fill" : "heart")
+                            .foregroundStyle(calculator.isCurrentFavorite ? CupaTheme.terracottaText : CupaTheme.secondaryText)
+                    }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel(calculator.isCurrentFavorite ? "Quitar de favoritos" : "Guardar como favorito")
+                }
+                .foregroundStyle(CupaTheme.secondaryText)
+
+                ViewThatFits(in: .horizontal) {
+                    calculatorActions
+                    VStack(alignment: .leading) {
+                        Button(action: onLab) { Label("Laboratorio", systemImage: "flask") }
+                            .buttonStyle(.bordered)
+                        Button(action: onPrepare) { Label("Preparar con estos datos", systemImage: "play.fill") }
+                            .buttonStyle(.borderedProminent)
+                            .tint(CupaTheme.forest)
+                            .foregroundStyle(CupaTheme.onAccent)
+                            .accessibilityIdentifier("calculator.prepare")
+                    }
+                }
+            }
+        }
+        .brewKeyboardDismissToolbar()
+        .sheet(isPresented: $showingMethodManager) {
+            CalculatorMethodManager(
+                calculator: calculator,
+                equipment: methodEquipment,
+                onEquipmentPinnedChange: setEquipmentPinned
+            )
+        }
+        .alert("No se pudo actualizar el método", isPresented: Binding(get: { methodError != nil }, set: { if !$0 { methodError = nil } })) {
+            Button("Aceptar") {}
+        } message: { Text(methodError ?? "") }
+    }
+
+    private func calculatorInputs(axis: Axis) -> some View {
+        Group {
+            if axis == .horizontal {
+                HStack(spacing: 8) { calculatorInputContent }
+            } else {
+                VStack(spacing: 8) { calculatorInputContent }
+            }
+        }
+    }
+
+    @ViewBuilder private var calculatorInputContent: some View {
+        calculatorInput("CAFÉ (g)", identifier: "calculator.coffee", text: Binding(
+            get: { calculator.coffeeInput },
+            set: { calculator.changeCoffee($0) }
+        ), dragAxis: .vertical, dragStep: $coffeeDragStep,
+        adjust: { adjustCoffee(Double($0)) })
+
+        calculatorInput("PROPORCIÓN", identifier: "calculator.ratio", text: Binding(
+            get: { calculator.ratioInput },
+            set: { calculator.changeRatio($0) }
+        ), dragAxis: .horizontal, dragStep: $ratioDragStep,
+        adjust: { adjustRatio(Double($0) * 0.1) })
+
+        calculatorInput("AGUA (ml)", identifier: "calculator.water", text: Binding(
+            get: { calculator.waterInput },
+            set: { calculator.changeWater($0) }
+        ), dragAxis: .vertical, dragStep: $waterDragStep,
+        adjust: { adjustWater($0 * 10) })
+    }
+
+    private var calculatorActions: some View {
+        HStack {
+            Button(action: onLab) { Label("Laboratorio", systemImage: "flask") }
+                .buttonStyle(.bordered)
+            Button(action: onPrepare) { Label("Preparar", systemImage: "play.fill") }
+                .buttonStyle(.borderedProminent)
+                .tint(CupaTheme.forest)
+                .foregroundStyle(CupaTheme.onAccent)
+                .accessibilityIdentifier("calculator.prepare")
+        }
+    }
+
+    private var methodEquipment: [EquipmentRecord] { activeEquipment.filter(\.isBrewingMethod) }
+
+    private var allMethodOptions: [CalculatorMethodOption] {
+        var seen = Set<String>()
+        var result = calculator.methods.map { name in
+            seen.insert(name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current))
+            return CalculatorMethodOption(name: name, equipmentId: nil)
+        }
+        for item in methodEquipment {
+            let key = item.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            if !item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, seen.insert(key).inserted {
+                result.append(.init(name: item.name, equipmentId: item.id))
+            }
+        }
+        return result
+    }
+
+    private var quickMethodOptions: [CalculatorMethodOption] {
+        let pinned = allMethodOptions.filter { option in
+            if let id = option.equipmentId { return methodEquipment.first(where: { $0.id == id })?.isFavorite == true }
+            return calculator.isMethodPinned(option.name)
+        }
+        return pinned.isEmpty ? allMethodOptions : pinned
+    }
+
+    private func setEquipmentPinned(_ equipment: EquipmentRecord, _ pinned: Bool) {
+        equipment.isFavorite = pinned
+        equipment.markUpdated()
+        do { try context.save() }
+        catch { context.rollback(); methodError = error.localizedDescription }
+    }
+
+    private var categorySurfaceColor: Color {
+        switch calculator.category {
+        case .espresso: CupaTheme.espresso
+        case .intense: CupaTheme.gold
+        case .balance: CupaTheme.forest
+        case .clarity: CupaTheme.clarity
+        }
+    }
+
+    // Same continuous color stops as Android; category boundaries must not jump.
+    private var calculatorGradient: [Color] {
+        let stops: [(Double, UInt, UInt)] = [
+            (2, 0x3D2817, 0x7A3B2E), (6, 0x4A3728, 0xA85D3F),
+            (12, 0x2D4A3E, 0xB5714A), (15, 0x3D5E4F, 0x6B9080),
+            (18, 0x6B9080, 0xC9D6C4)
+        ]
+        let ratio = min(18, max(2, calculator.ratio))
+        let end = stops.firstIndex { $0.0 >= ratio } ?? stops.count - 1
+        let start = max(0, end - 1)
+        let a = stops[start], b = stops[end]
+        let fraction = a.0 == b.0 ? 0 : (ratio - a.0) / (b.0 - a.0)
+        func blend(_ x: UInt, _ y: UInt) -> Color {
+            func channel(_ shift: UInt) -> Double {
+                let from = Double((x >> shift) & 255), to = Double((y >> shift) & 255)
+                return (from + (to - from) * fraction) / 255
+            }
+            return Color(red: channel(16), green: channel(8), blue: channel(0))
+        }
+        return [blend(a.1, b.1), blend(a.2, b.2)]
+    }
+
+    private var categoryTextColor: Color {
+        switch calculator.category {
+        case .espresso: CupaTheme.espressoText
+        case .intense: CupaTheme.goldText
+        case .balance: CupaTheme.forestText
+        case .clarity: CupaTheme.clarityText
+        }
+    }
+
+    private func calculatorInput(
+        _ title: String,
+        identifier: String,
+        text: Binding<String>,
+        dragAxis: CalculatorDragAxis,
+        dragStep: Binding<Int>,
+        adjust: @escaping (Int) -> Void
+    ) -> some View {
+        VStack(spacing: 7) {
+            Text(title).font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
+                .lineLimit(1).minimumScaleFactor(0.8)
+            TextField("", text: text)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.center)
+                .font(.headline.monospacedDigit())
+                .onSubmit { calculator.validateInputs() }
+                .accessibilityLabel(title)
+                .accessibilityIdentifier(identifier)
+            HStack(spacing: 0) {
+                Button { adjust(-1) } label: { Image(systemName: "minus.circle.fill") }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel("Disminuir \(title)")
+                Spacer(minLength: 0)
+                Button { adjust(1) } label: { Image(systemName: "plus.circle.fill") }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel("Aumentar \(title)")
+            }
+            .foregroundStyle(categoryTextColor)
+        }
+        .padding(.horizontal, 4).padding(.vertical, 8)
+        .frame(minWidth: 0, maxWidth: .infinity)
+        .background(CupaTheme.backgroundAlt.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 15))
+        .contentShape(RoundedRectangle(cornerRadius: 15))
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 10)
+                .onChanged { value in
+                    let distance = dragAxis == .vertical ? -value.translation.height : value.translation.width
+                    let threshold: CGFloat = dragAxis == .vertical ? 34 : 24
+                    let nextStep = Int(distance / threshold)
+                    let delta = nextStep - dragStep.wrappedValue
+                    guard delta != 0 else { return }
+                    dragStep.wrappedValue = nextStep
+                    adjust(delta)
+                }
+                .onEnded { _ in dragStep.wrappedValue = 0 }
+        )
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: adjust(1)
+            case .decrement: adjust(-1)
+            @unknown default: break
+            }
+        }
+    }
+
+    private func adjustCoffee(_ amount: Double) {
+        calculator.adjustCoffee(amount)
+        CalculatorHaptics.play(.coffee, milestone: calculator.coffee.truncatingRemainder(dividingBy: 5) == 0)
+    }
+
+    private func adjustRatio(_ amount: Double) {
+        calculator.adjustRatio(amount)
+        let nearestInteger = calculator.ratio.rounded()
+        CalculatorHaptics.play(.ratio, milestone: abs(calculator.ratio - nearestInteger) < 0.001)
+    }
+
+    private func adjustWater(_ amount: Int) {
+        calculator.adjustWater(amount)
+        CalculatorHaptics.play(.water, milestone: calculator.water.isMultiple(of: 50))
+    }
+}
+
+private enum CalculatorDragAxis { case vertical, horizontal }
+
+private enum CalculatorHapticKind { case coffee, ratio, water }
+
+private enum CalculatorHaptics {
+    static func play(_ kind: CalculatorHapticKind, milestone: Bool) {
+        if milestone {
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.prepare()
+            generator.impactOccurred(intensity: 0.82)
+            return
+        }
+        switch kind {
+        case .coffee:
+            let generator = UIImpactFeedbackGenerator(style: .soft)
+            generator.prepare()
+            generator.impactOccurred(intensity: 0.55)
+        case .ratio:
+            let generator = UISelectionFeedbackGenerator()
+            generator.prepare()
+            generator.selectionChanged()
+        case .water:
+            let generator = UIImpactFeedbackGenerator(style: .rigid)
+            generator.prepare()
+            generator.impactOccurred(intensity: 0.62)
+        }
+    }
+}
+
+private struct CalculatorMethodOption: Identifiable {
+    let name: String
+    let equipmentId: UUID?
+    var id: String { equipmentId?.uuidString ?? "builtin:\(name)" }
+}
+
+private struct CalculatorMethodManager: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var context
+    @ObservedObject var calculator: CalculatorModel
+    let equipment: [EquipmentRecord]
+    let onEquipmentPinnedChange: (EquipmentRecord, Bool) -> Void
+    @State private var showingAddMethod = false
+    @State private var newMethodName = ""
+    @State private var newMethodRatio = "16"
+    @State private var saveError: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Métodos base") {
+                    ForEach(calculator.methods, id: \.self) { method in
+                        Toggle(method, isOn: Binding(
+                            get: { calculator.isMethodPinned(method) },
+                            set: { calculator.setMethodPinned(method, pinned: $0) }
+                        ))
+                    }
+                }
+                Section("Métodos del Almacén") {
+                    if equipment.isEmpty {
+                        Text("Registra un equipo de tipo Método para añadirlo a la calculadora.")
+                            .foregroundStyle(CupaTheme.secondaryText)
+                    } else {
+                        ForEach(equipment) { item in
+                            Toggle(item.name, isOn: Binding(
+                                get: { item.isFavorite },
+                                set: { onEquipmentPinnedChange(item, $0) }
+                            ))
+                        }
+                    }
+                }
+                Section {
+                    Button { showingAddMethod = true } label: { Label("Agregar método", systemImage: "plus.circle.fill") }
+                } footer: {
+                    Text("El nuevo método quedará seleccionado en la calculadora y tendrá tres técnicas iniciales en Preparar café.")
+                }
+            }
+            .brewScrollableCanvas()
+            .navigationTitle("Gestionar métodos")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { dismiss() } } }
+            .sheet(isPresented: $showingAddMethod) {
+                NavigationStack {
+                    Form {
+                        TextField("Nombre del método", text: $newMethodName)
+                        TextField("Proporción inicial 1:", text: $newMethodRatio).keyboardType(.decimalPad)
+                    }
+                    .navigationTitle("Nuevo método")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { showingAddMethod = false } }
+                        ToolbarItem(placement: .confirmationAction) { Button("Guardar", action: saveMethod).disabled(newMethodName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                    }
+                }
+                .presentationDetents([.medium])
+            }
+            .alert("No se pudo guardar", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+                Button("Aceptar") {}
+            } message: { Text(saveError ?? "") }
+        }
+    }
+
+    private func saveMethod() {
+        let name = newMethodName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ratio = Double(newMethodRatio.replacingOccurrences(of: ",", with: ".")) ?? 16
+        let method = EquipmentRecord(context: context, name: name, equipmentType: "BREWER_METHOD", brand: "", model: "", capacityMl: nil, configuration: "", notes: "Método personalizado", isFavorite: true, isActive: true)
+        do {
+            try context.save()
+            calculator.registerCustomMethod(name, methodId: method.id, defaultRatio: max(1, ratio))
+            showingAddMethod = false; newMethodName = ""; newMethodRatio = "16"
+        } catch { context.rollback(); saveError = error.localizedDescription }
+    }
+}
+
+private enum LabControlCategory: String, CaseIterable, Identifiable {
+    case ratio = "Proporción"
+    case extraction = "Calor"
+    case bean = "Grano"
+    var id: Self { self }
+}
+
+struct LabView: View {
+    @Environment(\.managedObjectContext) private var modelContext
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \LabExperimentRecord.createdAt, ascending: false)],
+        predicate: LocalDataScope.visiblePredicate(),
+        animation: .default
+    ) private var experiments: FetchedResults<LabExperimentRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \RecipeRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var recipes: FetchedResults<RecipeRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \TechniqueRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var techniques: FetchedResults<TechniqueRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var beans: FetchedResults<CoffeeBeanRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \GrinderRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate()) private var grinders: FetchedResults<GrinderRecord>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \EquipmentRecord.name, ascending: true)], predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "equipmentType == 'BREWER_METHOD'"))) private var methods: FetchedResults<EquipmentRecord>
+    @ObservedObject var model: LabModel
+    @ObservedObject var preparation: PreparationModel
+    @ObservedObject var account: AccountModel
+    @Binding var selection: CupaTab
+    @State private var category = LabControlCategory.extraction
+    @State private var confirmingLabReset = false
+    @State private var deletingExperiment: LabExperimentRecord?
+    @State private var saveConfirmationMessage: String?
+    @State private var showLabDetails = false
+    @State private var errorMessage: String?
+    @State private var isSavingExperiment = false
+    @State private var isSavingTechnique = false
+    @State private var profileExpanded = false
+    @State private var showEqualizerInfo = false
+    @State private var lastThermalHaptic: TimeInterval = 0
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            BrewOrganicCanvas().ignoresSafeArea()
+            ScrollView {
+            VStack(spacing: 6) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Laboratorio").font(.title3.bold()).foregroundStyle(CupaTheme.text)
+                    }
+                    Spacer()
+                    Button { showLabDetails = true } label: {
+                        Label("Contexto", systemImage: "slider.horizontal.3")
+                            .font(.caption.bold())
+                    }
+                    .buttonStyle(.bordered)
+                }
+                calibrationWorkspaceCard
+                compactHypothesis
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { actionBar }
+        .navigationBarHidden(true)
+        .sheet(isPresented: $showEqualizerInfo) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Cómo leer la estimación").font(.title2.bold())
+                        Text("Los números de 0 a 100 son puntuaciones orientativas, no porcentajes ni mediciones del sabor. Sirven para comparar ajustes; no garantizan el resultado de tu taza.")
+                        Text("Calor: el corchete marca el rango de la receta. Verde: alcanzable; gris: por encima del hervor estimado. Los puntos dorados son referencias por tueste, no un intervalo continuo. En V60 corresponden a la técnica 4:6.")
+                        Text("El modelo es una hipótesis local, no una fórmula científicamente calibrada. Grano, tueste, molino, agua y técnica cambian el resultado. Registra el sabor real en Cata. Para métodos sin modelo disponible verás —.")
+                        Text(thermalGuide.headline).font(.headline)
+                        Text(thermalGuide.detail)
+                        Text("Puntos orientativos del método: " + thermalGuide.rangeText)
+                        if thermalGuide.openHotWater { Text("Hervor estimado: " + model.state.temperatureUnit.text(celsius: thermalGuide.boilingC) + ". La presión atmosférica real puede variar.") }
+                        if let url = URL(string: thermalGuide.sourceURL), !thermalGuide.sourceURL.isEmpty {
+                            Link(thermalGuide.sourceName + " ↗", destination: url)
+                        }
+                    }.font(.subheadline).foregroundStyle(CupaTheme.text).padding(20)
+                }.background(CupaTheme.background)
+                .navigationTitle("Ecualizador didáctico").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { showEqualizerInfo = false } } }
+            }
+        }
+        .sheet(isPresented: $showLabDetails) {
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: 14) {
+                        SectionHeader(eyebrow: "Contexto", title: "Base del experimento", subtitle: "Inventario e historial.")
+                        baseDataCard
+                        if !experiments.isEmpty { savedExperimentsCard }
+                    }.padding()
+                }
+                .background(BrewOrganicCanvas().ignoresSafeArea())
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { showLabDetails = false } }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { confirmingLabReset = true } label: { Image(systemName: "arrow.counterclockwise") }
+                            .accessibilityLabel("Restablecer Laboratorio")
+                    }
+                }
+            }
+        }
+        .alert("Guardado", isPresented: Binding(get: { saveConfirmationMessage != nil }, set: { if !$0 { saveConfirmationMessage = nil } })) {
+            Button("Aceptar", role: .cancel) {}
+        } message: {
+            Text(saveConfirmationMessage ?? "")
+        }
+        .alert("No se pudo actualizar el experimento", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("Aceptar") {}
+        } message: { Text(errorMessage ?? "") }
+        .confirmationDialog("¿Restablecer el Laboratorio?", isPresented: $confirmingLabReset, titleVisibility: .visible) {
+            Button("Restablecer variables", role: .destructive, action: model.reset)
+            Button("Cancelar", role: .cancel) {}
+        } message: { Text("Se perderán los ajustes que no hayas guardado como experimento.") }
+        .confirmationDialog("¿Eliminar este experimento?", isPresented: Binding(get: { deletingExperiment != nil }, set: { if !$0 { deletingExperiment = nil } }), titleVisibility: .visible) {
+            Button("Eliminar experimento", role: .destructive) { if let experiment = deletingExperiment { deleteExperiment(experiment) }; deletingExperiment = nil }
+            Button("Cancelar", role: .cancel) { deletingExperiment = nil }
+        } message: { Text("Se retirará del historial de este dispositivo.") }
+    }
+
+    private var baseDataCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Base e inventario").font(.headline)
+                Picker("Receta base", selection: Binding(get: { model.state.recipeId }, set: loadRecipe)) {
+                    Text("Sin receta base").tag(Optional<UUID>.none)
+                    ForEach(recipes) { Text($0.name).tag(Optional($0.id)) }
+                }
+                Picker("Técnica base", selection: Binding(get: { model.state.techniqueId }, set: loadTechnique)) {
+                    Text("Sin técnica base · modo libre").tag(Optional<UUID>.none)
+                    ForEach(techniques) { Text($0.name).tag(Optional($0.id)) }
+                }
+                Picker("Método / equipo", selection: Binding(get: { model.state.methodId }, set: loadMethod)) {
+                    Text("Sin equipo asignado · \(model.state.method)").tag(Optional<UUID>.none)
+                    ForEach(methods) { Text($0.name).tag(Optional($0.id)) }
+                }
+                HStack {
+                    Picker("Café", selection: binding(\.beanId)) { Text("Sin café seleccionado").tag(Optional<UUID>.none); ForEach(beans) { Text($0.name).tag(Optional($0.id)) } }
+                    Picker("Molino", selection: binding(\.grinderId)) { Text("Sin molino seleccionado").tag(Optional<UUID>.none); ForEach(grinders) { Text($0.name).tag(Optional($0.id)) } }
+                }
+            }
+        }
+    }
+
+    private func loadRecipe(_ id: UUID?) {
+        guard let id, let recipe = recipes.first(where: { $0.id == id }) else { model.update { $0.recipeId = nil }; return }
+        let ingredients = (try? RecipeTechniqueRepository(context: modelContext).ingredients(recipeId: id)) ?? []
+        model.load(recipe: recipe, ingredients: ingredients)
+    }
+    private func loadTechnique(_ id: UUID?) {
+        guard let id, let technique = techniques.first(where: { $0.id == id }) else { model.update { $0.techniqueId = nil }; return }
+        let recipeName = recipes.first(where: { $0.id == technique.recipeId })?.name
+        model.load(technique: technique, recipeName: recipeName)
+    }
+    private func loadMethod(_ id: UUID?) { model.selectMethod(methods.first(where: { $0.id == id })) }
+
+
+    private var hypothesisCard: some View {
+        let profile = model.profile
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("GUÍA DEL MÉTODO").font(.caption2.bold()).tracking(1)
+                    Text(primaryOutcome).font(.title3.bold())
+                }
+                Spacer()
+
+            }
+            Text(profile.summary).font(.subheadline)
+            HStack { ForEach(profile.labels, id: \.self) { Text($0).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 4).background(.white.opacity(0.18)).clipShape(Capsule()) } }
+        }
+        .foregroundStyle(CupaTheme.onAccent)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LinearGradient(colors: [CupaTheme.forest, CupaTheme.terracottaSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Orientación por método; confirma el sabor en Cata")
+    }
+
+    private var calibrationWorkspaceCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Método").font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                    Spacer()
+                    Menu {
+                        ForEach(["V60", "AeroPress", "Prensa francesa", "Chemex", "Espresso", "Moka", "Cold brew"], id: \.self) { method in
+                            Button(method) { model.selectMethod(method) }
+                        }
+                    } label: {
+                        HStack(spacing: 4) { Text(model.state.method); Image(systemName: "chevron.down") }
+                            .font(.caption.bold()).foregroundStyle(CupaTheme.terracottaText)
+                    }
+                }
+                VStack(spacing: 4) {
+                    sensoryContent
+                    variableTabs
+                }
+                controlsContent
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Variables de preparación y perfil sensorial en vivo")
+    }
+
+
+    private var variableTabs: some View {
+        HStack(spacing: 4) {
+            ForEach(LabControlCategory.allCases) { item in
+                let selected = category == item
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { category = item }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: item == .ratio ? "scalemass" : item == .extraction ? "thermometer.medium" : "leaf")
+                        if selected { Text(item.rawValue).font(.caption.bold()) }
+                    }
+                    .frame(width: selected ? nil : 44, height: 44)
+                    .frame(maxWidth: selected ? .infinity : nil)
+                    .foregroundStyle(selected ? CupaTheme.onAccent : CupaTheme.secondaryText)
+                    .background(selected ? CupaTheme.forest : CupaTheme.backgroundAlt, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.rawValue)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+    }
+
+    private var compactHypothesis: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button { profileExpanded.toggle() } label: {
+                HStack {
+                    Text(thermalGuide.headline).font(.system(size: 12, weight: .bold)).multilineTextAlignment(.leading)
+                    Spacer(minLength: 4)
+                    Text(profileExpanded ? "Menos" : "Consejos").font(.system(size: 10, weight: .bold))
+                    Image(systemName: profileExpanded ? "chevron.up" : "chevron.down").font(.system(size: 12))
+                }
+            }.buttonStyle(.plain).accessibilityLabel(profileExpanded ? "Ocultar consejos" : "Ver consejos completos")
+            Text(thermalGuide.compactDetail).font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.92)).fixedSize(horizontal: false, vertical: true)
+            if profileExpanded {
+                ForEach(Array(thermalGuide.recipeAdvice.enumerated()), id: \.offset) { _, advice in
+                    Text(advice).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true).padding(.top, 6)
+                }
+                if let url = URL(string: thermalGuide.sourceURL), !thermalGuide.sourceURL.isEmpty {
+                    Link(thermalGuide.sourceName + " ↗", destination: url).font(.system(size: 11)).padding(.vertical, 8)
+                }
+                if thermalGuide.kind == "filter" {
+                    Link("Kasuya · técnica 4:6 ↗", destination: URL(string: "https://en.philocoffea.com/blogs/blog/coffee-brewing-method")!).font(.system(size: 11)).padding(.vertical, 8)
+                }
+            }
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(LinearGradient(colors: [Color(hex: 0x214F3F), Color(hex: 0x81573F)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .accessibilityIdentifier("lab_heat_advice")
+        .tint(.white)
+        .accessibilityElement(children: .contain)
+        .accessibilityHint("Orientación por método; confirma el sabor en Cata")
+    }
+
+    private var sensoryContent: some View {
+        let values = [
+            ("Aroma", model.profile.aroma, Color(hex: 0xC59A5A)), ("Acidez", model.profile.acidity, Color(hex: 0xF2C14E)),
+            ("Dulzor", model.profile.sweetness, Color(hex: 0xD98BB3)), ("Cuerpo", model.profile.body, Color(hex: 0x8B6B5C)),
+            ("Amargor", model.profile.bitterness, Color(hex: 0x5C5641)), ("Final", model.profile.finish, Color(hex: 0x74BFE0))
+        ]
+        return VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text("ECUALIZADOR · 0–100").font(.caption2.bold()).tracking(0.8).foregroundStyle(CupaTheme.secondaryText)
+                    Spacer()
+                    Button { showEqualizerInfo = true } label: { Image(systemName: "info.circle").font(.system(size: 18)).frame(width: 36, height: 32) }
+                        .foregroundStyle(CupaTheme.terracottaText).accessibilityLabel("Acerca del ecualizador")
+                }
+                HStack(alignment: .bottom, spacing: 8) {
+                    ForEach(values, id: \.0) { label, value, color in
+                        VStack(spacing: 2) {
+                            Text(value == 0 ? "—" : "\(value)").font(.system(size: 10, weight: .bold)).foregroundStyle(color).frame(height: 16)
+                            GeometryReader { proxy in
+                                ZStack(alignment: .bottom) {
+                                    Rectangle().fill(CupaTheme.backgroundAlt)
+                                    Rectangle().fill(color.gradient).frame(height: proxy.size.height * CGFloat(value) / 100)
+                                        .animation(.easeOut(duration: 0.2), value: value)
+                                }
+                            }.frame(width: 12, height: 70)
+                            Text(label).font(.system(size: 9, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true).frame(minHeight: 20)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(label)
+                        .accessibilityValue(value == 0 ? "Sin estimación disponible" : "Estimación \(value) de 100")
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder private var controlsContent: some View {
+        VStack(spacing: category == .bean ? 9 : 5) {
+                switch category {
+                case .ratio:
+                    HStack(spacing: 8) {
+                        BrewLabQuantityControl(label: "Café", unit: "g", value: Binding(get: { Int(labCoffeeBinding.wrappedValue.rounded()) }, set: { labCoffeeBinding.wrappedValue = Double($0) }), range: 1...100)
+                        BrewLabQuantityControl(label: "Agua", unit: "ml", value: labWaterBinding, range: 10...2000)
+                    }
+                    labSlider("Proporción", value: labRatioBinding, range: 1...40, step: 1, display: "1:\(model.state.ratio.formatted(.number.precision(.fractionLength(0...2))))")
+                    labSlider("Tiempo", value: bindingInt(\.timeSeconds), range: labTimeRange, step: thermalGuide.kind == "cold" ? 3600 : 1, display: formattedTime)
+                case .extraction:
+                    calibratedTemperatureSlider
+                    temperatureCalibrationBand
+                    labSlider("Molienda", value: bindingInt(\.grindClicks), range: 6...36, step: 1, display: "Ref. \(model.state.grindClicks)")
+                    HStack { Text("← Menos gruesa"); Spacer(); Text("Más gruesa →") }.font(.system(size: 9)).foregroundStyle(CupaTheme.secondaryText)
+                case .bean:
+                    Picker("Frescura", selection: binding(\.freshness)) {
+                        ForEach(["muy fresco", "en ventana", "punto ideal", "bajando", "viejo"], id: \.self) { Text($0.capitalized) }
+                    }
+                    TextField("Notas del experimento", text: binding(\.notes), axis: .vertical).lineLimit(1...3)
+                }
+        }
+    }
+
+    private var savedExperimentsCard: some View {
+        CupaCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Experimentos recientes").font(.headline)
+                ForEach(Array(experiments.prefix(3))) { experiment in
+                    HStack {
+                        Button { model.load(experiment: experiment) } label: {
+                            VStack(alignment: .leading) {
+                                Text(experiment.method).font(.subheadline.bold())
+                                Text("1:\(experiment.ratio.formatted(.number.precision(.fractionLength(1)))) · \(experimentTemperatureText(experiment)) · \(experiment.cityName)")
+                                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            }
+                        }.buttonStyle(.plain).accessibilityLabel("Cargar experimento de \(experiment.method)")
+                        Spacer()
+                        Text(experiment.createdAt, style: .date).font(.caption2)
+                        Button(role: .destructive) { deletingExperiment = experiment } label: { Image(systemName: "trash") }
+                            .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Eliminar experimento")
+                    }
+                }
+            }
+        }
+    }
+
+
+    private var actionBar: some View {
+        HStack {
+            Button { saveExperiment() } label: { Label(isSavingExperiment ? "Guardando…" : "Guardar experimento", systemImage: "flask") }
+                .buttonStyle(.bordered)
+                .disabled(isSavingExperiment)
+            Button {
+                if saveExperiment() {
+                    preparation.load(lab: model.state)
+                    selection = .brew
+                }
+            } label: { Label("Preparar", systemImage: "play.fill") }
+                .buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
+                .disabled(isSavingExperiment)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .frame(maxWidth: .infinity).background(CupaTheme.card)
+    }
+
+
+    @discardableResult private func saveExperiment() -> Bool {
+        guard !isSavingExperiment else { return false }
+        isSavingExperiment = true
+        _ = LabExperimentRecord(context: modelContext, state: model.state, profile: model.profile)
+        do {
+            try modelContext.save()
+            isSavingExperiment = false
+            saveConfirmationMessage = "La hipótesis quedó disponible offline en este dispositivo."
+            return true
+        } catch {
+            modelContext.rollback()
+            isSavingExperiment = false
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    private func saveTechniqueFromLab() {
+        guard !isSavingTechnique else { return }
+        isSavingTechnique = true
+        do {
+            let technique = try RecipeTechniqueRepository(context: modelContext).saveTechnique(.fromLab(model.state))
+            model.update { $0.techniqueId = technique.id; $0.techniqueName = technique.name }
+            isSavingTechnique = false
+            saveConfirmationMessage = "La técnica quedó en Almacén → Técnicas y está lista para preparar."
+        } catch {
+            modelContext.rollback()
+            isSavingTechnique = false
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteExperiment(_ experiment: LabExperimentRecord) {
+        experiment.markDeleted()
+        do { try modelContext.save() }
+        catch { modelContext.rollback(); errorMessage = error.localizedDescription }
+    }
+
+    private var isTemperatureCapped: Bool { Float(model.state.effectiveTemperatureC) > model.boilingPointC }
+    private var boilingText: String {
+        model.state.temperatureUnit == .celsius
+            ? String(format: "%.1f °C", model.boilingPointC)
+            : "\(Int(roundf(LabEngine.fahrenheit(fromCelsius: model.boilingPointC)))) °F"
+    }
+    private var temperatureText: String {
+        model.state.temperatureUnit.text(celsius: model.state.effectiveTemperatureC)
+    }
+    private func experimentTemperatureText(_ experiment: LabExperimentRecord) -> String {
+        model.state.temperatureUnit.text(celsius: experiment.effectiveTemperatureC)
+    }
+    private var formattedTime: String { thermalGuide.kind == "cold" ? "\(model.state.timeSeconds / 3600) h" : String(format: "%d:%02d min", model.state.timeSeconds / 60, model.state.timeSeconds % 60) }
+    private var thermalGuide: LabTemperatureGuide {
+        LabTemperatureGuide(temperatureC: model.state.effectiveTemperatureC, altitudeMeters: model.state.altitudeMeters, unit: model.state.temperatureUnit, method: model.state.method)
+    }
+    private var calibratedTemperatureSlider: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text("Temperatura").font(.subheadline.bold())
+                Spacer(minLength: 4)
+                Text(temperatureText).font(.system(size: 16, weight: .bold, design: .serif)).foregroundStyle(CupaTheme.terracottaText)
+                Button { labTemperatureBinding.wrappedValue = max(thermalGuide.sliderRange.lowerBound, labTemperatureBinding.wrappedValue - 1) } label: { Image(systemName: "minus").frame(width: 32, height: 32) }
+                    .buttonStyle(.plain).accessibilityLabel("Menos 1 grado")
+                Button { labTemperatureBinding.wrappedValue = min(thermalGuide.sliderRange.upperBound, labTemperatureBinding.wrappedValue + 1) } label: { Image(systemName: "plus").frame(width: 32, height: 32) }
+                    .buttonStyle(.plain).accessibilityLabel("Más 1 grado")
+            }
+            BrewTemperatureRail(value: Binding(get: { labTemperatureBinding.wrappedValue }, set: { next in
+                if next.rounded() != labTemperatureBinding.wrappedValue {
+                    labTemperatureBinding.wrappedValue = next.rounded()
+                    let now = Date().timeIntervalSinceReferenceDate
+                    if now - lastThermalHaptic >= 0.045 { lastThermalHaptic = now; UISelectionFeedbackGenerator().selectionChanged() }
+                }
+            }), guide: thermalGuide)
+            .frame(height: 44)
+            .accessibilityLabel("Temperatura del agua")
+            .accessibilityValue("\(temperatureText). \(thermalGuide.headline)")
+            .accessibilityAdjustableAction { direction in
+                let delta = direction == .increment ? 1.0 : -1.0
+                labTemperatureBinding.wrappedValue = min(thermalGuide.sliderRange.upperBound, max(thermalGuide.sliderRange.lowerBound, labTemperatureBinding.wrappedValue + delta))
+            }
+        }
+    }
+    private var temperatureCalibrationBand: some View {
+        VStack(spacing: 3) {
+            HStack {
+                Text("\(Int(thermalGuide.sliderRange.lowerBound))\(model.state.temperatureUnit.symbol)")
+                Spacer(minLength: 2)
+                Text(thermalGuide.recipeBandText)
+                    .foregroundStyle(thermalGuide.hasReachableBand ? CupaTheme.forest : CupaTheme.secondaryText).fontWeight(.semibold)
+                Spacer(minLength: 2)
+                Text("\(Int(thermalGuide.sliderRange.upperBound))\(model.state.temperatureUnit.symbol)")
+            }.font(.system(size: 10)).foregroundStyle(CupaTheme.secondaryText)
+            if let points = thermalGuide.recipePointsText {
+                Text(points).font(.system(size: 10)).foregroundStyle(Color(red: 156/255, green: 109/255, blue: 46/255))
+            }
+        }
+    }
+    private var primaryOutcome: String { thermalGuide.headline }
+    private var labTimeRange: ClosedRange<Double> {
+        switch thermalGuide.kind { case "espresso": return 5...90; case "cold": return 3600...86400; default: return 30...600 }
+    }
+
+    private func labSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, display: String) -> some View {
+        VStack(spacing: 6) {
+            HStack { Text(title).font(.subheadline.bold()); Spacer(); Text(display).font(.subheadline.bold()).foregroundStyle(CupaTheme.terracottaText) }
+            Slider(value: value, in: range, step: step).tint(CupaTheme.forest)
+                .accessibilityLabel(title)
+                .accessibilityValue(display)
+        }
+    }
+    private func binding<Value>(_ keyPath: WritableKeyPath<LabState, Value>) -> Binding<Value> {
+        Binding(get: { model.state[keyPath: keyPath] }, set: { value in model.update { $0[keyPath: keyPath] = value } })
+    }
+    private func bindingFloat(_ keyPath: WritableKeyPath<LabState, Float>) -> Binding<Double> {
+        Binding(get: { Double(model.state[keyPath: keyPath]) }, set: { value in model.update { $0[keyPath: keyPath] = Float(value) } })
+    }
+    private func bindingInt(_ keyPath: WritableKeyPath<LabState, Int>) -> Binding<Double> {
+        Binding(get: { Double(model.state[keyPath: keyPath]) }, set: { value in model.update { $0[keyPath: keyPath] = Int(value.rounded()) } })
+    }
+    private var labCoffeeBinding: Binding<Double> {
+        Binding(get: { Double(model.state.coffeeGrams) }, set: { model.setCoffeeGrams(Float($0)) })
+    }
+    private var labWaterBinding: Binding<Int> {
+        Binding(get: { model.state.waterMl }, set: model.setWaterMl)
+    }
+    private var labRatioBinding: Binding<Double> {
+        Binding(get: { Double(model.state.ratio) }, set: { model.setRatio(Float($0)) })
+    }
+    private var labTemperatureBinding: Binding<Double> {
+        Binding(get: { model.state.temperatureUnit.displayValue(celsius: model.state.effectiveTemperatureC).rounded() }, set: model.setDisplayedTemperature)
+    }
+}
+
+private enum StorageCategory: String, CaseIterable, Identifiable {
+    case coffee = "Cafés"
+    case grinders = "Molinos"
+    case equipment = "Equipos"
+    case recipes = "Recetas"
+    case techniques = "Técnicas"
+    case cups = "Tazas"
+    var id: Self { self }
+}
+
+struct StorageView: View {
+    @Binding var selection: CupaTab
+    @ObservedObject var lab: LabModel
+    @ObservedObject var preparation: PreparationModel
+    @ObservedObject var account: AccountModel
+    @State private var category = StorageCategory.coffee
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(StorageCategory.allCases) { item in
+                        Button(item.rawValue) { category = item }
+                            .buttonStyle(.bordered)
+                            .tint(category == item ? CupaTheme.forest : CupaTheme.secondaryText)
+                            .accessibilityAddTraits(category == item ? .isSelected : [])
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .padding(.vertical, 10)
+            switch category {
+            case .coffee: CoffeeInventoryView(selection: $selection, lab: lab, preparation: preparation)
+            case .grinders: GrinderInventoryView()
+            case .equipment: EquipmentInventoryView()
+            case .recipes: RecipeInventoryView()
+            case .techniques: TechniqueInventoryView(selection: $selection, preparation: preparation, account: account)
+            case .cups: CupHistoryView(selection: $selection, preparation: preparation)
+            }
+        }
+        .background(BrewOrganicCanvas(warmTop: true).ignoresSafeArea())
+        .navigationTitle("Almacén")
+    }
+}
+
+private struct CupHistoryView: View {
+    @Binding var selection: CupaTab
+    @ObservedObject var preparation: PreparationModel
+    @Environment(\.managedObjectContext) private var context
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \CupSessionRecord.brewDate, ascending: false)],
+        predicate: LocalDataScope.visiblePredicate(),
+        animation: .default
+    ) private var cups: FetchedResults<CupSessionRecord>
+    @State private var errorMessage: String?
+    @State private var selectedCup: CupSessionRecord?
+
+    var body: some View {
+        List {
+            if cups.isEmpty {
+                ContentUnavailableView(
+                    "Sin tazas guardadas",
+                    systemImage: "cup.and.saucer",
+                    description: Text("Al guardar una cata aparecerá aquí con los valores ejecutados de la preparación.")
+                )
+                .listRowBackground(Color.clear)
+            } else {
+                ForEach(Array(cups), id: \.objectID) { (cup: CupSessionRecord) in
+                    Button { selectedCup = cup } label: {
+                        CupHistoryRow(cup: cup)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityHint("Abre todos los datos de la taza")
+                }
+            }
+        }
+        .brewScrollableCanvas()
+        .sheet(item: $selectedCup) { cup in
+            CupSessionDetailView(cup: cup, onDelete: { if delete(cup) { selectedCup = nil } }, onReplicate: {
+                if preparation.replicate(cup: cup, brew: try? context.existingBrewSession(id: cup.brewSessionId)) {
+                    selectedCup = nil; selection = .brew
+                } else { errorMessage = "Esta taza antigua no conserva sus pasos. Elige una técnica para volver a prepararla." }
+            })
+        }
+        .alert("No se pudo eliminar la taza", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("Aceptar") {}
+        } message: { Text(errorMessage ?? "") }
+    }
+
+    private func delete(_ cup: CupSessionRecord) -> Bool {
+        do { try TastingRepository(context: context).delete(cup); return true }
+        catch { context.rollback(); errorMessage = error.localizedDescription; return false }
+    }
+}
+
+private struct CupHistoryRow: View {
+    @ObservedObject var cup: CupSessionRecord
+    private var rating: String { cup.rating > 0 ? cup.rating.formatted(.number.precision(.fractionLength(0...1))) + " ★" : "Sin calificar" }
+    private var quantities: String {
+        let dose = cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))
+        return "\(cup.techniqueNameSnapshot) · \(dose) g → \(cup.executedWaterMl) ml"
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot).font(.headline)
+                Spacer()
+                Text(rating).foregroundStyle(CupaTheme.goldText)
+            }
+            if cup.syncStatus != .synced { inventorySyncBadge(cup.syncStatus) }
+            Text(quantities).font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+            HStack {
+                Label(cup.cupLifeState.localizedCupLife, systemImage: "thermometer.medium")
+                if !cup.executedGrindSetting.isEmpty { Label(cup.executedGrindSetting, systemImage: "dial.medium") }
+            }.font(.caption).foregroundStyle(CupaTheme.forestText)
+            if !cup.comment.isEmpty { Text(cup.comment).font(.caption) }
+            if let date = cup.brewDate { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary) }
+        }.padding(.vertical, 6)
+    }
+}
+
+private struct CupSessionDetailView: View {
+    @AppStorage("settings.temperature") private var rawTemperatureUnit = TemperatureUnit.celsius.rawValue
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var cup: CupSessionRecord
+    let onDelete: () -> Void
+    var onReplicate: (() -> Void)? = nil
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Label(cup.beanNameSnapshot.isEmpty ? "Café sin registrar" : cup.beanNameSnapshot, systemImage: "cup.and.saucer.fill").font(.title3.bold())
+                            Spacer(); Text(cup.rating > 0 ? "\(cup.rating.formatted(.number.precision(.fractionLength(0...1)))) ★" : "Sin calificar").font(.caption.bold()).foregroundStyle(CupaTheme.goldText)
+                        }
+                        if let date = cup.brewDate { Text(date.formatted(date: .long, time: .shortened)).font(.caption).foregroundStyle(CupaTheme.secondaryText) }
+                    }.padding(.vertical, 4)
+                }
+                Section("Preparación ejecutada") {
+                    cupDetailRow("Dosis", "\(cup.executedDoseGrams.formatted(.number.precision(.fractionLength(0...1)))) g")
+                    cupDetailRow("Agua", "\(cup.executedWaterMl) ml")
+                    cupDetailRow("Proporción", "1:\(cup.executedRatio.formatted(.number.precision(.fractionLength(0...2))))")
+                    cupDetailRow("Temperatura", (TemperatureUnit(rawValue: rawTemperatureUnit) ?? .celsius).text(celsius: cup.effectiveTemperatureC))
+                    cupDetailRow("Duración", String(format: "%02d:%02d", Int(cup.executedDurationSeconds) / 60, Int(cup.executedDurationSeconds) % 60))
+                    if !cup.executedGrindSetting.isEmpty { cupDetailRow("Molienda", cup.executedGrindSetting) }
+                }
+                Section("Referencias históricas") {
+                    if !cup.recipeNameSnapshot.isEmpty { cupDetailRow("Receta", cup.recipeNameSnapshot) }
+                    cupDetailRow("Técnica", cup.techniqueNameSnapshot.isEmpty ? "Cata independiente" : cup.techniqueNameSnapshot)
+                    if !cup.methodNameSnapshot.isEmpty { cupDetailRow("Método", cup.methodNameSnapshot) }
+                    if !cup.grinderNameSnapshot.isEmpty { cupDetailRow("Molino", cup.grinderNameSnapshot) }
+                }
+                Section("Resultado de cata") {
+                    cupDetailRow("Vida de taza", "\(cup.cupLifeState.localizedCupLife) · \(String(format: "%02d:%02d", Int(cup.cupLifeSeconds) / 60, Int(cup.cupLifeSeconds) % 60))")
+                    cupDetailRow("Recomendación", "\(cup.nps)/10")
+                    if !cup.comment.isEmpty { Text(cup.comment) }
+                }
+                Section {
+                    if let onReplicate { Button(action: onReplicate) { Label("Replicar taza", systemImage: "arrow.clockwise") } }
+                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar taza y cata", systemImage: "trash") }
+                }
+            }
+            .brewScrollableCanvas()
+            .navigationTitle("Detalle de taza")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } } }
+            .confirmationDialog("¿Eliminar esta taza?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Eliminar taza y cata", role: .destructive, action: onDelete)
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("También se ocultarán la cata y sus observaciones asociadas. La preparación original se conservará.")
+            }
+        }
+    }
+
+    private func cupDetailRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .top) { Text(title); Spacer(); Text(value).multilineTextAlignment(.trailing).fontWeight(.semibold).foregroundStyle(CupaTheme.forestText) }
+    }
+}
+
+private extension String {
+    var localizedCupLife: String {
+        switch self { case "FRESH": "Fresca"; case "PEAK": "En su punto"; case "DECLINING": "En descenso"; case "EXHAUSTED": "Agotada"; default: self.capitalized }
+    }
+}
+
+private struct CoffeeInventoryView: View {
+    @Environment(\.managedObjectContext) private var modelContext
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \CoffeeBeanRecord.updatedAt, ascending: false)],
+        predicate: LocalDataScope.visiblePredicate(),
+        animation: .default
+    ) private var beans: FetchedResults<CoffeeBeanRecord>
+    @Binding var selection: CupaTab
+    @ObservedObject var lab: LabModel
+    @ObservedObject var preparation: PreparationModel
+    @State private var showAddBean = false
+    @State private var selectedBean: CoffeeBeanRecord?
+    @State private var editedBean: CoffeeBeanRecord?
+    @State private var pendingDeleteBean: CoffeeBeanRecord?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        ZStack {
+            BrewOrganicCanvas(warmTop: true).ignoresSafeArea()
+            List {
+                Section("Cafés activos") {
+                    if activeBeans.isEmpty {
+                        ContentUnavailableView(
+                            "Sin cafés activos",
+                            systemImage: "leaf",
+                            description: Text("Agrega tu primer café para usarlo en preparaciones, recetas y catas.")
+                        )
+                        .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(activeBeans) { bean in coffeeRow(bean) }
+                    }
+                }
+                if !finishedBeans.isEmpty {
+                    Section("Lotes históricos / terminados") {
+                        ForEach(finishedBeans) { bean in coffeeRow(bean) }
+                    }
+                }
+            }
+            .brewScrollableCanvas(warmTop: true)
+        }
+        .toolbar {
+            Button { showAddBean = true } label: { Image(systemName: "plus") }
+                .accessibilityLabel("Agregar café")
+                .accessibilityIdentifier("inventory.addCoffee")
+        }
+        .sheet(isPresented: $showAddBean) {
+            CoffeeBeanEditor(record: nil) { draft in
+                _ = draft.makeRecord(in: modelContext)
+                return save()
+            }
+        }
+        .sheet(item: $selectedBean) { bean in
+            CoffeeBeanDetail(
+                record: bean,
+                onPrepare: { preparation.selectBean(bean); selection = .brew },
+                onLab: { lab.load(bean: bean); selection = .lab },
+                onReplicate: { cup in
+                    if preparation.replicate(cup: cup, brew: try? modelContext.existingBrewSession(id: cup.brewSessionId)) { selectedBean = nil; selection = .brew }
+                },
+                onDelete: { delete(bean) }
+            )
+        }
+        .sheet(item: $editedBean) { bean in
+            CoffeeBeanEditor(record: bean) { draft in
+                draft.apply(to: bean)
+                bean.markUpdated()
+                return save()
+            }
+        }
+        .confirmationDialog("¿Eliminar este café?", isPresented: Binding(
+            get: { pendingDeleteBean != nil }, set: { if !$0 { pendingDeleteBean = nil } }), titleVisibility: .visible) {
+            Button("Eliminar café", role: .destructive) {
+                if let bean = pendingDeleteBean { errorMessage = delete(bean) }
+                pendingDeleteBean = nil
+            }
+            Button("Cancelar", role: .cancel) { pendingDeleteBean = nil }
+        } message: { Text("Las preparaciones y tazas conservarán sus datos históricos.") }
+        .alert("No se pudo guardar el café", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("Aceptar") {}
+        } message: { Text(errorMessage ?? "") }
+    }
+
+    private var activeBeans: [CoffeeBeanRecord] { beans.filter { $0.inventoryStatus != .finished } }
+    private var finishedBeans: [CoffeeBeanRecord] { beans.filter { $0.inventoryStatus == .finished } }
+
+    private func coffeeRow(_ bean: CoffeeBeanRecord) -> some View {
+        let freshness = CoffeeFreshnessEngine.evaluate(roastDate: bean.roastDate, openedDate: bean.openedDate)
+        let accent = CupaTheme.coffeeAccent(bean.id)
+        return VStack(alignment: .leading, spacing: 10) {
+            Button { selectedBean = bean } label: {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 10) {
+                        RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 4, height: 28)
+                        Text(bean.name).font(.system(size: 18, weight: .semibold, design: .serif))
+                            .foregroundStyle(CupaTheme.text).lineLimit(2)
+                        Spacer(minLength: 0)
+                    }
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(bean.origin.isEmpty ? "Origen sin registrar" : bean.origin)
+                            .foregroundStyle(CupaTheme.secondaryText).lineLimit(2)
+                        Spacer(minLength: 0)
+                        Text(bean.altitudeMeters.map { "\($0) m" } ?? "Altura sin registrar")
+                            .foregroundStyle(accent)
+                    }.font(.system(size: 12))
+                    CoffeeFreshnessBar(result: freshness, compact: true)
+                }.contentShape(Rectangle())
+            }
+            .accessibilityIdentifier("coffee.row.\(bean.id.uuidString)")
+            Button { selectedBean = bean } label: {
+                HStack {
+                    Text("Cómo lo preparo").font(.system(size: 12, weight: .semibold))
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.system(size: 14))
+                }.foregroundStyle(accent).frame(minHeight: 40).contentShape(Rectangle())
+            }.accessibilityIdentifier("coffee.preparation.\(bean.id.uuidString)")
+            HStack(spacing: 0) {
+                Button { editedBean = bean } label: {
+                    Image(systemName: "pencil").frame(width: 44, height: 44)
+                }.accessibilityLabel("Editar")
+                Spacer(minLength: 0)
+                Button { lab.load(bean: bean); selection = .lab } label: {
+                    Image(systemName: "flask").frame(width: 44, height: 44)
+                }.accessibilityLabel("Usar en Laboratorio")
+                Spacer(minLength: 0)
+                Button { preparation.selectBean(bean); selection = .brew } label: {
+                    Label("Preparar", systemImage: "mug")
+                        .font(.system(size: 12, weight: .medium)).padding(.horizontal, 14)
+                        .frame(minHeight: 44).foregroundStyle(CupaTheme.onAccent)
+                        .background(CupaTheme.forest, in: Capsule())
+                }
+                if !bean.isSample {
+                    Spacer(minLength: 0)
+                    Button { pendingDeleteBean = bean } label: {
+                        Image(systemName: "trash").foregroundStyle(CupaTheme.terracottaText)
+                            .frame(width: 44, height: 44)
+                    }.accessibilityLabel("Borrar")
+                }
+            }.foregroundStyle(accent)
+        }
+        .buttonStyle(.plain)
+        .padding(16)
+        .background {
+            ZStack {
+                CupaTheme.card
+                LinearGradient(colors: [accent.opacity(0.10), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(accent.opacity(0.22), lineWidth: 1))
+        .shadow(color: CupaTheme.warmShadow.opacity(0.08), radius: 4, y: 2)
+        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+    private func delete(_ bean: CoffeeBeanRecord) -> String? {
+        guard !bean.isSample else { return "Ronpotrero es el café de muestra y siempre estará disponible." }
+        bean.markDeleted()
+        return save()
+    }
+
+    @discardableResult private func save() -> String? {
+        do { try modelContext.save(); return nil }
+        catch { modelContext.rollback(); return error.localizedDescription }
+    }
+}
+
+private struct CoffeeBeanDetail: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var modelContext
+    @ObservedObject private var record: CoffeeBeanRecord
+    private let onPrepare: () -> Void
+    private let onLab: () -> Void
+    private let onReplicate: (CupSessionRecord) -> Void
+    private let onDelete: () -> String?
+    @FetchRequest private var brews: FetchedResults<BrewSessionRecord>
+    @FetchRequest private var cups: FetchedResults<CupSessionRecord>
+    @State private var showEditor = false
+    @State private var selectedCupDetail: CupSessionRecord?
+    @State private var actionError: String?
+    @State private var confirmingFinished = false
+    @State private var confirmingDelete = false
+
+    init(record: CoffeeBeanRecord, onPrepare: @escaping () -> Void, onLab: @escaping () -> Void, onReplicate: @escaping (CupSessionRecord) -> Void = { _ in }, onDelete: @escaping () -> String?) {
+        _record = ObservedObject(wrappedValue: record)
+        self.onPrepare = onPrepare
+        self.onLab = onLab
+        self.onReplicate = onReplicate
+        self.onDelete = onDelete
+        _brews = FetchRequest(
+            sortDescriptors: [NSSortDescriptor(keyPath: \BrewSessionRecord.completedAt, ascending: false)],
+            predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "beanId == %@", record.id as CVarArg)),
+            animation: .default
+        )
+        _cups = FetchRequest(
+            sortDescriptors: [NSSortDescriptor(keyPath: \CupSessionRecord.brewDate, ascending: false)],
+            predicate: LocalDataScope.visiblePredicate(additional: NSPredicate(format: "beanId == %@", record.id as CVarArg)),
+            animation: .default
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Café") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(record.name).font(.title3.bold())
+                        Text("\(record.origin.isEmpty ? "Origen sin registrar" : record.origin) · \(record.altitudeMeters.map { "\($0) m" } ?? "Altura sin registrar")")
+                            .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                        CoffeeFreshnessBar(result: freshness, compact: true)
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section("Cómo lo preparo") {
+                    InventoryBeanBrewSettings(bean: record)
+                }
+
+                Section {
+                    DisclosureGroup("Ficha completa") {
+                        Text(record.brand.isEmpty ? "Sin tostador" : record.brand)
+                        if !details.isEmpty { Text(details) }
+                        Label("\(record.remainingQuantityGrams.formatted(.number.precision(.fractionLength(0...1)))) g disponibles", systemImage: "scalemass")
+                        if !record.notes.isEmpty { Text(record.notes) }
+                        if record.isSample { Text("Muestra · Datos ficticios") }
+                        if record.syncStatus != .synced { inventorySyncBadge(record.syncStatus) }
+                        if let warning = freshness.openWarning { Text(warning).foregroundStyle(CupaTheme.terracottaText) }
+                    }.font(.subheadline)
+                }
+
+                Section("Acciones") {
+                    HStack {
+                        Button { onPrepare(); dismiss() } label: { Label("Preparar", systemImage: "mug") }
+                            .buttonStyle(.borderedProminent).tint(CupaTheme.forest).foregroundStyle(CupaTheme.onAccent)
+                        Spacer()
+                        Button { onLab(); dismiss() } label: { Label("Laboratorio", systemImage: "flask") }
+                            .buttonStyle(.bordered).tint(CupaTheme.terracotta)
+                    }
+                    if record.inventoryStatus == .closed {
+                        Button("Abrir bolsa hoy", systemImage: "shippingbox.and.arrow.backward") { markOpened() }
+                    }
+                    if !record.isSample && record.inventoryStatus != .finished {
+                        Button("Marcar como terminado", systemImage: "checkmark.circle") { confirmingFinished = true }
+                            .foregroundStyle(CupaTheme.terracottaText)
+                    }
+                }
+
+                Section("Uso") {
+                    LabeledContent("Preparaciones", value: "\(brews.count)")
+                    LabeledContent("Tazas catadas", value: "\(cups.count)")
+                }
+
+                Section("Preparaciones recientes") {
+                    if brews.isEmpty {
+                        Text("Todavía no hay preparaciones vinculadas con este café.")
+                            .foregroundStyle(CupaTheme.secondaryText)
+                    } else {
+                        ForEach(brews) { brew in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(brew.techniqueNameSnapshot.isEmpty ? (brew.methodNameSnapshot.isEmpty ? "Preparación" : brew.methodNameSnapshot) : brew.techniqueNameSnapshot)
+                                    .font(.headline)
+                                if !brew.methodNameSnapshot.isEmpty && brew.methodNameSnapshot != brew.techniqueNameSnapshot {
+                                    Text(brew.methodNameSnapshot).font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
+                                }
+                                Text("\(brew.doseGrams.formatted(.number.precision(.fractionLength(0...1)))) g → \(brew.waterMl) ml · 1:\(brew.ratio.formatted(.number.precision(.fractionLength(0...1))))")
+                                    .font(.subheadline)
+                                Text(brew.completedAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+
+                Section("Tazas y catas") {
+                    if cups.isEmpty {
+                        Text("Todavía no hay tazas catadas con este café.")
+                            .foregroundStyle(CupaTheme.secondaryText)
+                    } else {
+                        ForEach(cups) { cup in
+                            Button { selectedCupDetail = cup } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(cup.techniqueNameSnapshot.isEmpty ? "Cata" : cup.techniqueNameSnapshot).font(.headline)
+                                    Spacer()
+                                    Label(cup.rating.formatted(.number.precision(.fractionLength(1))), systemImage: "star.fill")
+                                        .font(.subheadline).foregroundStyle(CupaTheme.goldText)
+                                }
+                                Text(cup.cupLifeState.localizedCupLife)
+                                    .font(.subheadline).foregroundStyle(CupaTheme.forestText)
+                                if !cup.comment.isEmpty { Text(cup.comment).font(.subheadline) }
+                                Text((cup.brewDate ?? cup.createdAt).formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                            }
+                            .padding(.vertical, 3)
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                Section {
+                    if !record.isSample {
+                        Button(role: .destructive) { confirmingDelete = true } label: { Label("Eliminar café", systemImage: "trash") }
+                    }
+                }
+            }
+            .brewScrollableCanvas()
+            .navigationTitle("Historial del café")
+            .sheet(item: $selectedCupDetail) { cup in
+                CupSessionDetailView(cup: cup, onDelete: {
+                    do { try TastingRepository(context: modelContext).delete(cup); selectedCupDetail = nil }
+                    catch { actionError = error.localizedDescription }
+                }, onReplicate: { onReplicate(cup); selectedCupDetail = nil; dismiss() })
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } }
+                ToolbarItem(placement: .primaryAction) { Button("Editar") { showEditor = true }.accessibilityIdentifier("coffee.detail.edit") }
+            }
+            .sheet(isPresented: $showEditor) {
+                CoffeeBeanEditor(record: record) { draft in
+                    draft.apply(to: record)
+                    record.markUpdated()
+                    return save()
+                }
+            }
+            .alert("No se pudo actualizar el café", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+                Button("Aceptar") {}
+            } message: { Text(actionError ?? "") }
+            .confirmationDialog("¿Marcar este lote como terminado?", isPresented: $confirmingFinished, titleVisibility: .visible) {
+                Button("Marcar como terminado", role: .destructive, action: markFinished)
+                Button("Cancelar", role: .cancel) {}
+            } message: { Text("La cantidad restante cambiará a 0 g. Puedes corregirla después desde Editar.") }
+            .confirmationDialog("¿Eliminar este café?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Eliminar café", role: .destructive) {
+                    if let error = onDelete() { actionError = error } else { dismiss() }
+                }
+                Button("Cancelar", role: .cancel) {}
+            } message: { Text("Se retirará del inventario, pero las preparaciones y tazas conservarán sus datos históricos.") }
+        }
+    }
+
+    private var freshness: CoffeeFreshnessResult {
+        CoffeeFreshnessEngine.evaluate(roastDate: record.roastDate, openedDate: record.openedDate)
+    }
+
+    private var details: String {
+        [record.origin, record.variety, record.process, "Tueste \(record.roastLevel.lowercased())"]
+            .filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    private func save() -> String? {
+        do { try modelContext.save(); return nil }
+        catch { modelContext.rollback(); return error.localizedDescription }
+    }
+
+    private func markOpened() {
+        record.openedDate = .now; record.markUpdated()
+        if let error = save() { actionError = error }
+    }
+
+    private func markFinished() {
+        record.remainingQuantityGrams = 0; record.markUpdated()
+        if let error = save() { actionError = error }
+    }
+}
+
+private struct CoffeeFreshnessBadge: View {
+    let state: CoffeeFreshnessState
+    var body: some View {
+        Text(state.label.uppercased())
+            .font(.caption2.bold())
+            .foregroundStyle(Color(hex: state.colorHex))
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(Color(hex: state.colorHex).opacity(0.12), in: Capsule())
+    }
+}
+
+private struct CoffeeFreshnessBar: View {
+    let result: CoffeeFreshnessResult
+    var compact = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(result.daysFromRoast.map { "Día \($0) desde tostado" } ?? "Sin datos de tueste")
+                Spacer()
+                Text(compact ? result.state.label : "\(Int((result.progress * 100).rounded(.towardZero)))% est. útil")
+            }
+            .font(.caption2.bold()).foregroundStyle(CupaTheme.secondaryText)
+            if compact {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(LinearGradient(colors: [0x84AD92, 0x3F7A63, 0xC28B46, 0xB76545, 0x8C5A2B].map { Color(hex: UInt($0)) }, startPoint: .leading, endPoint: .trailing))
+                        if result.daysFromRoast != nil {
+                            Circle().fill(Color(hex: result.state.colorHex)).frame(width: 8, height: 8)
+                                .overlay(Circle().stroke(.white, lineWidth: 2))
+                                .offset(x: max(0, min(geometry.size.width - 8, geometry.size.width * result.progress - 4)))
+                        }
+                    }
+                }.frame(height: 12)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Maduración estimada: \(result.state.label)")
+            } else { ProgressView(value: result.progress)
+                .tint(Color(hex: result.state.colorHex))
+                .accessibilityLabel("Maduración estimada")
+                .accessibilityValue("\(Int((result.progress * 100).rounded())) por ciento")
+            Text(result.openStatusDetails).font(.caption2).foregroundStyle(CupaTheme.secondaryText)
+            }
+        }
+    }
+}
+
+private struct CoffeeBeanDraft {
+    var name: String
+    var brand: String
+    var origin: String
+    var producer: String
+    var variety: String
+    var process: String
+    var altitudeMeters: Int?
+    var roastLevel: String
+    var roastDate: Date?
+    var openedDate: Date?
+    var initialQuantityGrams: Double
+    var remainingQuantityGrams: Double
+    var notes: String
+
+    func makeRecord(in context: NSManagedObjectContext) -> CoffeeBeanRecord {
+        CoffeeBeanRecord(
+            context: context,
+            name: name,
+            brand: brand,
+            origin: origin,
+            producer: producer,
+            variety: variety,
+            process: process,
+            altitudeMeters: altitudeMeters,
+            roastLevel: roastLevel,
+            roastDate: roastDate,
+            openedDate: openedDate,
+            initialQuantityGrams: initialQuantityGrams,
+            remainingQuantityGrams: remainingQuantityGrams,
+            notes: notes
+        )
+    }
+
+    func apply(to record: CoffeeBeanRecord) {
+        record.name = record.isSample ? "Ronpotrero" : name
+        record.brand = brand
+        record.origin = origin
+        record.producer = producer
+        record.variety = variety
+        record.process = process
+        record.altitudeMeters = altitudeMeters
+        record.roastLevel = roastLevel
+        record.roastDate = roastDate
+        record.openedDate = openedDate
+        record.initialQuantityGrams = initialQuantityGrams
+        record.remainingQuantityGrams = remainingQuantityGrams
+        record.notes = notes
+    }
+}
+
+private struct CoffeeBeanEditorFormDraft: Codable, Equatable {
+    var recordId: UUID?
+    var name: String
+    var brand: String
+    var origin: String
+    var producer: String
+    var variety: String
+    var process: String
+    var altitude: String
+    var roastLevel: String
+    var hasRoastDate: Bool
+    var roastDate: Date
+    var hasOpenedDate: Bool
+    var openedDate: Date
+    var initialQuantity: String
+    var remainingQuantity: String
+    var notes: String
+
+    init(record: CoffeeBeanRecord?) {
+        recordId = record?.id
+        name = record?.name ?? ""
+        brand = record?.brand ?? ""
+        origin = record?.origin ?? ""
+        producer = record?.producer ?? ""
+        variety = record?.variety ?? ""
+        process = record?.process ?? ""
+        altitude = record?.altitudeMeters.map(String.init) ?? ""
+        roastLevel = record?.roastLevel ?? "Medio"
+        hasRoastDate = record?.roastDate != nil
+        roastDate = record?.roastDate ?? .now
+        hasOpenedDate = record?.openedDate != nil
+        openedDate = record?.openedDate ?? .now
+        initialQuantity = record.map { String(format: "%.1f", $0.initialQuantityGrams) } ?? "250.0"
+        remainingQuantity = record.map { String(format: "%.1f", $0.remainingQuantityGrams) } ?? "250.0"
+        notes = record?.notes ?? ""
+    }
+}
+
+private struct CoffeeBeanEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var context
+    private let record: CoffeeBeanRecord?
+    private let onSave: (CoffeeBeanDraft) -> String?
+    @State private var draft: CoffeeBeanEditorFormDraft
+    @State private var loaded = false
+    @State private var isSaving = false
+    @State private var saveError: String?
+    @SceneStorage("cupa.coffeeBeanEditorDraft.v1") private var storedDraft: Data?
+
+    init(record: CoffeeBeanRecord?, onSave: @escaping (CoffeeBeanDraft) -> String?) {
+        self.record = record
+        self.onSave = onSave
+        _draft = State(initialValue: CoffeeBeanEditorFormDraft(record: record))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Identidad") {
+                    TextField("Nombre del café", text: $draft.name).disabled(record?.isSample == true)
+                    TextField("Marca o tostador", text: $draft.brand)
+                    TextField("Origen", text: $draft.origin)
+                    TextField("Productor", text: $draft.producer)
+                    TextField("Variedad", text: $draft.variety)
+                    TextField("Proceso", text: $draft.process)
+                    TextField("Altitud (msnm)", text: $draft.altitude).keyboardType(.numberPad)
+                }
+                Section("Tueste y apertura") {
+                    Picker("Tueste", selection: $draft.roastLevel) {
+                    ForEach(["Claro", "Medio", "Oscuro"], id: \.self) { Text($0) }
+                    }
+                    Toggle("Con fecha de tueste", isOn: $draft.hasRoastDate)
+                    if draft.hasRoastDate { DatePicker("Fecha de tueste", selection: $draft.roastDate, displayedComponents: .date) }
+                    Toggle("Bolsa abierta", isOn: $draft.hasOpenedDate)
+                    if draft.hasOpenedDate { DatePicker("Fecha de apertura", selection: $draft.openedDate, displayedComponents: .date) }
+                }
+                Section("Frescura estimada") {
+                    HStack { CoffeeFreshnessBadge(state: freshness.state); Spacer(); Text(freshness.openStatusDetails).font(.caption).foregroundStyle(.secondary) }
+                    CoffeeFreshnessBar(result: freshness)
+                    Text(freshness.recommendation).font(.caption).foregroundStyle(CupaTheme.secondaryText)
+                    if let warning = freshness.openWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(CupaTheme.terracottaText)
+                    }
+                }
+                Section("Inventario") {
+                    TextField("Cantidad inicial (g)", text: $draft.initialQuantity).keyboardType(.decimalPad)
+                    TextField("Cantidad restante (g)", text: $draft.remainingQuantity).keyboardType(.decimalPad)
+                    if let validationMessage { Text(validationMessage).font(.caption).foregroundStyle(.red) }
+                    TextField("Notas", text: $draft.notes, axis: .vertical).lineLimit(3...8)
+                }
+            }
+            .navigationTitle(record == nil ? "Agregar café" : "Editar café")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { clearStoredDraft(); dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSaving ? "Guardando…" : "Guardar") {
+                        guard !isSaving else { return }
+                        let values: CoffeeBeanValidatedInput
+                        do { values = try validatedInput() }
+                        catch { saveError = error.localizedDescription; return }
+                        isSaving = true
+                        let error = onSave(CoffeeBeanDraft(
+                            name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                            brand: draft.brand.trimmingCharacters(in: .whitespacesAndNewlines),
+                            origin: draft.origin.trimmingCharacters(in: .whitespacesAndNewlines),
+                            producer: draft.producer.trimmingCharacters(in: .whitespacesAndNewlines),
+                            variety: draft.variety.trimmingCharacters(in: .whitespacesAndNewlines),
+                            process: draft.process.trimmingCharacters(in: .whitespacesAndNewlines),
+                            altitudeMeters: values.altitudeMeters,
+                            roastLevel: draft.roastLevel,
+                            roastDate: draft.hasRoastDate ? draft.roastDate : nil,
+                            openedDate: draft.hasOpenedDate ? draft.openedDate : nil,
+                            initialQuantityGrams: values.initialQuantityGrams,
+                            remainingQuantityGrams: values.remainingQuantityGrams,
+                            notes: draft.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                        ))
+                        if let error { isSaving = false; saveError = error }
+                        else { clearStoredDraft(); dismiss() }
+                    }
+                    .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || validationMessage != nil || isSaving)
+                }
+            }
+            .brewScrollableCanvas()
+            .onAppear(perform: load)
+            .onChange(of: draft) { _, value in
+                guard loaded else { return }
+                storedDraft = storingEditorDraft(value, ownerId: context.activeOwnerId, in: storedDraft)
+            }
+            .alert("No se pudo guardar el café", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+                Button("Aceptar") {}
+            } message: { Text(saveError ?? "") }
+        }
+    }
+
+    private func validatedInput() throws -> CoffeeBeanValidatedInput {
+        try CoffeeBeanInputValidator.validate(
+            altitudeText: draft.altitude,
+            initialQuantityText: draft.initialQuantity,
+            remainingQuantityText: draft.remainingQuantity,
+            roastDate: draft.hasRoastDate ? draft.roastDate : nil,
+            openedDate: draft.hasOpenedDate ? draft.openedDate : nil
+        )
+    }
+
+    private var validationMessage: String? {
+        do { _ = try validatedInput(); return nil }
+        catch { return error.localizedDescription }
+    }
+
+    private var freshness: CoffeeFreshnessResult {
+        CoffeeFreshnessEngine.evaluate(
+            roastDate: draft.hasRoastDate ? draft.roastDate : nil,
+            openedDate: draft.hasOpenedDate ? draft.openedDate : nil
+        )
+    }
+
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        if let restored: CoffeeBeanEditorFormDraft = scopedEditorDraft(from: storedDraft, ownerId: context.activeOwnerId),
+           restored.recordId == record?.id {
+            draft = restored
+        }
+    }
+
+    private func clearStoredDraft() {
+        storedDraft = removingEditorDraft(ownerId: context.activeOwnerId, from: storedDraft, as: CoffeeBeanEditorFormDraft.self)
+    }
+}

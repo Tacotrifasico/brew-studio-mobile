@@ -3,6 +3,60 @@ import CoreData
 
 @main
 struct LabGoldenVerifier {
+    @MainActor static func verifyGoogleOAuth() async {
+        precondition(GooglePKCERequest.challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+        let configuration = AppConfiguration(supabaseURL: URL(string: "https://example.supabase.co"), supabaseAnonKey: "sb_publishable_test")
+        let request = try! GooglePKCERequest(configuration: configuration)
+        precondition(request.verifier.count == 43 && !request.authorizationURL.absoluteString.contains(request.verifier))
+        precondition(try! request.code(from: URL(string: request.redirectURL.absoluteString + "?code=once")!) == "once")
+        for suffix in ["?code=once#", "?code=once#_", "?code=once#sb=", "/?code=once"] {
+            precondition(try! request.code(from: URL(string: request.redirectURL.absoluteString + suffix)!) == "once")
+        }
+        for suffix in ["?code=a&code=b", "?code=a#access_token=forged", "?error=denied", "?access_token=forged", "?code="] {
+            do { _ = try request.code(from: URL(string: request.redirectURL.absoluteString + suffix)!); preconditionFailure("Unsafe callback accepted") } catch {}
+        }
+        do { _ = try request.code(from: URL(string: "other://auth/confirmed?code=a")!); preconditionFailure("Foreign return") } catch {}
+        do { _ = try request.code(from: URL(string: request.redirectURL.absoluteString + "?code=a")!, now: request.createdAt.addingTimeInterval(601)); preconditionFailure("Expired attempt") } catch {}
+        let user = UUID()
+        let response = try! JSONSerialization.data(withJSONObject: ["access_token":"test-access", "refresh_token":"test-refresh", "expires_in":3600,
+            "user":["id":user.uuidString, "email":"test@example.com"]])
+        let transport = VerifierTransport(responseData: response)
+        let store = VerifierTokenStore(nil)
+        let model = AccountModel(configuration: configuration, transport: transport, store: store)
+        precondition(!model.canEnterApp, "No guest access")
+        // Unsolicited/replayed callbacks cannot create a session.
+        await model.completeGoogleSignIn(URL(string: request.redirectURL.absoluteString + "?code=forged")!)
+        precondition(model.tokens == nil && transport.requests.isEmpty)
+        let started = try! model.beginGoogleSignIn()
+        await model.completeGoogleSignIn(URL(string: started.redirectURL.absoluteString + "?code=one-use")!)
+        precondition(model.tokens?.userId == user && store.value?.userId == user)
+        precondition(model.canEnterApp, "Registered account can enter")
+        precondition(transport.requests.count == 1)
+        let sent = transport.requests[0]
+        precondition(sent.url?.query == "grant_type=pkce" && sent.value(forHTTPHeaderField: "Authorization") == nil)
+        let body = try! JSONSerialization.jsonObject(with: sent.httpBody!) as! [String:String]
+        precondition(body["auth_code"] == "one-use" && body["code_verifier"] == started.verifier)
+        await model.completeGoogleSignIn(URL(string: started.redirectURL.absoluteString + "?code=one-use")!)
+        precondition(transport.requests.count == 1)
+        let canceled = AccountModel(configuration: configuration, transport: transport, store: VerifierTokenStore(nil))
+        let canceledRequest = try! canceled.beginGoogleSignIn(); canceled.cancelGoogleSignIn()
+        await canceled.completeGoogleSignIn(URL(string: canceledRequest.redirectURL.absoluteString + "?code=late")!)
+        precondition(canceled.tokens == nil && transport.requests.count == 1)
+        precondition(!canceled.canEnterApp)
+        let offlineTokens = AuthTokens(accessToken: "expired", refreshToken: "stored-refresh", expiresAt: .distantPast, userId: user, email: "test@example.com")
+        let offline = AccountModel(configuration: configuration, transport: VerifierTransport(error: URLError(.notConnectedToInternet)), store: VerifierTokenStore(offlineTokens))
+        await offline.restoreAndRefreshIfNeeded()
+        precondition(offline.canEnterApp, "Previously authenticated local tools remain available offline")
+        await model.signOut()
+        precondition(!model.canEnterApp, "Sign-out closes root access")
+        let second = try! model.beginGoogleSignIn()
+        precondition(second.verifier != started.verifier)
+        await model.completeGoogleSignIn(URL(string: second.redirectURL.absoluteString + "/?code=second-login#")!)
+        precondition(model.canEnterApp && transport.requests.count == 3, "Login → logout → login")
+        await model.completeGoogleSignIn(URL(string: second.redirectURL.absoluteString + "?code=second-login")!)
+        precondition(transport.requests.count == 3, "Second login is also single-use")
+        print("PASS: Google PKCE RFC7636, verifier, callback validation, expiry, cancel, replay, mock exchange and secure-store handoff")
+    }
     static func verifyThermalGuidance() {
         let at158 = LabTemperatureGuide(temperatureC: 70, altitudeMeters: 0, unit: .fahrenheit)
         precondition(at158.warning && at158.headline == "Calor bajo para V60")
@@ -156,6 +210,8 @@ struct LabGoldenVerifier {
         print("PASS: Android → iOS technique files, new method without invented steps, validated import and iOS export")
     }
     @MainActor static func main() async {
+        await verifyGoogleOAuth()
+        if CommandLine.arguments.contains("--google-oauth-only") { return }
         verifyThermalGuidance()
         verifyCupLifecycleAndIntegerLab()
         verifyTemperatureMigration()

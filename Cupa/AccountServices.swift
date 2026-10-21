@@ -1,5 +1,71 @@
 import Foundation
 import Security
+import CryptoKit
+
+/// One attempt, bound to this process/device. Never consume URL fragment tokens.
+struct GooglePKCERequest {
+    let id = UUID()
+    let verifier: String
+    let redirectURL: URL
+    let authorizationURL: URL
+    let createdAt: Date
+
+    static func challenge(_ verifier: String) -> String {
+        Data(SHA256.hash(data: Data(verifier.utf8))).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+    }
+    init(configuration: AppConfiguration, now: Date = .now) throws {
+        guard let base = configuration.supabaseURL, base.scheme == "https",
+              configuration.isSupabaseConfigured,
+              let redirect = configuration.authRedirectURL?.deletingLastPathComponent().appendingPathComponent("confirmed") else { throw AuthServiceError.notConfigured }
+        var bytes = [UInt8](repeating: 0, count: 32)
+        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw AuthServiceError.invalidResponse }
+        verifier = Data(bytes).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        redirectURL = redirect; createdAt = now
+        var components = URLComponents(url: base.appendingPathComponent("auth/v1/authorize"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "provider", value: "google"),
+            URLQueryItem(name: "redirect_to", value: redirect.absoluteString),
+            URLQueryItem(name: "code_challenge", value: Self.challenge(verifier)),
+            URLQueryItem(name: "code_challenge_method", value: "s256"),
+            URLQueryItem(name: "scopes", value: "openid email profile"),
+            URLQueryItem(name: "prompt", value: "select_account")]
+        guard let url = components.url else { throw AuthServiceError.invalidResponse }
+        authorizationURL = url
+    }
+    func code(from callback: URL, now: Date = .now) throws -> String {
+        guard (0...600).contains(now.timeIntervalSince(createdAt)) else {
+            throw AuthServiceError.invalidRecoveryLink("Este intento venció. Toca Continuar con Google otra vez. (G01)")
+        }
+        guard AuthCallbackParser.matches(callback, expectedRedirectURL: redirectURL),
+              callback.user == nil, callback.password == nil, callback.port == nil else {
+            throw AuthServiceError.invalidRecoveryLink("El enlace de regreso no corresponde a esta app. (G02)")
+        }
+        // Browser redirects may retain an empty fragment or a harmless Supabase
+        // marker. They are not credentials. Non-empty token fragments stay rejected.
+        let fields = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        guard Set(fields.map(\.name)).count == fields.count else {
+            throw AuthServiceError.invalidRecoveryLink("El enlace de regreso está duplicado. Inicia de nuevo. (G04)")
+        }
+        if fields.contains(where: { ["error", "error_code"].contains($0.name) }) {
+            let code = fields.first(where: { $0.name == "error_code" })?.value ?? ""
+            let message: String
+            switch code {
+            case "flow_state_expired", "flow_state_not_found", "bad_oauth_state": message = "Este intento de Google terminó. Toca Continuar con Google otra vez. (G05)"
+            case "provider_disabled", "oauth_provider_not_supported": message = "El acceso con Google no está disponible. (G06)"
+            default: message = "Google no pudo completar el acceso. Puedes intentarlo de nuevo. (G07)"
+            }
+            throw AuthServiceError.invalidRecoveryLink(message)
+        }
+        guard ["", "_", "sb", "sb="].contains(callback.fragment ?? "") else {
+            throw AuthServiceError.invalidRecoveryLink("El enlace de regreso no es válido. Inicia de nuevo. (G03)")
+        }
+        guard !fields.contains(where: { ["access_token", "refresh_token"].contains($0.name) }),
+              let code = fields.first(where: { $0.name == "code" })?.value, !code.isEmpty, code.count <= 4096 else {
+            throw AuthServiceError.invalidRecoveryLink("No llegó el código de acceso. Toca Continuar con Google otra vez. (G08)")
+        }
+        return code
+    }
+}
 
 struct AppConfiguration: Equatable {
     let supabaseURL: URL?; let supabaseAnonKey: String?; let authRedirectURL: URL?
@@ -124,7 +190,7 @@ enum AuthCallbackParser {
 
     static func passwordRecovery(from url: URL, expectedRedirectURL: URL, now: Date = .now) throws -> PasswordRecoveryCredential {
         guard matches(url, expectedRedirectURL: expectedRedirectURL) else {
-            throw AuthServiceError.invalidRecoveryLink("Este enlace no pertenece a la recuperación de Cupa.")
+            throw AuthServiceError.invalidRecoveryLink("Este enlace no pertenece a la recuperación de cUpa.")
         }
         var values: [String: String] = [:]
         URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.forEach { values[$0.name] = $0.value }
@@ -188,6 +254,9 @@ struct SupabaseAuthService {
         return .confirmationRequired(email: confirmedEmail)
     }
     func refresh(_ refreshToken: String) async throws -> AuthTokens { try await token(path: "/auth/v1/token?grant_type=refresh_token", payload: ["refresh_token": refreshToken]) }
+    func exchangeGoogle(code: String, verifier: String) async throws -> AuthTokens {
+        try await token(path: "/auth/v1/token?grant_type=pkce", payload: ["auth_code": code, "code_verifier": verifier])
+    }
     func sendPasswordRecovery(email: String) async throws {
         guard let redirectURL = configuration.authRedirectURL else { throw AuthServiceError.notConfigured }
         var components = URLComponents(); components.path = "/auth/v1/recover"
@@ -260,6 +329,36 @@ final class AccountModel: ObservableObject {
     let configuration: AppConfiguration; private let service: SupabaseAuthService; private let store: TokenStore
     private let accountDeletionHandler: (UUID) throws -> Void
     private var recoveryCredential: PasswordRecoveryCredential?
+    private var googleRequest: GooglePKCERequest?
+    private var googleAttempt: UUID?
+
+    func beginGoogleSignIn() throws -> GooglePKCERequest {
+        guard tokens == nil else { throw AuthServiceError.invalidResponse }
+        let request = try GooglePKCERequest(configuration: configuration)
+        googleRequest = request; googleAttempt = request.id; sessionNotice = nil
+        return request
+    }
+    func cancelGoogleSignIn() {
+        let wasExchanging = googleAttempt != nil && googleRequest == nil
+        googleRequest = nil; googleAttempt = nil
+        if wasExchanging, state == .loading { state = .signedOut }
+    }
+    func completeGoogleSignIn(_ callback: URL) async {
+        guard let request = googleRequest, googleAttempt == request.id else { return }
+        googleRequest = nil // Single-use, even when the request fails.
+        state = .loading; sessionNotice = nil
+        do {
+            let code = try request.code(from: callback)
+            let value = try await service.exchangeGoogle(code: code, verifier: request.verifier)
+            guard googleAttempt == request.id else { return }
+            guard !value.accessToken.isEmpty, !value.refreshToken.isEmpty, !value.email.isEmpty,
+                  value.expiresAt > .now else { throw AuthServiceError.invalidResponse }
+            try store.save(value); googleAttempt = nil; pendingConfirmationEmail = nil; state = .signedIn(value)
+        } catch {
+            guard googleAttempt == request.id else { return }
+            googleAttempt = nil; state = .error(error.localizedDescription)
+        }
+    }
 
     init(configuration: AppConfiguration = AppConfiguration(), transport: NetworkTransport = URLSessionTransport(), store: TokenStore = KeychainTokenStore(), accountDeletionHandler: @escaping (UUID) throws -> Void = { _ in }) {
         self.configuration = configuration; self.service = SupabaseAuthService(configuration: configuration, transport: transport); self.store = store
@@ -270,10 +369,16 @@ final class AccountModel: ObservableObject {
     }
 
     var tokens: AuthTokens? { if case let .signedIn(tokens) = state { tokens } else { nil } }
+    // Keep local tools available offline after a real login; sign-out/revocation closes the gate.
+    var canEnterApp: Bool {
+        guard let value = tokens else { return false }
+        return !value.accessToken.isEmpty && !value.refreshToken.isEmpty && !value.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     var localScopeKey: String { tokens?.userId.uuidString ?? "guest" }
     var canRetryPasswordRecovery: Bool { recoveryCredential != nil }
     func signIn(email: String, password: String) async { await perform { try await self.service.signIn(email: email, password: password) } }
     func signUp(email: String, password: String) async {
+        cancelGoogleSignIn()
         state = .loading; sessionNotice = nil
         do {
             switch try await service.signUp(email: email, password: password) {
@@ -382,6 +487,7 @@ final class AccountModel: ObservableObject {
         }
     }
     func signOut() async {
+        cancelGoogleSignIn()
         let access = tokens?.accessToken; state = .loading; sessionNotice = nil; pendingConfirmationEmail = nil
         if let access { try? await service.signOut(accessToken: access) }
         do { try store.clear(); state = configuration.isSupabaseConfigured ? .signedOut : .unavailable }
@@ -408,6 +514,7 @@ final class AccountModel: ObservableObject {
     }
 
     private func perform(_ operation: () async throws -> AuthTokens) async {
+        cancelGoogleSignIn()
         state = .loading; sessionNotice = nil
         do { let value = try await operation(); try store.save(value); pendingConfirmationEmail = nil; state = .signedIn(value); sessionNotice = nil }
         catch { state = .error(error.localizedDescription) }

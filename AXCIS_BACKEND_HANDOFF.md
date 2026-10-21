@@ -87,3 +87,70 @@ falta elegir proveedor/remitente sin desactivar confirmación. No se inventaron
 contraseñas ni se enviaron correos a los usuarios. La función delete-account ya
 está activa y rechaza solicitudes sin sesión o con JWT inválido (401); falta ensayo
 autenticado. Registro/confirmación y prueba física siguen pendientes de SMTP.
+
+## Acceso cUpa y Google (implementado, pendiente de prueba física)
+
+Pantalla propia con la marca cUpa, «Hecha por compitas del café», «Sin cargos
+extras», inicio/registro separados y acceso obligatorio. La gratuidad describe
+cargos al usuario; no promete costo cero del backend. Rectángulo decorativo listo
+para reemplazar por el PNG oficial de la mascota sin tapar los controles.
+
+Política actual: AppShell no monta las pestañas sin identidad registrada/sesión.
+Login raíz sin Cerrar ni Continuar sin cuenta; cierre de sesión/revocación
+conocida regresa al acceso. Una sesión ya autenticada conserva uso local offline;
+el primer acceso requiere internet. Auth sigue registrando usuarios/perfiles;
+la biblioteca privada NO se sube a Supabase ni se borra al bloquear la entrada.
+
+Botón Google conectado a ASWebAuthenticationSession y PKCE S256. Verificador
+aleatorio sólo en memoria, nunca en URL ni UserDefaults; intento único de 10 minutos,
+canje REST a Supabase y persistencia final en Keychain. No hay sesión por callback
+sin intento local ni por tokens de fragmento. Cancelación/replay no autentican.
+Si se cierra el proceso se reinicia el acceso, sin persistir secretos de OAuth.
+Proyecto actual: `nice-column-512202-g6`, propiedad de la cuenta de cUpa,
+sin activar facturación. Marca OAuth creada; soporte/contacto oficiales:
+`cupabrewthers@gmail.com`, audiencia externa en pruebas. Proyecto anterior
+`cupa-512202` de la cuenta personal intacto, SIN USAR para esta integración.
+Cliente web «cUpa · Supabase Auth» creado por el propietario. Google activo,
+verificado por `/auth/v1/settings` (`external.google=true`), confirmación de correo
+conservada (`mailer_autoconfirm=false`). Secreto sólo en Supabase, no leído por
+el agente ni enviado al código. Callback Google web:
+`https://qndojncusqmhoxnokgwb.supabase.co/auth/v1/callback`.
+Retorno exacto normal/Staging/Android mediante `/auth/confirmed`, reutilizando
+la allowlist existente. No acepta tokens sin verificar ni modifica RLS/tablas.
+Probar cancelación, retornos adulterados/repetidos, refresh, reinicio y ambos
+dispositivos antes de beta pública. No subir biblioteca privada al login.
+
+La captura entregada se usa exclusivamente como ícono: AppIcon 1024×1024 opaco,
+imagen completa sin recortar al personaje ni redibujarlo. Conserva márgenes blancos
+de la captura. El rectángulo de la futura mascota del login permanece separado.
+
+Verificación 2026-10-19: build genérico iOS sin firma aprobado y verificador de
+dominio `--google-oauth-only` aprobado (RFC7636, callbacks, expiración, cancelación,
+replay y canje simulado con guardado de sesión). Android assembleDebug y 4 pruebas
+GoogleOAuthFlowTest aprobadas. `/authorize` real devuelve 302 a accounts.google.com
+con el cliente correcto y el callback exacto. Asesor de seguridad sin hallazgos.
+No hubo login real ni consentimiento de un usuario; no se ha probado el secreto
+del proveedor, el retorno físico en ambos teléfonos ni la homologación visual.
+
+Antes de publicar con Google revisar App Store 4.8: ofrecer acceso equivalente
+con privacidad, normalmente Sign in with Apple. El correo por sí solo no garantiza
+cumplimiento. No activar un proveedor vacío ni deshabilitar confirmación de correo.
+
+Referencias: https://supabase.com/docs/guides/auth/social-login/auth-google
+y https://developer.apple.com/app-store/review/guidelines/#login-services
+
+### Reingreso después de cerrar sesión
+
+Reporte real de rechazo genérico al reingresar en iPhone. Auth consultado devuelve
+callbacks 302 sin error del proveedor; no identifica la condición exacta del cliente.
+Corrección defensiva compartida: aceptar sólo fragmentos vacíos/marcadores inocuos
+(``, `_`, `sb`, `sb=`) y slash final canónico. Tokens en fragmento/query, duplicados,
+host ajeno, intentos vencidos y replays siguen rechazados. Diagnóstico G01–G08
+sin mostrar URL, códigos OAuth ni mensajes crudos de terceros. ASWebAuthenticationSession
+ahora comprueba el ID de intento antes de completar/cancelar; una sesión vieja
+no puede cancelar la nueva. Se agrega regresión simulada login → logout → login.
+La cancelación de AccountView se liga al NavigationStack raíz, no a Group: los
+modificadores de Group se propagan al contenido condicional y el paso de formulario
+a Conectando no debe tratarse como abandonar la pantalla.
+El propietario confirmó en iPhone que cerrar sesión y volver a entrar con Google
+ya funciona. Esa confirmación real no sustituye la prueba pendiente en Android.

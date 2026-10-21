@@ -538,7 +538,7 @@ private struct RecipeImporterView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("Pega una receta de un blog, mensaje o nota. Cupa detectará localmente el nombre, categoría, método, ingredientes y pasos; podrás corregirlos antes de guardar.")
+                    Text("Pega una receta de un blog, mensaje o nota. cUpa detectará localmente el nombre, categoría, método, ingredientes y pasos; podrás corregirlos antes de guardar.")
                         .font(.subheadline).foregroundStyle(CupaTheme.secondaryText)
                     TextEditor(text: $rawText).frame(minHeight: 220).accessibilityIdentifier("recipes.import.text")
                 } footer: {

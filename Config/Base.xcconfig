@@ -1,4 +1,4 @@
-APP_DISPLAY_NAME = Cupa
+APP_DISPLAY_NAME = cUpa
 AUTH_URL_SCHEME = com.tacotrifasico.cupa
 // AXCIS-ONLINE P0: completar mediante un xcconfig local/no versionado. Staging
 // debe usar exactamente el mismo proyecto Supabase que el APK Android de prueba.

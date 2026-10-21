@@ -55,6 +55,10 @@ struct AppShell: View {
     }
 
     var body: some View {
+        Group {
+            if !account.canEnterApp {
+                AccountView(model: account, requiresLogin: true)
+            } else {
         TabView(selection: $navigation.selection) {
             NavigationStack {
                 HomeView(
@@ -85,6 +89,8 @@ struct AppShell: View {
                 .tag(CupaTab.storage)
                 .tabItem { Label("Almacén", systemImage: "shippingbox") }
         }
+            }
+        }
         .id(account.localScopeKey)
         .tint(CupaTheme.forest)
         .background(BrewOrganicCanvas().ignoresSafeArea())
@@ -96,6 +102,7 @@ struct AppShell: View {
             set: { if !$0 { account.dismissPasswordRecovery() } }
         )) { PasswordResetView(model: account) }
         .safeAreaInset(edge: .top, spacing: 0) {
+            if account.canEnterApp {
             VStack(spacing: 0) {
                 if let storageWarning {
                     statusBanner(storageWarning, icon: "externaldrive.badge.exclamationmark", color: CupaTheme.terracotta, foreground: CupaTheme.onTerracotta)
@@ -118,6 +125,7 @@ struct AppShell: View {
                     .accessibilityIdentifier("sync.statusNotice")
                     .accessibilityHint("Muestra el estado completo y las opciones de sincronización")
                 }
+            }
             }
         }
         .alert("Estado de sincronización", isPresented: $showingSyncDetails) {

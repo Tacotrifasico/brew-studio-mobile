@@ -40,12 +40,17 @@ struct HubView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("Brew Hub", selection: $tab) { Text("Perfil").tag(0); Text("Bandeja").tag(1); Text("Fórmulas").tag(2); Text("Historial").tag(3) }.pickerStyle(.segmented).padding()
+                Picker("cUpa Hub", selection: $tab) { Text("Perfil").tag(0); Text("Bandeja").tag(1); Text("Fórmulas").tag(2); Text("Historial").tag(3) }.pickerStyle(.segmented).padding()
+                Link(destination: URL(string: "https://www.instagram.com/cupa.brew/")!) {
+                    Label("Instagram · @cupa.brew", systemImage: "arrow.up.right.square")
+                        .font(.caption).foregroundStyle(CupaTheme.forestText)
+                        .frame(minHeight: 44)
+                }
                 if account.tokens == nil { signedOut }
                 else { Group { switch tab { case 0: profileTab; case 1: communityTab; case 2: formulasTab; default: historyTab } } }
             }
             .background(BrewOrganicCanvas().ignoresSafeArea())
-            .navigationTitle("Brew Studio Hub")
+            .navigationTitle("cUpa Hub")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { if account.tokens != nil { Button { synchronize() } label: { Image(systemName: "arrow.triangle.2.circlepath") }.accessibilityLabel("Sincronizar datos") } }
                 ToolbarItem(placement: .confirmationAction) { Button("Cerrar") { dismiss() } }
@@ -66,7 +71,7 @@ struct HubView: View {
                 Button("Cancelar", role: .cancel) { blockShare = nil }
             } message: { _ in Text("Sus publicaciones dejarán de aparecer. Puedes desbloquearlo desde tu perfil.") }
             .task { loadProfile(); await loadSocialData() }
-            .alert("Brew Hub", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("Aceptar") {} } message: { Text(message ?? "") }
+            .alert("cUpa Hub", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("Aceptar") {} } message: { Text(message ?? "") }
         }
     }
 

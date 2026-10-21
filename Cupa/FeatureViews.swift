@@ -144,7 +144,7 @@ private final class BrewTemperatureUISlider: UISlider {
 // Plain-text handoff through the system share sheet; no automatic feed publication.
 func recipeShareText(_ draft: RecipeDraftModel) -> String {
     let units = ["GRAMS": "g", "MILLILITERS": "ml", "UNITS": "uds", "TEASPOONS": "cdta", "TABLESPOONS": "cda", "OUNCES": "oz"]
-    return ["Brew Studio · \(draft.name)", draft.intention,
+    return ["cUpa · \(draft.name)", draft.intention,
         draft.suggestedMethodName.isEmpty ? "" : "Método: \(draft.suggestedMethodName)",
         "Ingredientes", draft.ingredients.map { "\($0.amount.formatted(.number.precision(.fractionLength(0...2)))) \(units[$0.unit] ?? $0.unit) · \($0.name)" }.joined(separator: "\n"),
         "Pasos", draft.steps.enumerated().map { "\($0.offset + 1). \($0.element.instruction)" + ($0.element.durationSeconds.map { " (\($0) s)" } ?? "") }.joined(separator: "\n"),

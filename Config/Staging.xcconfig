@@ -1,5 +1,5 @@
 #include "Base.xcconfig"
 APP_ENVIRONMENT = Staging
-APP_DISPLAY_NAME = Cupa Staging
+APP_DISPLAY_NAME = cUpa Staging
 AUTH_URL_SCHEME = com.tacotrifasico.cupa.staging
 #include? "Staging.local.xcconfig"

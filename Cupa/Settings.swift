@@ -46,7 +46,7 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Privacidad") {
-                    Text("Cupa no envía telemetría sensible ni solicita permisos de notificaciones.")
+                    Text("cUpa no envía telemetría sensible ni solicita permisos de notificaciones.")
                         .font(.caption).foregroundStyle(.secondary)
                     if let privacyPolicyURL {
                         Link("Consultar política de privacidad", destination: privacyPolicyURL)
@@ -59,7 +59,14 @@ struct SettingsView: View {
                     }
                 }
                 Section("Cuenta") { Button("Abrir cuenta") { showAccount = true } }
-                Section("Aplicación") { LabeledContent("Versión", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"); LabeledContent("Entorno", value: Bundle.main.object(forInfoDictionaryKey: "APP_ENVIRONMENT") as? String ?? "Development") }
+                Section("Aplicación") {
+                    LabeledContent("Nombre", value: "cUpa")
+                    Link(destination: URL(string: "https://www.instagram.com/cupa.brew/")!) {
+                        Label("Instagram · @cupa.brew", systemImage: "arrow.up.right.square")
+                    }
+                    LabeledContent("Versión", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
+                    LabeledContent("Entorno", value: Bundle.main.object(forInfoDictionaryKey: "APP_ENVIRONMENT") as? String ?? "Development")
+                }
             }
             .brewScrollableCanvas()
             .navigationTitle("Configuración")

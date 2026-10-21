@@ -77,7 +77,7 @@ struct PreparationExecutionView: View {
                     .font(.caption).foregroundStyle(CupaTheme.secondaryText)
                 Picker("Técnica", selection: $selectedTechniqueKey) {
                     Text("Selecciona una técnica").tag(Optional<String>.none)
-                    Section("Incluidas en Cupa") { ForEach(builtInTechniques) { item in Text(item.name).tag(Optional(item.id)) } }
+                    Section("Incluidas en cUpa") { ForEach(builtInTechniques) { item in Text(item.name).tag(Optional(item.id)) } }
                     if !matchingSavedTechniques.isEmpty {
                         Section("Mis técnicas") { ForEach(matchingSavedTechniques) { Text($0.name).tag(Optional("saved:\($0.id.uuidString)")) } }
                     }
